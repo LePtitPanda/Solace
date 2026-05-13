@@ -13,7 +13,6 @@ base {
     archivesName = 'solace'
 }
 
-// Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
@@ -26,6 +25,7 @@ minecraft {
     runs {
         configureEach {
             workingDirectory project.file('run')
+
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
 
@@ -72,20 +72,17 @@ repositories {
     maven {
         url 'https://maven.kyrptonaught.dev'
     }
-
-    flatDir {
-        dir 'libs'
-    }
 }
 
 dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
     implementation fg.deobf("curse.maven:custom-portal-api-forge-621463:4704980")
 
-    // Optional compile-only mod jars are supplied by local ./libs or by GitHub Actions.
-    // They are not packaged into Solace; they only let javac and Mixin AP resolve targets.
-    compileOnly fg.deobf(fileTree(dir: 'libs', include: ['*.jar']))
+    compileOnly files('../mods/minecells-1.9.2.jar')
+    compileOnly files('../mods/The_Undergarden-1.20.1-0.8.14.jar')
+    compileOnly files('../mods/RegionsUnexploredForge-0.5.6+1.20.1.jar')
 
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
@@ -108,7 +105,6 @@ tasks.named('processResources', ProcessResources).configure {
             mod_authors            : mod_authors,
             mod_description        : mod_description,
     ]
-
     inputs.properties replaceProperties
 
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
