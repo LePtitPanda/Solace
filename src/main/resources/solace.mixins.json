@@ -14,7 +14,8 @@
     "MineCellsDoorwayPortalDataMixin",
     "MineCellsDoorwayPortalFrameMixin",
     "MineCellsRiftBlockMixin",
-    "PalettedContainerResizeGuardMixin"
+    "PalettedContainerResizeGuardMixin",
+    "UGNoiseBasedChunkGeneratorMixin"
   ],
   "client": [],
   "server": [],
