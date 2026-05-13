@@ -1,0 +1,12 @@
+{
+  "dimension.undergarden.undergarden": "The Undergarden",
+  "block.minecells.overworld_doorway": "The Undergarden Doorway",
+  "block.minecells.rift.description": "Return to The Undergarden",
+  "block.minecells.return_stone.title": "Return to The Undergarden",
+  "item.minecells.dimensional_rune.tooltip": "Use on a Doorway in The Undergarden\nto change its destination",
+  "item.minecells.dimensional_rune.only_usable_in_overworld": "You can only use this rune in The Undergarden",
+  "book.minecells.entries.dimensions.overworld.title0": "The Undergarden",
+  "book.minecells.entries.dimensions.overworld.description": "The main hub, where your Mine Cells journey begins. Strange door-like portals have appeared throughout The Undergarden; it may be worth investigating their destinations...",
+  "book.minecells.entries.items.doorway.description0": "Doorways are the primary method of accessing the dimensions of Mine Cells.<br><br>Doorways to Prisoners' Quarters can be found in The Undergarden, and can be broken, crafted, and placed elsewhere.",
+  "book.minecells.entries.items.doorway.dimensional_rune.description": "Dimensional Runes can be used to change the destination of a Doorway in The Undergarden.<br>They're granted when you first enter a Mine Cells dimension, but can also be crafted.<br><br>You can only use it if you've already visited the rune's dimension through a Doorway with the same coordinates as the one you want to change."
+}

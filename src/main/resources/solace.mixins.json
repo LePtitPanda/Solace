@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.solace.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "solace.refmap.json",
+  "mixins": [
+    "MineCellsDataMixin",
+    "MineCellsDimensionalRuneItemMixin",
+    "MineCellsDimensionGraphMixin",
+    "MineCellsDimensionMixin",
+    "MineCellsDoorwayItemMixin",
+    "MineCellsDoorwayPortalBlockEntityMixin",
+    "MineCellsDoorwayPortalDataMixin",
+    "MineCellsDoorwayPortalFrameMixin",
+    "MineCellsRiftBlockMixin",
+    "PalettedContainerResizeGuardMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
