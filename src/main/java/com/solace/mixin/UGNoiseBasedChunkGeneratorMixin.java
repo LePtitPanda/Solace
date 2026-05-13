@@ -8,22 +8,23 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.Noises;
 import net.minecraft.world.level.levelgen.SurfaceRules;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 
 /**
- * Adds RU-specific surface rules when The Undergarden's custom noise generator is built.
+ * Adds RU-specific surface rules to Undergarden terrain.
  *
- * The biome source itself is patched by Solace's data override for
- * data/undergarden/dimension/undergarden.json. This mixin fixes the part a pure data
- * biome-source patch cannot handle cleanly: RU Nether plants/trees expect RU/Nether
- * substrates, not Undergarden deepturf/depthrock.
+ * The 1.20-catacombs_update branch uses vanilla minecraft:noise for the
+ * Undergarden dimension, so this targets NoiseBasedChunkGenerator and gates the
+ * patch by Undergarden's default block instead of depending on an internal UG
+ * generator class name.
  */
-@Mixin(targets = "quek.undergarden.world.gen.UGNoiseBasedChunkGenerator", remap = false)
+@Mixin(NoiseBasedChunkGenerator.class)
 public abstract class UGNoiseBasedChunkGeneratorMixin {
     private static final ResourceLocation UNDERGARDEN_DEPTHROCK = new ResourceLocation("undergarden", "depthrock");
 
@@ -37,15 +38,11 @@ public abstract class UGNoiseBasedChunkGeneratorMixin {
             new ResourceLocation("regions_unexplored", "blackstone_basin")
     );
 
-    @ModifyArg(
+    @ModifyVariable(
             method = "<init>",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/levelgen/NoiseBasedChunkGenerator;<init>(Lnet/minecraft/world/level/biome/BiomeSource;Lnet/minecraft/core/Holder;)V",
-                    remap = true
-            ),
-            index = 1,
-            remap = true
+            at = @At("HEAD"),
+            argsOnly = true,
+            ordinal = 0
     )
     private Holder<NoiseGeneratorSettings> solace$patchUndergardenSurfaceRules(Holder<NoiseGeneratorSettings> originalHolder) {
         NoiseGeneratorSettings original = originalHolder.value();
