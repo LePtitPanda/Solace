@@ -44,7 +44,7 @@ public abstract class UGNoiseBasedChunkGeneratorMixin {
             argsOnly = true,
             ordinal = 0
     )
-    private Holder<NoiseGeneratorSettings> solace$patchUndergardenSurfaceRules(Holder<NoiseGeneratorSettings> originalHolder) {
+    private static Holder<NoiseGeneratorSettings> solace$patchUndergardenSurfaceRules(Holder<NoiseGeneratorSettings> originalHolder) {
         NoiseGeneratorSettings original = originalHolder.value();
 
         ResourceLocation defaultBlockId = BuiltInRegistries.BLOCK.getKey(original.defaultBlock().getBlock());
