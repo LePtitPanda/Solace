@@ -30,9 +30,26 @@ public final class BalloonIntroManager {
     private static final ResourceKey<Structure> PLAINS_VILLAGE = ResourceKey.create(Registries.STRUCTURE, new ResourceLocation("minecraft", "village_plains"));
     private static final int SEARCH_RADIUS_CHUNKS = 96;
     private static final double START_DISTANCE = 650.0D;
-    private static final int START_HEIGHT_ABOVE_SEA_LEVEL = 120;
+    private static final int START_HEIGHT_ABOVE_SEA_LEVEL = 150;
 
     private BalloonIntroManager() {
+    }
+
+    public static void precomputeIntroVillage(ServerLevel level) {
+        if (!level.dimension().equals(ServerLevel.OVERWORLD)) return;
+
+        SolaceWorldData data = getData(level);
+        if (data.isBreezyVillageIntroCompleted() || data.hasBreezyVillageIntroVillagePos()) return;
+
+        LOGGER.info("[Solace] Finding Breezy intro village. This may take a few seconds during world load.");
+        BlockPos villagePos = findPlainsVillage(level);
+        if (villagePos == null) {
+            LOGGER.warn("[Solace] Could not find minecraft:village_plains within {} chunks.", SEARCH_RADIUS_CHUNKS);
+            return;
+        }
+
+        LOGGER.info("[Solace] Cached Breezy intro village at {} {} {}.", villagePos.getX(), villagePos.getY(), villagePos.getZ());
+        data.setBreezyVillageIntroVillagePos(villagePos);
     }
 
     public static void tryStartIntro(ServerPlayer player) {
@@ -47,7 +64,14 @@ public final class BalloonIntroManager {
             return;
         }
 
-        BlockPos villagePos = findPlainsVillage(level);
+        BlockPos villagePos = data.getBreezyVillageIntroVillagePos();
+        if (villagePos == null) {
+            villagePos = findPlainsVillage(level);
+            if (villagePos != null) {
+                data.setBreezyVillageIntroVillagePos(villagePos);
+            }
+        }
+
         if (villagePos == null) {
             LOGGER.warn("[Solace] Could not find minecraft:village_plains within {} chunks.", SEARCH_RADIUS_CHUNKS);
             return;
