@@ -10,8 +10,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -30,9 +28,9 @@ public final class BalloonIntroManager {
     private static final String DATA_NAME = Solace.MOD_ID + "_world_data";
     private static final ResourceLocation BREEZY_BALLOON_ID = new ResourceLocation("breezy", "hot_air_balloon");
     private static final ResourceKey<Structure> PLAINS_VILLAGE = ResourceKey.create(Registries.STRUCTURE, new ResourceLocation("minecraft", "village_plains"));
-    private static final int SEARCH_RADIUS_CHUNKS = 192;
+    private static final int SEARCH_RADIUS_CHUNKS = 96;
     private static final double START_DISTANCE = 650.0D;
-    private static final int START_HEIGHT_ABOVE_GROUND = 90;
+    private static final int START_HEIGHT_ABOVE_SEA_LEVEL = 120;
 
     private BalloonIntroManager() {
     }
@@ -85,10 +83,7 @@ public final class BalloonIntroManager {
         Vec3 horizontalStart = villageCenter.subtract(travelDirection.scale(START_DISTANCE));
         int x = Mth.floor(horizontalStart.x);
         int z = Mth.floor(horizontalStart.z);
-        ChunkPos chunkPos = new ChunkPos(x >> 4, z >> 4);
-        level.getChunk(chunkPos.x, chunkPos.z);
-        int groundY = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        double y = Mth.clamp(groundY + START_HEIGHT_ABOVE_GROUND, level.getMinBuildHeight() + 32, level.getMaxBuildHeight() - 32);
+        double y = Mth.clamp(level.getSeaLevel() + START_HEIGHT_ABOVE_SEA_LEVEL, level.getMinBuildHeight() + 32, level.getMaxBuildHeight() - 32);
         return new Vec3(x + 0.5D, y, z + 0.5D);
     }
 
