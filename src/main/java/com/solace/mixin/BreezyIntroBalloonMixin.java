@@ -1,7 +1,6 @@
 package com.solace.mixin;
 
 import com.solace.world.BalloonIntroManager;
-import codyhuh.breezy.common.entities.HotAirBalloonEntity;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.phys.Vec3;
@@ -10,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin(HotAirBalloonEntity.class)
+@Mixin(targets = "codyhuh.breezy.common.entity.HotAirBalloonEntity", remap = false)
 public abstract class BreezyIntroBalloonMixin {
 
     @Inject(method = "travel", at = @At("HEAD"), cancellable = true)
@@ -29,7 +28,6 @@ public abstract class BreezyIntroBalloonMixin {
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
 
         Vec3 movement;
-
         if (horizontalDistance < 36.0D) {
             movement = new Vec3(0.0D, -0.16D, 0.0D);
         } else {
@@ -41,7 +39,6 @@ public abstract class BreezyIntroBalloonMixin {
         entity.setDeltaMovement(movement);
         entity.move(MoverType.SELF, movement);
         entity.hasImpulse = true;
-
         ci.cancel();
     }
 }
