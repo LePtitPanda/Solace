@@ -29,7 +29,7 @@ public final class BalloonIntroManager {
     private static final ResourceLocation BREEZY_BALLOON_ID = new ResourceLocation("breezy", "hot_air_balloon");
     private static final ResourceKey<Structure> PLAINS_VILLAGE = ResourceKey.create(Registries.STRUCTURE, new ResourceLocation("minecraft", "village_plains"));
     private static final int SEARCH_RADIUS_CHUNKS = 128;
-    private static final double START_DISTANCE = 360.0D;
+    private static final double START_DISTANCE = 460.0D;
     private static final int START_HEIGHT_ABOVE_SEA_LEVEL = 150;
 
     private BalloonIntroManager() {
