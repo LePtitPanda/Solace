@@ -82,6 +82,7 @@ dependencies {
     compileOnly files('../mods/minecells-1.9.2.jar')
     compileOnly files('../mods/The_Undergarden-1.20.1-0.8.14.jar')
     compileOnly files('../mods/RegionsUnexploredForge-0.5.6+1.20.1.jar')
+    compileOnly files('../mods/breezy-1.20.1-1.2.1.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
