@@ -2,7 +2,6 @@ package com.solace.world;
 
 import com.solace.Solace;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -103,6 +102,9 @@ public final class BalloonIntroManager {
         entity.getPersistentData().putDouble(TARGET_X_KEY, target.x);
         entity.getPersistentData().putDouble(TARGET_Y_KEY, target.y);
         entity.getPersistentData().putDouble(TARGET_Z_KEY, target.z);
+        if (entity instanceof SolaceIntroBalloonAccess access) {
+            access.solace$setIntroTarget(target.x, target.y, target.z);
+        }
         callIntSetter(entity, "setLitness", 3);
         callIntSetter(entity, "setSandbags", 0);
         level.addFreshEntity(entity);
