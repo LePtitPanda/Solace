@@ -1,13 +1,13 @@
 package com.solace.mixin;
 
+import codyhuh.breezy.common.entity.HotAirBalloonEntity;
+import codyhuh.breezy.common.network.NewWindSavedData;
 import com.solace.world.BalloonIntroManager;
 import com.solace.world.SolaceIntroBalloonAccess;
-import codyhuh.breezy.common.network.NewWindSavedData;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -19,15 +19,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(targets = "codyhuh.breezy.common.entity.HotAirBalloonEntity", remap = false)
 public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAccess {
     @Unique
-    private static final EntityDataAccessor<Boolean> SOLACE$INTRO_BALLOON = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> SOLACE$INTRO_BALLOON = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.BOOLEAN);
     @Unique
-    private static final EntityDataAccessor<Float> SOLACE$TARGET_X = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> SOLACE$TARGET_X = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.FLOAT);
     @Unique
-    private static final EntityDataAccessor<Float> SOLACE$TARGET_Y = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> SOLACE$TARGET_Y = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.FLOAT);
     @Unique
-    private static final EntityDataAccessor<Float> SOLACE$TARGET_Z = SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.FLOAT);
+    private static final EntityDataAccessor<Float> SOLACE$TARGET_Z = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.FLOAT);
 
-    @Inject(method = "defineSynchedData", at = @At("TAIL"), remap = false)
+    @Inject(method = {"defineSynchedData", "m_8097_"}, at = @At("TAIL"), remap = false, require = 0)
     private void solace$defineIntroSyncedData(CallbackInfo ci) {
         Entity entity = (Entity) (Object) this;
         entity.getEntityData().define(SOLACE$INTRO_BALLOON, false);
