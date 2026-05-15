@@ -1,6 +1,7 @@
 package com.solace.mixin;
 
 import com.solace.world.BalloonIntroManager;
+import codyhuh.breezy.common.network.NewWindSavedData;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
@@ -12,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class BreezyIntroBalloonMixin {
 
     @Inject(method = "getTargetDirection", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
-    private void solace$getIntroTargetDirection(Object windData, CallbackInfoReturnable<Vec3> cir) {
+    private void solace$getIntroTargetDirection(NewWindSavedData windData, CallbackInfoReturnable<Vec3> cir) {
         Entity entity = (Entity) (Object) this;
 
         if (!entity.getPersistentData().getBoolean(BalloonIntroManager.INTRO_BALLOON_KEY)) {
