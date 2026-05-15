@@ -21,6 +21,8 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
     @Unique
     private static final EntityDataAccessor<Boolean> SOLACE$INTRO_BALLOON = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.BOOLEAN);
     @Unique
+    private static final EntityDataAccessor<Boolean> SOLACE$LANDED = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.BOOLEAN);
+    @Unique
     private static final EntityDataAccessor<Float> SOLACE$TARGET_X = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.FLOAT);
     @Unique
     private static final EntityDataAccessor<Float> SOLACE$TARGET_Y = SynchedEntityData.defineId(HotAirBalloonEntity.class, EntityDataSerializers.FLOAT);
@@ -31,6 +33,7 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
     private void solace$defineIntroSyncedData(CallbackInfo ci) {
         Entity entity = (Entity) (Object) this;
         entity.getEntityData().define(SOLACE$INTRO_BALLOON, false);
+        entity.getEntityData().define(SOLACE$LANDED, false);
         entity.getEntityData().define(SOLACE$TARGET_X, 0.0F);
         entity.getEntityData().define(SOLACE$TARGET_Y, 0.0F);
         entity.getEntityData().define(SOLACE$TARGET_Z, 0.0F);
@@ -40,6 +43,7 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
     public void solace$setIntroTarget(double x, double y, double z) {
         Entity entity = (Entity) (Object) this;
         entity.getEntityData().set(SOLACE$INTRO_BALLOON, true);
+        entity.getEntityData().set(SOLACE$LANDED, false);
         entity.getEntityData().set(SOLACE$TARGET_X, (float) x);
         entity.getEntityData().set(SOLACE$TARGET_Y, (float) y);
         entity.getEntityData().set(SOLACE$TARGET_Z, (float) z);
@@ -56,11 +60,23 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
         return entity.getEntityData().get(SOLACE$INTRO_BALLOON);
     }
 
+    @Override
+    public boolean solace$hasLanded() {
+        Entity entity = (Entity) (Object) this;
+        return entity.getEntityData().get(SOLACE$LANDED);
+    }
+
     @Inject(method = "getTargetDirection", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void solace$getIntroTargetDirection(NewWindSavedData windData, CallbackInfoReturnable<Vec3> cir) {
         Entity entity = (Entity) (Object) this;
 
         if (!entity.getEntityData().get(SOLACE$INTRO_BALLOON)) {
+            return;
+        }
+
+        if (entity.getEntityData().get(SOLACE$LANDED)) {
+            entity.setDeltaMovement(Vec3.ZERO);
+            cir.setReturnValue(Vec3.ZERO);
             return;
         }
 
@@ -72,13 +88,20 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
 
         if (horizontalDistance < 36.0D) {
-            cir.setReturnValue(new Vec3(0.0D, -0.08D, 0.0D));
+            if (entity.onGround() || entity.getY() <= targetY + 3.0D) {
+                entity.getEntityData().set(SOLACE$LANDED, true);
+                entity.setDeltaMovement(Vec3.ZERO);
+                cir.setReturnValue(Vec3.ZERO);
+                return;
+            }
+
+            cir.setReturnValue(new Vec3(0.0D, -0.09D, 0.0D));
             return;
         }
 
         Vec3 horizontal = new Vec3(delta.x, 0.0D, delta.z).normalize();
-        double speed = horizontalDistance < 160.0D ? 0.095D : 0.19D;
-        double descent = entity.getY() > targetY + 18.0D ? -0.055D : -0.015D;
+        double speed = horizontalDistance < 160.0D ? 0.12D : 0.24D;
+        double descent = entity.getY() > targetY + 18.0D ? -0.06D : -0.018D;
 
         cir.setReturnValue(new Vec3(horizontal.x * speed, descent, horizontal.z * speed));
     }
