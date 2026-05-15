@@ -66,6 +66,14 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
         return entity.getEntityData().get(SOLACE$LANDED);
     }
 
+    @Override
+    public void solace$markLanded() {
+        Entity entity = (Entity) (Object) this;
+        entity.getEntityData().set(SOLACE$LANDED, true);
+        entity.setDeltaMovement(Vec3.ZERO);
+        entity.hurtMarked = true;
+    }
+
     @Inject(method = "getTargetDirection", at = @At("HEAD"), cancellable = true, remap = false, require = 0)
     private void solace$getIntroTargetDirection(NewWindSavedData windData, CallbackInfoReturnable<Vec3> cir) {
         Entity entity = (Entity) (Object) this;
@@ -88,20 +96,13 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
         double horizontalDistance = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
 
         if (horizontalDistance < 36.0D) {
-            if (entity.onGround() || entity.getY() <= targetY + 3.0D) {
-                entity.getEntityData().set(SOLACE$LANDED, true);
-                entity.setDeltaMovement(Vec3.ZERO);
-                cir.setReturnValue(Vec3.ZERO);
-                return;
-            }
-
-            cir.setReturnValue(new Vec3(0.0D, -0.09D, 0.0D));
+            cir.setReturnValue(new Vec3(0.0D, -0.10D, 0.0D));
             return;
         }
 
         Vec3 horizontal = new Vec3(delta.x, 0.0D, delta.z).normalize();
-        double speed = horizontalDistance < 160.0D ? 0.12D : 0.24D;
-        double descent = entity.getY() > targetY + 18.0D ? -0.06D : -0.018D;
+        double speed = horizontalDistance < 180.0D ? 0.13D : 0.26D;
+        double descent = entity.getY() > targetY + 28.0D ? -0.045D : -0.012D;
 
         cir.setReturnValue(new Vec3(horizontal.x * speed, descent, horizontal.z * speed));
     }
