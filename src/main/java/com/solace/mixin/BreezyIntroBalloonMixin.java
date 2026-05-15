@@ -77,7 +77,7 @@ public abstract class BreezyIntroBalloonMixin implements SolaceIntroBalloonAcces
         }
 
         Vec3 horizontal = new Vec3(delta.x, 0.0D, delta.z).normalize();
-        double speed = horizontalDistance < 160.0D ? 0.08D : 0.16D;
+        double speed = horizontalDistance < 160.0D ? 0.095D : 0.19D;
         double descent = entity.getY() > targetY + 18.0D ? -0.055D : -0.015D;
 
         cir.setReturnValue(new Vec3(horizontal.x * speed, descent, horizontal.z * speed));
