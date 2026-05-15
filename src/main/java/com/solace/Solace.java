@@ -1,5 +1,7 @@
 package com.solace;
 
+import com.solace.events.CommonEvents;
+import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
@@ -28,6 +30,7 @@ public class Solace {
 
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");
+        MinecraftForge.EVENT_BUS.register(CommonEvents.class);
     }
 
     @Mod.EventBusSubscriber(modid = MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)

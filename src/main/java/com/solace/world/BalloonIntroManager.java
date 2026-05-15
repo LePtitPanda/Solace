@@ -12,7 +12,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.Heightmap;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -71,11 +71,12 @@ public final class BalloonIntroManager {
     }
 
     private static BlockPos findPlainsVillage(ServerLevel level) {
-        var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
-        var holder = registry.getHolder(PLAINS_VILLAGE);
-        if (holder.isEmpty()) return null;
-        var result = level.findNearestMapStructure(HolderSet.direct(holder.get()), level.getSharedSpawnPos(), SEARCH_RADIUS_CHUNKS, false);
-        return result == null ? null : result.getFirst();
+        return level.findNearestMapStructure(
+                net.minecraft.tags.StructureTags.VILLAGE,
+                level.getSharedSpawnPos(),
+                SEARCH_RADIUS_CHUNKS,
+                false
+        );
     }
 
     private static Vec3 computeStartPosition(ServerLevel level, Vec3 villageCenter) {
