@@ -29,15 +29,14 @@ public abstract class BreezyIntroBalloonMixin {
         Vec3 direction = target.subtract(entity.position());
 
         double horizontalDistance = Math.sqrt(direction.x * direction.x + direction.z * direction.z);
-        if (horizontalDistance < 24.0D) {
-            cir.setReturnValue(new Vec3(0.0D, -0.08D, 0.0D));
+        if (horizontalDistance < 36.0D) {
+            cir.setReturnValue(new Vec3(0.0D, -0.16D, 0.0D));
             return;
         }
 
         Vec3 normalized = new Vec3(direction.x, 0.0D, direction.z).normalize();
+        double speed = horizontalDistance < 140.0D ? 0.32D : 0.55D;
 
-        double vertical = entity.getY() > targetY + 20.0D ? -0.015D : 0.02D;
-
-        cir.setReturnValue(new Vec3(normalized.x * 0.22D, vertical, normalized.z * 0.22D));
+        cir.setReturnValue(new Vec3(normalized.x * speed, -0.11D, normalized.z * speed));
     }
 }
