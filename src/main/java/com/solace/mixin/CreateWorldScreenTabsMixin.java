@@ -19,6 +19,7 @@ import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.world.Difficulty;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
@@ -107,6 +108,13 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
         int x = controlRowBounds.left();
         int y = Math.min(controlsBottom + 18, footerTop - panelHeight);
         this.solace$renderModePanel(guiGraphics, modeInfo, x, y, panelWidth, panelHeight);
+    }
+
+    @Inject(method = {"init", "tick"}, at = @At("RETURN"))
+    private void solace$preventEasyDifficulty(CallbackInfo ci) {
+        if (this.uiState.getDifficulty() == Difficulty.EASY) {
+            this.uiState.setDifficulty(Difficulty.NORMAL);
+        }
     }
 
     private void solace$renderModePanel(GuiGraphics guiGraphics, ModeInfo modeInfo, int x, int y, int width, int height) {
