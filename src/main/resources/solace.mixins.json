@@ -18,7 +18,9 @@
     "PalettedContainerResizeGuardMixin",
     "UGNoiseBasedChunkGeneratorMixin"
   ],
-  "client": [],
+  "client": [
+    "CreateWorldScreenTabsMixin"
+  ],
   "server": [],
   "injectors": {
     "defaultRequire": 1
