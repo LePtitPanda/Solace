@@ -5,16 +5,6 @@ var InsnNode = Java.type('org.objectweb.asm.tree.InsnNode');
 var JumpInsnNode = Java.type('org.objectweb.asm.tree.JumpInsnNode');
 var LabelNode = Java.type('org.objectweb.asm.tree.LabelNode');
 var FieldInsnNode = Java.type('org.objectweb.asm.tree.FieldInsnNode');
-var System = Java.type('java.lang.System');
-
-function forceDebugLoggingProperty() {
-    if (System.getProperty('forge.logging.console.level') == null) {
-        System.setProperty('forge.logging.console.level', 'debug');
-    }
-    ASMAPI.log('INFO', '[Solace] Requested Forge debug logging from coremod bootstrap');
-}
-
-forceDebugLoggingProperty();
 
 // Guard that returns early if ModList is not ready yet.
 // Use this for <clinit> and init() - methods that SET UP the attributes.
