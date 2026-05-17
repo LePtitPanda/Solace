@@ -1,5 +1,6 @@
 package com.solace;
 
+import com.solace.client.RuntimeDebugLoggingForcer;
 import com.solace.events.CommonEvents;
 import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
@@ -29,6 +30,7 @@ public class Solace {
     private static final Logger LOGGER = LogManager.getLogger();
 
     public Solace() {
+        RuntimeDebugLoggingForcer.apply();
         LOGGER.info("[Solace] Mod Constructor Called");
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
     }
