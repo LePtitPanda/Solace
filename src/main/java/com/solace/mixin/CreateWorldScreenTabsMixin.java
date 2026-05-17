@@ -136,11 +136,11 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
 
         int lineY = y + 33;
         List<FormattedCharSequence> bodyLines = this.font.split(Component.literal(modeInfo.description()), textWidth);
-        for (int i = 0; i < Math.min(2, bodyLines.size()); i++) {
+        for (int i = 0; i < Math.min(3, bodyLines.size()); i++) {
             guiGraphics.drawString(this.font, bodyLines.get(i), textX, lineY + i * 10, 0xFFD8D8D8, false);
         }
 
-        int noteY = y + 74;
+        int noteY = y + 78;
         guiGraphics.fill(textX, noteY - 5, x + width - 18, noteY - 4, 0xFF3A3A3A);
         List<FormattedCharSequence> noteLines = this.font.split(Component.literal(modeInfo.note()), textWidth);
         int maxNoteLines = Math.min(Math.max(1, (y + height - 8 - noteY) / 10), noteLines.size());
@@ -196,7 +196,7 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
             return switch (gameMode) {
                 case CREATIVE -> new ModeInfo(
                         "CREATIVE MODE",
-                        "Build freely, test mechanics, inspect structures, and explore Astralis without limits.",
+                        "Build freely, test mechanics, inspect structures, and explore the world of Astralis without limits.",
                         "All blocks and items are available.",
                         new ResourceLocation("solace", "textures/gui/gamemode_icons/enchanted_soul.png"),
                         0xFFFF78B8
