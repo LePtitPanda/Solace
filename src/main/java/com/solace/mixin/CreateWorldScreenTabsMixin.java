@@ -1,5 +1,6 @@
 package com.solace.mixin;
 
+import com.solace.client.SolaceClientState;
 import de.keksuccino.modernworldcreation.ModernWorldCreationGameTab;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -112,6 +113,7 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
 
     @Inject(method = {"init", "tick"}, at = @At("RETURN"))
     private void solace$preventEasyDifficulty(CallbackInfo ci) {
+        SolaceClientState.setLastCreatedWorldWasHardcore(this.uiState.getGameMode() == WorldCreationUiState.SelectedGameMode.HARDCORE);
         if (this.uiState.getDifficulty() == Difficulty.EASY) {
             this.uiState.setDifficulty(Difficulty.NORMAL);
         }

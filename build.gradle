@@ -83,6 +83,7 @@ dependencies {
     compileOnly files('../mods/The_Undergarden-1.20.1-0.8.14.jar')
     compileOnly files('../mods/RegionsUnexploredForge-0.5.6+1.20.1.jar')
     compileOnly files('../mods/breezy-1.20.1-1.2.2.jar')
+    compileOnly files('../mods/difficulty_enhancement-0.1.jar')
     compileOnly files('../mods/modernworldcreation_forge_2.0.2_MC_1.20.1.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'

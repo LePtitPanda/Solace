@@ -8,4 +8,6 @@ public interface SolaceIntroBalloonAccess {
     boolean solace$hasLanded();
 
     void solace$markLanded();
+
+    void solace$tickLandingMovementCheck();
 }
