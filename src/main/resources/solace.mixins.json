@@ -6,6 +6,7 @@
   "refmap": "solace.refmap.json",
   "mixins": [
     "BreezyIntroBalloonMixin",
+    "DifficultyPacketMixin",
     "MineCellsDataMixin",
     "MineCellsDimensionalRuneItemMixin",
     "MineCellsDimensionGraphMixin",
@@ -19,7 +20,9 @@
     "UGNoiseBasedChunkGeneratorMixin"
   ],
   "client": [
-    "CreateWorldScreenTabsMixin"
+    "CreateWorldScreenTabsMixin",
+    "DifficultyButtonAccess",
+    "DifficultySelectionScreenMixin"
   ],
   "server": [],
   "injectors": {

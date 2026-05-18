@@ -1,17 +1,19 @@
 package com.solace.events;
 
+import com.mojang.brigadier.CommandDispatcher;
 import com.solace.world.BalloonIntroManager;
 import com.solace.world.SolaceIntroBalloonAccess;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 public final class CommonEvents {
@@ -36,25 +38,7 @@ public final class CommonEvents {
             return;
         }
 
-        if (hasSolidBlockUnder(vehicle)) {
-            access.solace$markLanded();
-        }
-    }
-
-    private static boolean hasSolidBlockUnder(Entity entity) {
-        BlockPos base = BlockPos.containing(entity.getX(), entity.getBoundingBox().minY - 0.12D, entity.getZ());
-
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                BlockPos pos = base.offset(dx, 0, dz);
-                BlockState state = entity.level().getBlockState(pos);
-                if (!state.isAir() && state.getCollisionShape(entity.level(), pos).max(Direction.Axis.Y) > 0.0D) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        access.solace$tickLandingMovementCheck();
     }
 
     @SubscribeEvent
@@ -74,5 +58,38 @@ public final class CommonEvents {
         if (event.getEntity() instanceof ServerPlayer player) {
             BalloonIntroManager.tryStartIntro(player);
         }
+    }
+
+    @SubscribeEvent
+    public static void onRegisterCommands(RegisterCommandsEvent event) {
+        CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
+        dispatcher.register(Commands.literal("solace")
+                .then(Commands.literal("stop_balloon")
+                        .executes(context -> stopIntroBalloon(context.getSource()))));
+    }
+
+    private static int stopIntroBalloon(CommandSourceStack source) {
+        ServerPlayer player;
+        try {
+            player = source.getPlayerOrException();
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only players can stop an intro balloon."));
+            return 0;
+        }
+
+        if (!player.isCreative()) {
+            source.sendFailure(Component.literal("You must be in creative mode to stop the intro balloon."));
+            return 0;
+        }
+
+        Entity vehicle = player.getVehicle();
+        if (!(vehicle instanceof SolaceIntroBalloonAccess access) || !access.solace$isIntroBalloon() || access.solace$hasLanded()) {
+            source.sendFailure(Component.literal("You are not riding an active intro balloon."));
+            return 0;
+        }
+
+        access.solace$markLanded();
+        source.sendSuccess(() -> Component.literal("Stopped the intro balloon."), false);
+        return 1;
     }
 }
