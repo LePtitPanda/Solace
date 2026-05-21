@@ -11,12 +11,19 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
+import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
 public final class CommonEvents {
+    private static final Set<UUID> DEATH_DISMOUNT_BYPASS = ConcurrentHashMap.newKeySet();
+
     private CommonEvents() {
     }
 
@@ -38,7 +45,12 @@ public final class CommonEvents {
             return;
         }
 
+        BalloonIntroManager.refreshIntroSafetySpawn(player, vehicle);
+        boolean wasLanded = access.solace$hasLanded();
         access.solace$tickLandingMovementCheck();
+        if (!wasLanded && access.solace$hasLanded()) {
+            BalloonIntroManager.completeIntroLanding(player, vehicle);
+        }
     }
 
     @SubscribeEvent
@@ -48,9 +60,34 @@ public final class CommonEvents {
         }
 
         Entity mounted = event.getEntityBeingMounted();
+        Entity rider = event.getEntityMounting();
+        if (rider instanceof ServerPlayer player && DEATH_DISMOUNT_BYPASS.contains(player.getUUID())) {
+            return;
+        }
+
         if (mounted instanceof SolaceIntroBalloonAccess access && access.solace$isIntroBalloon() && !access.solace$hasLanded()) {
             event.setCanceled(true);
         }
+    }
+
+    @SubscribeEvent
+    public static void onLivingDeath(LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+
+        Entity vehicle = player.getVehicle();
+        if (!(vehicle instanceof SolaceIntroBalloonAccess access) || !access.solace$isIntroBalloon() || access.solace$hasLanded()) {
+            return;
+        }
+
+        DEATH_DISMOUNT_BYPASS.add(player.getUUID());
+        try {
+            player.stopRiding();
+        } finally {
+            DEATH_DISMOUNT_BYPASS.remove(player.getUUID());
+        }
+        vehicle.discard();
     }
 
     @SubscribeEvent
@@ -89,6 +126,7 @@ public final class CommonEvents {
         }
 
         access.solace$markLanded();
+        BalloonIntroManager.completeIntroLanding(player, vehicle);
         source.sendSuccess(() -> Component.literal("Stopped the intro balloon."), false);
         return 1;
     }
