@@ -1,3 +1,4 @@
 {
-  "ForgeFragmentumFix": "coremods/fragmentum_modlist_fix.js"
+  "ForgeFragmentumFix": "coremods/fragmentum_modlist_fix.js",
+  "TravelOpticsCataclysmCompat": "coremods/traveloptics_cataclysm_compat.js"
 }
