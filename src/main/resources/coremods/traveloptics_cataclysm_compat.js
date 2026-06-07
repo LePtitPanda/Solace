@@ -2,10 +2,7 @@ var ASMAPI = Java.type('net.minecraftforge.coremod.api.ASMAPI');
 var Type = Java.type('org.objectweb.asm.Type');
 var Handle = Java.type('org.objectweb.asm.Handle');
 
-var RENAMES = {
-    'com/github/L_Ender/cataclysm/items/Dungeon_Eye/DungeonEyeItem': 'com/github/L_Ender/cataclysm/items/DungeonEyeItem',
-    'com/github/L_Ender/cataclysm/entity/effect/Boltstrike_Entity': 'com/github/L_Ender/cataclysm/entity/effect/Bolt_strike_Entity'
-};
+var RENAMES = {};
 
 function replaceText(text) {
     if (text == null) {
