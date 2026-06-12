@@ -2,12 +2,12 @@ package com.solace.world;
 
 import com.mojang.datafixers.util.Either;
 import com.mojang.logging.LogUtils;
+import com.solace.config.VillageBuildingSpawnConfig;
+import com.solace.config.VillageBuildingSpawnConfig.Mode;
 import com.solace.mixin.SinglePoolElementAccessor;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Deque;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,15 +27,6 @@ import org.slf4j.Logger;
 public final class JigsawVillageBuildingTool {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final String VANILLA_PLAINS_TOWN_CENTER_PREFIX = "village/plains/town_centers/";
-    private static final List<ResourceLocation> UNIQUE_PLAINS_BUILDINGS = List.of(
-            id("villagersplus", "village/plains/plains_alchemist"),
-            id("villagersplus", "village/plains/plains_horticulturist"),
-            id("villagersplus", "village/plains/plains_occultist"),
-            id("villagersplus", "village/plains/plains_oceanographer"),
-            id("chefsdelight", "plains_chef_house"),
-            id("chefsdelight", "plains_cook_house")
-    );
-    private static final Set<ResourceLocation> UNIQUE_PLAINS_BUILDING_SET = new HashSet<>(UNIQUE_PLAINS_BUILDINGS);
     private static final int MAX_RECENT_REPORTS = 8;
     private static final Deque<String> RECENT_REPORTS = new ArrayDeque<>();
     private static final boolean DIAGNOSTICS = Boolean.getBoolean("solace.villageJigsawDiagnostics");
@@ -66,7 +57,7 @@ public final class JigsawVillageBuildingTool {
         Session session = new Session(startPiece.getPosition(), startTemplate.get());
         ACTIVE_SESSION.set(session);
         session.record(startPiece.getElement(), startPiece.getPosition(), startPiece.getBoundingBox());
-        LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {}; unique targets: {}", session.startPos, session.startTemplate, UNIQUE_PLAINS_BUILDINGS);
+        LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {}; configured buildings: {}", session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
     }
 
     public static void end() {
@@ -85,10 +76,10 @@ public final class JigsawVillageBuildingTool {
             return candidates;
         }
 
-        if (session == null && hasUniqueCandidate(candidates)) {
+        if (session == null && hasCustomCandidate(candidates)) {
             session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
             ACTIVE_SESSION.set(session);
-            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient unique candidate pool; unique targets: {}", UNIQUE_PLAINS_BUILDINGS);
+            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient custom candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
         }
 
         if (session == null) {
@@ -96,50 +87,66 @@ public final class JigsawVillageBuildingTool {
         }
 
         List<StructurePoolElement> allowedNonUnique = new ArrayList<>(candidates.size());
-        Map<ResourceLocation, StructurePoolElement> uniqueCandidates = new LinkedHashMap<>();
-        Set<ResourceLocation> queuedUniqueIds = new LinkedHashSet<>();
+        List<StructurePoolElement> customCandidates = new ArrayList<>();
+        Set<ResourceLocation> customCandidateIds = new LinkedHashSet<>();
+        Map<ResourceLocation, Integer> queuedCustomCounts = new LinkedHashMap<>();
 
         for (StructurePoolElement candidate : candidates) {
             Optional<ResourceLocation> templateId = templateId(candidate);
-            if (templateId.isEmpty() || !UNIQUE_PLAINS_BUILDING_SET.contains(templateId.get())) {
+            templateId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
+            if (templateId.isEmpty() || !isCustomBuilding(templateId.get())) {
                 allowedNonUnique.add(candidate);
                 continue;
             }
 
-            ResourceLocation uniqueId = templateId.get();
-            if (session.hasPlaced(uniqueId) || !queuedUniqueIds.add(uniqueId)) {
-                session.recordSuppressed(uniqueId);
+            ResourceLocation customId = templateId.get();
+            int queued = queuedCustomCounts.getOrDefault(customId, 0);
+            if (!session.needsMore(customId, queued)) {
+                session.recordSuppressed(customId);
                 continue;
             }
 
-            uniqueCandidates.put(uniqueId, candidate);
+            customCandidates.add(candidate);
+            customCandidateIds.add(customId);
+            queuedCustomCounts.merge(customId, 1, Integer::sum);
         }
 
-        if (uniqueCandidates.isEmpty()) {
+        if (customCandidates.isEmpty()) {
             return allowedNonUnique;
         }
 
-        ResourceLocation priorityId = session.selectPriorityCandidate(uniqueCandidates.keySet());
-        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedNonUnique.size() + uniqueCandidates.size());
+        ResourceLocation priorityId = session.selectPriorityCandidate(customCandidateIds);
+        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedNonUnique.size() + customCandidates.size());
         if (priorityId != null) {
-            priorityFirstList.add(uniqueCandidates.get(priorityId));
+            for (StructurePoolElement candidate : customCandidates) {
+                Optional<ResourceLocation> candidateId = templateId(candidate);
+                if (candidateId.isPresent() && candidateId.get().equals(priorityId)) {
+                    priorityFirstList.add(candidate);
+                    break;
+                }
+            }
             session.recordOffered(priorityId);
         }
-        for (Map.Entry<ResourceLocation, StructurePoolElement> entry : uniqueCandidates.entrySet()) {
-            if (!entry.getKey().equals(priorityId)) {
-                priorityFirstList.add(entry.getValue());
+        boolean skippedPriorityCandidate = false;
+        for (StructurePoolElement candidate : customCandidates) {
+            Optional<ResourceLocation> candidateId = templateId(candidate);
+            if (!skippedPriorityCandidate && candidateId.isPresent() && candidateId.get().equals(priorityId)) {
+                skippedPriorityCandidate = true;
+                continue;
             }
+            priorityFirstList.add(candidate);
         }
         priorityFirstList.addAll(allowedNonUnique);
         if (DIAGNOSTICS) {
-            LOGGER.info("[Solace] Prioritizing plains village unique building candidate: {}", priorityId);
+            LOGGER.info("[Solace] Prioritizing plains village custom building candidate: {}", priorityId);
         }
         return priorityFirstList;
     }
 
     public static StructurePoolElement filterRandomCandidate(StructurePoolElement selected, List<StructurePoolElement> candidates) {
         Optional<ResourceLocation> selectedId = templateId(selected);
-        if (selectedId.isEmpty() || !UNIQUE_PLAINS_BUILDING_SET.contains(selectedId.get())) {
+        selectedId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
+        if (selectedId.isEmpty() || !isCustomBuilding(selectedId.get())) {
             return selected;
         }
 
@@ -147,14 +154,14 @@ public final class JigsawVillageBuildingTool {
         if (session == null) {
             session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
             ACTIVE_SESSION.set(session);
-            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient random candidate pool; unique targets: {}", UNIQUE_PLAINS_BUILDINGS);
+            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient random candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
         }
 
-        if (session.hasPlaced(selectedId.get()) || session.hasPending(selectedId.get())) {
+        if (!session.needsMore(selectedId.get(), 0)) {
             StructurePoolElement replacement = session.selectRandomReplacement(candidates);
             if (replacement != null) {
                 Optional<ResourceLocation> replacementId = templateId(replacement);
-                replacementId.ifPresent(id -> LOGGER.info("[Solace] Replacing duplicate plains village random candidate {} with {}", selectedId.get(), id));
+                replacementId.ifPresent(id -> LOGGER.info("[Solace] Replacing excess plains village random candidate {} with {}", selectedId.get(), id));
                 return replacement;
             }
         }
@@ -166,6 +173,7 @@ public final class JigsawVillageBuildingTool {
 
     public static StructurePoolElement preparePieceElement(StructurePoolElement element) {
         Optional<ResourceLocation> elementId = templateId(element);
+        elementId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
         Session session = ACTIVE_SESSION.get();
 
         if (session == null) {
@@ -177,9 +185,9 @@ public final class JigsawVillageBuildingTool {
             return element;
         }
 
-        if (elementId.isPresent() && UNIQUE_PLAINS_BUILDING_SET.contains(elementId.get())) {
+        if (elementId.isPresent() && isCustomBuilding(elementId.get())) {
             ResourceLocation id = elementId.get();
-            if (!session.hasPlaced(id) && !session.hasPending(id)) {
+            if (session.needsMore(id, 0)) {
                 session.markPending(id);
                 return element;
             }
@@ -188,12 +196,12 @@ public final class JigsawVillageBuildingTool {
             if (missingTarget != null) {
                 session.recordOffered(missingTarget);
                 session.markPending(missingTarget);
-                LOGGER.info("[Solace] Replacing duplicate plains village piece {} with missing unique building {}", id, missingTarget);
+                LOGGER.info("[Solace] Replacing excess plains village piece {} with missing custom building {}", id, missingTarget);
                 return replacementElement(missingTarget, element);
             }
 
             session.recordSuppressed(id);
-            LOGGER.info("[Solace] Replacing duplicate plains village piece {} with empty element", id);
+            LOGGER.info("[Solace] Replacing excess plains village piece {} with empty element", id);
             return emptyElement(element);
         }
 
@@ -202,7 +210,7 @@ public final class JigsawVillageBuildingTool {
             if (missingTarget != null) {
                 session.recordOffered(missingTarget);
                 session.markPending(missingTarget);
-                LOGGER.info("[Solace] Replacing plains village house {} with required unique building {}", elementId.get(), missingTarget);
+                LOGGER.info("[Solace] Replacing plains village house {} with required custom building {}", elementId.get(), missingTarget);
                 return replacementElement(missingTarget, element);
             }
         }
@@ -217,8 +225,8 @@ public final class JigsawVillageBuildingTool {
             if (activeTemplateId.isPresent() && isPlainsVillageStart(activeTemplateId.get()) && !session.matchesStart(position, activeTemplateId.get())) {
                 session.logSummary();
                 session.startNew(position, activeTemplateId.get());
-                LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; unique targets: {}",
-                        session.startPos, session.startTemplate, UNIQUE_PLAINS_BUILDINGS);
+                LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
+                        session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
             }
             session.record(element, position, boundingBox);
             return;
@@ -229,8 +237,8 @@ public final class JigsawVillageBuildingTool {
             Session ambientSession = new Session(position, templateId.get(), true);
             ACTIVE_SESSION.set(ambientSession);
             ambientSession.record(element, position, boundingBox);
-            LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; unique targets: {}",
-                    ambientSession.startPos, ambientSession.startTemplate, UNIQUE_PLAINS_BUILDINGS);
+            LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
+                    ambientSession.startPos, ambientSession.startTemplate, VillageBuildingSpawnConfig.describeEntries());
             return;
         }
 
@@ -246,7 +254,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     public static boolean isUniqueTarget(ResourceLocation id) {
-        return UNIQUE_PLAINS_BUILDING_SET.contains(id);
+        return isCustomBuilding(id);
     }
 
     private static void logObservedPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
@@ -275,11 +283,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     public static List<String> describeUniqueTargets() {
-        List<String> targets = new ArrayList<>(UNIQUE_PLAINS_BUILDINGS.size());
-        for (ResourceLocation target : UNIQUE_PLAINS_BUILDINGS) {
-            targets.add(target.toString());
-        }
-        return Collections.unmodifiableList(targets);
+        return VillageBuildingSpawnConfig.describeEntries();
     }
 
     private static Optional<ResourceLocation> templateId(StructurePoolElement element) {
@@ -291,14 +295,27 @@ public final class JigsawVillageBuildingTool {
         return template.left();
     }
 
-    private static boolean hasUniqueCandidate(List<StructurePoolElement> candidates) {
+    private static boolean hasCustomCandidate(List<StructurePoolElement> candidates) {
         for (StructurePoolElement candidate : candidates) {
             Optional<ResourceLocation> templateId = templateId(candidate);
-            if (templateId.isPresent() && UNIQUE_PLAINS_BUILDING_SET.contains(templateId.get())) {
+            if (templateId.isPresent()) {
+                discoverBuilding(templateId.get());
+            }
+            if (templateId.isPresent() && isCustomBuilding(templateId.get())) {
                 return true;
             }
         }
         return false;
+    }
+
+    private static void discoverBuilding(ResourceLocation id) {
+        if (isConfigurableBuilding(id)) {
+            VillageBuildingSpawnConfig.discover(id);
+        }
+    }
+
+    private static boolean isCustomBuilding(ResourceLocation id) {
+        return isConfigurableBuilding(id) && VillageBuildingSpawnConfig.discover(id).mode == Mode.CUSTOM;
     }
 
     private static boolean isPlainsVillageStart(ResourceLocation templateId) {
@@ -313,7 +330,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     private static boolean isInterestingDiagnosticPiece(ResourceLocation templateId) {
-        if (UNIQUE_PLAINS_BUILDING_SET.contains(templateId)) {
+        if (isConfigurableBuilding(templateId)) {
             return true;
         }
 
@@ -328,6 +345,30 @@ public final class JigsawVillageBuildingTool {
                 || path.contains("oceanographer")
                 || "villagersplus".equals(namespace)
                 || "chefsdelight".equals(namespace);
+    }
+
+    private static boolean isConfigurableBuilding(ResourceLocation templateId) {
+        if (isPlainsVillageStart(templateId)) {
+            return false;
+        }
+
+        String path = templateId.getPath();
+        if (path.contains("/streets/")
+                || path.contains("/terminators/")
+                || path.contains("/villagers/")
+                || path.contains("/zombie/")
+                || path.contains("/decor/")
+                || path.contains("/lamp")
+                || path.contains("plains_lamp")) {
+            return false;
+        }
+
+        if (path.contains("village/") && path.contains("plains")) {
+            return true;
+        }
+
+        return path.startsWith("plains_")
+                && (path.endsWith("_house") || path.contains("_house_") || path.contains("chef") || path.contains("cook"));
     }
 
     private static ResourceLocation id(String namespace, String path) {
@@ -360,8 +401,9 @@ public final class JigsawVillageBuildingTool {
         private final Map<ResourceLocation, Integer> spawnedCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> suppressedCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> offeredCounts = new LinkedHashMap<>();
-        private final Set<ResourceLocation> pendingUniqueIds = new LinkedHashSet<>();
-        private String lastLoggedUniqueSignal = "";
+        private final Map<ResourceLocation, Integer> pendingCounts = new LinkedHashMap<>();
+        private final Map<ResourceLocation, Integer> targetCounts = new LinkedHashMap<>();
+        private String lastLoggedCustomSignal = "";
 
         private Session(BlockPos startPos, ResourceLocation startTemplate) {
             this(startPos, startTemplate, false);
@@ -381,18 +423,14 @@ public final class JigsawVillageBuildingTool {
 
             ResourceLocation id = templateId.get();
             spawnedCounts.merge(id, 1, Integer::sum);
-            pendingUniqueIds.remove(id);
-            if (UNIQUE_PLAINS_BUILDING_SET.contains(id)) {
-                LOGGER.debug("[Solace] Plains village unique building placed: {} at {} with box {}", id, position, boundingBox);
+            decrementPending(id);
+            if (isCustomBuilding(id)) {
+                LOGGER.debug("[Solace] Plains village custom building placed: {} at {} with box {}", id, position, boundingBox);
             }
 
             if (ambient && id.getPath().contains("/terminators/")) {
                 logSummary();
             }
-        }
-
-        private boolean isAmbient() {
-            return ambient;
         }
 
         private boolean matchesStart(BlockPos position, ResourceLocation id) {
@@ -405,24 +443,38 @@ public final class JigsawVillageBuildingTool {
             this.spawnedCounts.clear();
             this.suppressedCounts.clear();
             this.offeredCounts.clear();
-            this.pendingUniqueIds.clear();
-            this.lastLoggedUniqueSignal = "";
-        }
-
-        private boolean hasPlaced(ResourceLocation id) {
-            return spawnedCounts.getOrDefault(id, 0) > 0;
+            this.pendingCounts.clear();
+            this.targetCounts.clear();
+            this.lastLoggedCustomSignal = "";
         }
 
         private void recordOffered(ResourceLocation id) {
             offeredCounts.merge(id, 1, Integer::sum);
         }
 
-        private boolean hasPending(ResourceLocation id) {
-            return pendingUniqueIds.contains(id);
+        private void markPending(ResourceLocation id) {
+            pendingCounts.merge(id, 1, Integer::sum);
         }
 
-        private void markPending(ResourceLocation id) {
-            pendingUniqueIds.add(id);
+        private void decrementPending(ResourceLocation id) {
+            int pending = pendingCounts.getOrDefault(id, 0);
+            if (pending <= 1) {
+                pendingCounts.remove(id);
+            } else {
+                pendingCounts.put(id, pending - 1);
+            }
+        }
+
+        private boolean needsMore(ResourceLocation id, int queued) {
+            int target = targetCount(id);
+            if (target < 0) {
+                return false;
+            }
+            return spawnedCounts.getOrDefault(id, 0) + pendingCounts.getOrDefault(id, 0) + queued < target;
+        }
+
+        private int targetCount(ResourceLocation id) {
+            return targetCounts.computeIfAbsent(id, target -> VillageBuildingSpawnConfig.chooseTargetCount(target, startPos, startTemplate));
         }
 
         private void recordSuppressed(ResourceLocation id) {
@@ -431,8 +483,8 @@ public final class JigsawVillageBuildingTool {
 
         private StructurePoolElement selectRandomReplacement(List<StructurePoolElement> candidates) {
             StructurePoolElement nonUniqueFallback = null;
-            for (ResourceLocation target : UNIQUE_PLAINS_BUILDINGS) {
-                if (hasPlaced(target) || hasPending(target)) {
+            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (!needsMore(target, 0)) {
                     continue;
                 }
 
@@ -448,7 +500,7 @@ public final class JigsawVillageBuildingTool {
 
             for (StructurePoolElement candidate : candidates) {
                 Optional<ResourceLocation> candidateId = templateId(candidate);
-                if (candidateId.isEmpty() || !UNIQUE_PLAINS_BUILDING_SET.contains(candidateId.get())) {
+                if (candidateId.isEmpty() || !isCustomBuilding(candidateId.get())) {
                     nonUniqueFallback = candidate;
                     break;
                 }
@@ -460,8 +512,8 @@ public final class JigsawVillageBuildingTool {
         private ResourceLocation selectPriorityCandidate(Set<ResourceLocation> candidateIds) {
             ResourceLocation selected = null;
             int selectedOffers = Integer.MAX_VALUE;
-            for (ResourceLocation target : UNIQUE_PLAINS_BUILDINGS) {
-                if (hasPlaced(target) || !candidateIds.contains(target)) {
+            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (!needsMore(target, 0) || !candidateIds.contains(target)) {
                     continue;
                 }
 
@@ -475,8 +527,8 @@ public final class JigsawVillageBuildingTool {
         }
 
         private ResourceLocation selectMissingTarget() {
-            for (ResourceLocation target : UNIQUE_PLAINS_BUILDINGS) {
-                if (!hasPlaced(target) && !hasPending(target)) {
+            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (needsMore(target, 0)) {
                     return target;
                 }
             }
@@ -484,7 +536,7 @@ public final class JigsawVillageBuildingTool {
         }
 
         private boolean isReplaceableHouse(ResourceLocation id) {
-            if (UNIQUE_PLAINS_BUILDING_SET.contains(id)) {
+            if (isCustomBuilding(id)) {
                 return false;
             }
 
@@ -499,24 +551,25 @@ public final class JigsawVillageBuildingTool {
             if (spawnedCounts.isEmpty()) {
                 return;
             }
-            if (!hasUniqueTargetSignal()) {
+            if (!hasCustomTargetSignal()) {
                 return;
             }
-            String uniqueSignal = uniqueSignal();
-            if (uniqueSignal.equals(lastLoggedUniqueSignal)) {
+            String customSignal = customSignal();
+            if (customSignal.equals(lastLoggedCustomSignal)) {
                 return;
             }
-            lastLoggedUniqueSignal = uniqueSignal;
+            lastLoggedCustomSignal = customSignal;
 
             String summary = "Plains village jigsaw at " + startPos + " from " + startTemplate + ": " + spawnedCounts;
             rememberReport(summary);
             LOGGER.info("[Solace] {}", summary);
-            for (ResourceLocation uniqueId : UNIQUE_PLAINS_BUILDINGS) {
-                int count = spawnedCounts.getOrDefault(uniqueId, 0);
-                if (count == 0) {
-                    LOGGER.warn("[Solace] Plains village did not place required unique building: {}", uniqueId);
-                } else if (count > 1) {
-                    LOGGER.warn("[Solace] Plains village placed duplicate unique building {} times: {}", count, uniqueId);
+            for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
+                int target = targetCount(customId);
+                int count = spawnedCounts.getOrDefault(customId, 0);
+                if (count < target) {
+                    LOGGER.warn("[Solace] Plains village placed {} of required {} custom building {}", count, target, customId);
+                } else if (count > target) {
+                    LOGGER.warn("[Solace] Plains village placed {} above target {} for custom building {}", count, target, customId);
                 }
             }
 
@@ -527,34 +580,36 @@ public final class JigsawVillageBuildingTool {
             Set<ResourceLocation> offeredButMissing = new LinkedHashSet<>(offeredCounts.keySet());
             offeredButMissing.removeAll(spawnedCounts.keySet());
             if (!offeredButMissing.isEmpty()) {
-                LOGGER.warn("[Solace] Plains village offered unique candidates that did not become pieces: {}", offeredButMissing);
+                LOGGER.warn("[Solace] Plains village offered custom candidates that did not become pieces: {}", offeredButMissing);
             }
         }
 
-        private boolean hasUniqueTargetSignal() {
-            for (ResourceLocation uniqueId : UNIQUE_PLAINS_BUILDINGS) {
-                if (spawnedCounts.containsKey(uniqueId)
-                        || suppressedCounts.containsKey(uniqueId)
-                        || offeredCounts.containsKey(uniqueId)
-                        || pendingUniqueIds.contains(uniqueId)) {
+        private boolean hasCustomTargetSignal() {
+            for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (spawnedCounts.containsKey(customId)
+                        || suppressedCounts.containsKey(customId)
+                        || offeredCounts.containsKey(customId)
+                        || pendingCounts.containsKey(customId)) {
                     return true;
                 }
             }
             return false;
         }
 
-        private String uniqueSignal() {
+        private String customSignal() {
             StringBuilder signal = new StringBuilder();
-            for (ResourceLocation uniqueId : UNIQUE_PLAINS_BUILDINGS) {
-                signal.append(uniqueId)
+            for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
+                signal.append(customId)
                         .append('=')
-                        .append(spawnedCounts.getOrDefault(uniqueId, 0))
+                        .append(spawnedCounts.getOrDefault(customId, 0))
                         .append('/')
-                        .append(suppressedCounts.getOrDefault(uniqueId, 0))
+                        .append(suppressedCounts.getOrDefault(customId, 0))
                         .append('/')
-                        .append(offeredCounts.getOrDefault(uniqueId, 0))
+                        .append(offeredCounts.getOrDefault(customId, 0))
                         .append('/')
-                        .append(pendingUniqueIds.contains(uniqueId))
+                        .append(pendingCounts.getOrDefault(customId, 0))
+                        .append('/')
+                        .append(targetCount(customId))
                         .append(';');
             }
             return signal.toString();
