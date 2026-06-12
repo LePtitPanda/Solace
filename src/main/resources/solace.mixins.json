@@ -17,6 +17,10 @@
     "MineCellsDoorwayPortalFrameMixin",
     "MineCellsRiftBlockMixin",
     "PalettedContainerResizeGuardMixin",
+    "JigsawPlacementMixin",
+    "PoolElementStructurePieceMixin",
+    "SinglePoolElementAccessor",
+    "StructureTemplatePoolMixin",
     "UGNoiseBasedChunkGeneratorMixin"
   ],
   "client": [
