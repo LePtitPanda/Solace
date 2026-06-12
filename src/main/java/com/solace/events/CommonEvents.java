@@ -143,7 +143,7 @@ public final class CommonEvents {
     }
 
     private static int showVillageJigsaws(CommandSourceStack source) {
-        source.sendSuccess(() -> Component.literal("Unique plains village targets: " + JigsawVillageBuildingTool.describeUniqueTargets()), false);
+        source.sendSuccess(() -> Component.literal("Configured plains village building rules: " + JigsawVillageBuildingTool.describeUniqueTargets()), false);
 
         java.util.List<String> reports = JigsawVillageBuildingTool.describeRecentReports();
         if (reports.isEmpty()) {

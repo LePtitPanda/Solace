@@ -1,6 +1,7 @@
 package com.solace;
 
 import com.solace.events.CommonEvents;
+import com.solace.config.VillageBuildingSpawnConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -39,6 +40,7 @@ public class Solace {
         @SubscribeEvent
         public static void onCommonSetup(FMLCommonSetupEvent event) {
             LOGGER.info("[Solace] FMLCommonSetupEvent Fired!");
+            VillageBuildingSpawnConfig.init();
 
             event.enqueueWork(() -> {
                 // Register custom portal
