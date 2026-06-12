@@ -1,7 +1,9 @@
 package com.solace.events;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.logging.LogUtils;
 import com.solace.world.BalloonIntroManager;
+import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -9,6 +11,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec2;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -16,12 +20,14 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.slf4j.Logger;
 
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class CommonEvents {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<UUID> DEATH_DISMOUNT_BYPASS = ConcurrentHashMap.newKeySet();
 
     private CommonEvents() {
@@ -102,7 +108,12 @@ public final class CommonEvents {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.literal("solace")
                 .then(Commands.literal("stop_balloon")
-                        .executes(context -> stopIntroBalloon(context.getSource()))));
+                        .executes(context -> stopIntroBalloon(context.getSource())))
+                .then(Commands.literal("village_jigsaws")
+                        .then(Commands.literal("place_test")
+                                .requires(source -> source.hasPermission(4))
+                                .executes(context -> runVillageJigsawPlacementTest(context.getSource(), "command")))
+                        .executes(context -> showVillageJigsaws(context.getSource()))));
     }
 
     private static int stopIntroBalloon(CommandSourceStack source) {
@@ -129,5 +140,48 @@ public final class CommonEvents {
         BalloonIntroManager.completeIntroLanding(player, vehicle);
         source.sendSuccess(() -> Component.literal("Stopped the intro balloon."), false);
         return 1;
+    }
+
+    private static int showVillageJigsaws(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("Unique plains village targets: " + JigsawVillageBuildingTool.describeUniqueTargets()), false);
+
+        java.util.List<String> reports = JigsawVillageBuildingTool.describeRecentReports();
+        if (reports.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No plains village jigsaw reports recorded yet."), false);
+            return 1;
+        }
+
+        source.sendSuccess(() -> Component.literal("Recent plains village jigsaw reports:"), false);
+        for (String report : reports) {
+            source.sendSuccess(() -> Component.literal(report), false);
+        }
+
+        return reports.size();
+    }
+
+    private static int runVillageJigsawPlacementTest(CommandSourceStack source, String reason) {
+        Vec3 position = source.getPosition();
+        CommandSourceStack testSource = source
+                .withPermission(4)
+                .withSuppressedOutput()
+                .withPosition(position)
+                .withRotation(Vec2.ZERO);
+        String command = "place jigsaw minecraft:village/plains/town_centers minecraft:bottom 7 "
+                + (int) Math.floor(position.x) + " "
+                + (int) Math.floor(position.y) + " "
+                + (int) Math.floor(position.z);
+        int result = source.getServer().getCommands().performPrefixedCommand(testSource, command);
+        java.util.List<String> reports = JigsawVillageBuildingTool.describeRecentReports();
+        LOGGER.info("[Solace] Village jigsaw placement test ({}) ran `{}` result {}; reports: {}", reason, command, result, reports);
+
+        source.sendSuccess(() -> Component.literal("Placed plains village jigsaw test; command result " + result + "."), false);
+        if (reports.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No plains village jigsaw reports recorded yet."), false);
+        } else {
+            for (String report : reports) {
+                source.sendSuccess(() -> Component.literal(report), false);
+            }
+        }
+        return result;
     }
 }
