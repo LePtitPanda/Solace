@@ -36,7 +36,9 @@ public final class BalloonIntroManager {
     private static final int SEARCH_RADIUS_CHUNKS = 128;
     private static final double START_DISTANCE = 460.0D;
     private static final int START_HEIGHT_ABOVE_SEA_LEVEL = 150;
-    private static final int ROUTE_PRELOAD_HALF_WIDTH_CHUNKS = 1;
+    private static final int ROUTE_PRELOAD_VERSION = 2;
+    private static final int ROUTE_PRELOAD_HALF_WIDTH_CHUNKS = 3;
+    private static final int START_PRELOAD_HALF_WIDTH_CHUNKS = 4;
 
     private BalloonIntroManager() {
     }
@@ -140,13 +142,13 @@ public final class BalloonIntroManager {
     }
 
     private static void preloadIntroRouteIfNeeded(ServerLevel level, SolaceWorldData data, BlockPos villagePos) {
-        if (data.isBreezyVillageIntroRoutePreloaded()) return;
+        if (data.isBreezyVillageIntroRoutePreloaded(ROUTE_PRELOAD_VERSION)) return;
 
         Vec3 target = Vec3.atCenterOf(villagePos);
         Vec3 start = computeStartPosition(level, target);
         int loadedChunks = preloadChunkCorridor(level, start, target);
-        data.setBreezyVillageIntroRoutePreloaded(true);
-        LOGGER.info("[Solace] Preloaded {} chunks along Breezy intro route.", loadedChunks);
+        data.setBreezyVillageIntroRoutePreloaded(ROUTE_PRELOAD_VERSION);
+        LOGGER.info("[Solace] Preloaded {} chunks along Breezy intro route at preload version {}.", loadedChunks, ROUTE_PRELOAD_VERSION);
     }
 
     private static int preloadChunkCorridor(ServerLevel level, Vec3 start, Vec3 target) {
@@ -160,24 +162,32 @@ public final class BalloonIntroManager {
         int loadedChunks = 0;
         java.util.HashSet<Long> seenChunks = new java.util.HashSet<>();
 
+        loadedChunks += preloadChunkSquare(level, seenChunks, startChunkX, startChunkZ, START_PRELOAD_HALF_WIDTH_CHUNKS);
+
         for (int step = 0; step <= steps; step++) {
             double progress = steps == 0 ? 0.0D : step / (double) steps;
             int centerChunkX = Mth.floor(Mth.lerp(progress, startChunkX, targetChunkX));
             int centerChunkZ = Mth.floor(Mth.lerp(progress, startChunkZ, targetChunkZ));
 
-            for (int offsetX = -ROUTE_PRELOAD_HALF_WIDTH_CHUNKS; offsetX <= ROUTE_PRELOAD_HALF_WIDTH_CHUNKS; offsetX++) {
-                for (int offsetZ = -ROUTE_PRELOAD_HALF_WIDTH_CHUNKS; offsetZ <= ROUTE_PRELOAD_HALF_WIDTH_CHUNKS; offsetZ++) {
-                    int chunkX = centerChunkX + offsetX;
-                    int chunkZ = centerChunkZ + offsetZ;
-                    long chunkKey = net.minecraft.world.level.ChunkPos.asLong(chunkX, chunkZ);
-                    if (seenChunks.add(chunkKey)) {
-                        level.getChunk(chunkX, chunkZ);
-                        loadedChunks++;
-                    }
+            loadedChunks += preloadChunkSquare(level, seenChunks, centerChunkX, centerChunkZ, ROUTE_PRELOAD_HALF_WIDTH_CHUNKS);
+        }
+
+        return loadedChunks;
+    }
+
+    private static int preloadChunkSquare(ServerLevel level, java.util.Set<Long> seenChunks, int centerChunkX, int centerChunkZ, int halfWidthChunks) {
+        int loadedChunks = 0;
+        for (int offsetX = -halfWidthChunks; offsetX <= halfWidthChunks; offsetX++) {
+            for (int offsetZ = -halfWidthChunks; offsetZ <= halfWidthChunks; offsetZ++) {
+                int chunkX = centerChunkX + offsetX;
+                int chunkZ = centerChunkZ + offsetZ;
+                long chunkKey = net.minecraft.world.level.ChunkPos.asLong(chunkX, chunkZ);
+                if (seenChunks.add(chunkKey)) {
+                    level.getChunk(chunkX, chunkZ);
+                    loadedChunks++;
                 }
             }
         }
-
         return loadedChunks;
     }
 

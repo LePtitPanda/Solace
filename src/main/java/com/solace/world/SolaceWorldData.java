@@ -19,11 +19,13 @@ public class SolaceWorldData extends SavedData {
     private static final String INTRO_VILLAGE_Y_KEY = "BreezyVillageIntroVillageY";
     private static final String INTRO_VILLAGE_Z_KEY = "BreezyVillageIntroVillageZ";
     private static final String INTRO_ROUTE_PRELOADED_KEY = "BreezyVillageIntroRoutePreloaded";
+    private static final String INTRO_ROUTE_PRELOAD_VERSION_KEY = "BreezyVillageIntroRoutePreloadVersion";
 
     private final Set<UUID> breezyVillageIntroCompletedPlayers = new HashSet<>();
     private boolean breezyVillageIntroVillageFound;
     private BlockPos breezyVillageIntroVillagePos;
     private boolean breezyVillageIntroRoutePreloaded;
+    private int breezyVillageIntroRoutePreloadVersion;
 
     public static SolaceWorldData load(CompoundTag tag) {
         SolaceWorldData data = new SolaceWorldData();
@@ -36,6 +38,7 @@ public class SolaceWorldData extends SavedData {
         }
         data.breezyVillageIntroVillageFound = tag.getBoolean(INTRO_VILLAGE_FOUND_KEY);
         data.breezyVillageIntroRoutePreloaded = tag.getBoolean(INTRO_ROUTE_PRELOADED_KEY);
+        data.breezyVillageIntroRoutePreloadVersion = tag.getInt(INTRO_ROUTE_PRELOAD_VERSION_KEY);
         if (data.breezyVillageIntroVillageFound) {
             data.breezyVillageIntroVillagePos = new BlockPos(
                     tag.getInt(INTRO_VILLAGE_X_KEY),
@@ -70,13 +73,14 @@ public class SolaceWorldData extends SavedData {
         setDirty();
     }
 
-    public boolean isBreezyVillageIntroRoutePreloaded() {
-        return breezyVillageIntroRoutePreloaded;
+    public boolean isBreezyVillageIntroRoutePreloaded(int requiredVersion) {
+        return breezyVillageIntroRoutePreloaded && breezyVillageIntroRoutePreloadVersion >= requiredVersion;
     }
 
-    public void setBreezyVillageIntroRoutePreloaded(boolean preloaded) {
-        if (this.breezyVillageIntroRoutePreloaded != preloaded) {
-            this.breezyVillageIntroRoutePreloaded = preloaded;
+    public void setBreezyVillageIntroRoutePreloaded(int version) {
+        if (!this.breezyVillageIntroRoutePreloaded || this.breezyVillageIntroRoutePreloadVersion != version) {
+            this.breezyVillageIntroRoutePreloaded = true;
+            this.breezyVillageIntroRoutePreloadVersion = version;
             setDirty();
         }
     }
@@ -91,6 +95,7 @@ public class SolaceWorldData extends SavedData {
         tag.put(INTRO_COMPLETED_PLAYERS_KEY, completedPlayers);
         tag.putBoolean(INTRO_VILLAGE_FOUND_KEY, breezyVillageIntroVillageFound);
         tag.putBoolean(INTRO_ROUTE_PRELOADED_KEY, breezyVillageIntroRoutePreloaded);
+        tag.putInt(INTRO_ROUTE_PRELOAD_VERSION_KEY, breezyVillageIntroRoutePreloadVersion);
         if (breezyVillageIntroVillageFound && breezyVillageIntroVillagePos != null) {
             tag.putInt(INTRO_VILLAGE_X_KEY, breezyVillageIntroVillagePos.getX());
             tag.putInt(INTRO_VILLAGE_Y_KEY, breezyVillageIntroVillagePos.getY());
