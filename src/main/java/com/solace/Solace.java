@@ -32,6 +32,66 @@ public class Solace {
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
+        updateCraftPresenceConfig();
+    }
+
+    private void updateCraftPresenceConfig() {
+        try {
+            java.io.File configFile = new java.io.File("config/craftpresence.json");
+            if (configFile.exists()) {
+                String content = new String(java.nio.file.Files.readAllBytes(configFile.toPath()), java.nio.charset.StandardCharsets.UTF_8);
+                com.google.gson.JsonObject json = com.google.gson.JsonParser.parseString(content).getAsJsonObject();
+                if (json.has("displaySettings")) {
+                    com.google.gson.JsonObject displaySettings = json.getAsJsonObject("displaySettings");
+                    if (displaySettings.has("presenceData")) {
+                        com.google.gson.JsonObject presenceData = displaySettings.getAsJsonObject("presenceData");
+                        
+                        boolean codex = Boolean.getBoolean("astralis.codex.bridge") || Boolean.getBoolean("astralis.codex.automation");
+                        boolean antigravity = Boolean.getBoolean("astralis.antigravity.bridge");
+                        
+                        String details;
+                        String gameState;
+                        String smallImageKey;
+                        String smallImageText;
+                        
+                        if (codex && antigravity) {
+                            details = "Playing with Antigravity & Codex";
+                            gameState = "Astralis [AI Co-op]";
+                            smallImageKey = "agents";
+                            smallImageText = "Agents are watching chat and logs";
+                        } else if (codex) {
+                            details = "Playing with Codex monitoring";
+                            gameState = "Astralis [Codex co-op]";
+                            smallImageKey = "codex";
+                            smallImageText = "Codex is watching chat and logs";
+                        } else if (antigravity) {
+                            details = "Playing with Antigravity monitoring";
+                            gameState = "Astralis [Antigravity co-op]";
+                            smallImageKey = "antigravity";
+                            smallImageText = "Antigravity is watching chat and logs";
+                        } else {
+                            // Solo
+                            details = "{getFirst(menu.message, dimension.message)}";
+                            gameState = "Astralis [Solo]";
+                            smallImageKey = "{player.icon}";
+                            smallImageText = "{player.name}";
+                        }
+                        
+                        presenceData.addProperty("details", details);
+                        presenceData.addProperty("gameState", gameState);
+                        presenceData.addProperty("smallImageKey", smallImageKey);
+                        presenceData.addProperty("smallImageText", smallImageText);
+                        
+                        com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+                        String newContent = gson.toJson(json);
+                        java.nio.file.Files.write(configFile.toPath(), newContent.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        LOGGER.info("[Solace] CraftPresence config successfully updated for details='{}', gameState='{}'", details, gameState);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[Solace] Failed to update CraftPresence config dynamically", e);
+        }
     }
 
     @Mod.EventBusSubscriber(modid = MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD)
