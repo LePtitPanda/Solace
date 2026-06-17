@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "solace.refmap.json",
   "mixins": [
+    "AlchemistCauldronTileMixin",
     "BreezyIntroBalloonMixin",
     "DifficultyPacketMixin",
     "MineCellsDataMixin",
