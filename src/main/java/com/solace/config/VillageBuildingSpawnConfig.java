@@ -133,6 +133,16 @@ public final class VillageBuildingSpawnConfig {
         }
 
         boolean changed = false;
+        if (Files.isRegularFile(CONFIG_PATH)) {
+            try {
+                String content = Files.readString(CONFIG_PATH);
+                if (content.contains("\"RANDOM\"") || content.contains("\"CUSTOM\"")) {
+                    changed = true;
+                }
+            } catch (IOException ignored) {
+            }
+        }
+
         for (ResourceLocation buildingId : DEFAULT_CUSTOM_BUILDINGS) {
             String key = buildingId.toString();
             if (!loaded.entries.containsKey(key)) {
