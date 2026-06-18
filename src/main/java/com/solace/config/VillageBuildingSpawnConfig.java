@@ -14,6 +14,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import com.google.gson.annotations.SerializedName;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -78,7 +79,7 @@ public final class VillageBuildingSpawnConfig {
         for (Map.Entry<String, Entry> entry : config.entries.entrySet()) {
             ResourceLocation id = parseId(entry.getKey());
             Entry rule = sanitize(entry.getValue(), id);
-            if (rule.mode == Mode.CUSTOM) {
+            if (rule.mode == Mode.ONCE || rule.mode == Mode.RANGE) {
                 customIds.add(id);
             }
         }
@@ -91,8 +92,11 @@ public final class VillageBuildingSpawnConfig {
 
     public static int chooseTargetCount(ResourceLocation buildingId, BlockPos startPos, ResourceLocation startTemplate) {
         Entry entry = discover(buildingId);
-        if (entry.mode != Mode.CUSTOM) {
+        if (entry.mode == Mode.DEFAULT) {
             return -1;
+        }
+        if (entry.mode == Mode.ONCE) {
+            return 1;
         }
 
         if (entry.min == entry.max) {
@@ -132,7 +136,7 @@ public final class VillageBuildingSpawnConfig {
         for (ResourceLocation buildingId : DEFAULT_CUSTOM_BUILDINGS) {
             String key = buildingId.toString();
             if (!loaded.entries.containsKey(key)) {
-                loaded.entries.put(key, Entry.custom(1, 1));
+                loaded.entries.put(key, Entry.once());
                 changed = true;
             }
         }
@@ -166,9 +170,9 @@ public final class VillageBuildingSpawnConfig {
 
     private static Entry defaultEntry(ResourceLocation buildingId) {
         if (DEFAULT_CUSTOM_BUILDINGS.contains(buildingId)) {
-            return Entry.custom(1, 1);
+            return Entry.once();
         }
-        return Entry.random();
+        return Entry.defaultMode();
     }
 
     private static Entry sanitize(Entry entry, ResourceLocation buildingId) {
@@ -176,7 +180,7 @@ public final class VillageBuildingSpawnConfig {
             return defaultEntry(buildingId);
         }
 
-        Mode mode = entry.mode == null ? Mode.RANDOM : entry.mode;
+        Mode mode = entry.mode == null ? Mode.DEFAULT : entry.mode;
         int min = Math.max(0, entry.min);
         int max = Math.max(min, entry.max);
         return new Entry(mode, min, max);
@@ -195,12 +199,16 @@ public final class VillageBuildingSpawnConfig {
     }
 
     public enum Mode {
-        RANDOM,
-        CUSTOM
+        @SerializedName(value = "DEFAULT", alternate = {"RANDOM"})
+        DEFAULT,
+        @SerializedName(value = "ONCE")
+        ONCE,
+        @SerializedName(value = "RANGE", alternate = {"CUSTOM"})
+        RANGE
     }
 
     public static final class Entry {
-        public Mode mode = Mode.RANDOM;
+        public Mode mode = Mode.DEFAULT;
         public int min = 1;
         public int max = 1;
 
@@ -213,12 +221,16 @@ public final class VillageBuildingSpawnConfig {
             this.max = max;
         }
 
-        private static Entry random() {
-            return new Entry(Mode.RANDOM, 1, 1);
+        private static Entry defaultMode() {
+            return new Entry(Mode.DEFAULT, 1, 1);
         }
 
-        private static Entry custom(int min, int max) {
-            return new Entry(Mode.CUSTOM, min, max);
+        private static Entry once() {
+            return new Entry(Mode.ONCE, 1, 1);
+        }
+
+        private static Entry range(int min, int max) {
+            return new Entry(Mode.RANGE, min, max);
         }
 
         private Entry copy() {

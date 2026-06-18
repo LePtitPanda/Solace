@@ -7,10 +7,13 @@ import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
@@ -109,11 +112,20 @@ public final class CommonEvents {
         dispatcher.register(Commands.literal("solace")
                 .then(Commands.literal("stop_balloon")
                         .executes(context -> stopIntroBalloon(context.getSource())))
+                .then(Commands.literal("what_building")
+                        .executes(context -> whatBuilding(context.getSource())))
+                .then(Commands.literal("village_buildings")
+                        .executes(context -> listVillageBuildings(context.getSource())))
                 .then(Commands.literal("village_jigsaws")
                         .then(Commands.literal("place_test")
                                 .requires(source -> source.hasPermission(4))
                                 .executes(context -> runVillageJigsawPlacementTest(context.getSource(), "command")))
                         .executes(context -> showVillageJigsaws(context.getSource()))));
+
+        dispatcher.register(Commands.literal("what_building")
+                .executes(context -> whatBuilding(context.getSource())));
+        dispatcher.register(Commands.literal("village_buildings")
+                .executes(context -> listVillageBuildings(context.getSource())));
     }
 
     private static int stopIntroBalloon(CommandSourceStack source) {
@@ -183,5 +195,110 @@ public final class CommonEvents {
             }
         }
         return result;
+    }
+
+    private static int whatBuilding(CommandSourceStack source) {
+        ServerPlayer player;
+        try {
+            player = source.getPlayerOrException();
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only players can query buildings."));
+            return 0;
+        }
+
+        ServerLevel level = player.serverLevel();
+        BlockPos pos = player.blockPosition();
+        StructureManager structureManager = level.structureManager();
+        java.util.Map<net.minecraft.world.level.levelgen.structure.Structure, ?> structures = structureManager.getAllStructuresAt(pos);
+
+        boolean foundPiece = false;
+        for (net.minecraft.world.level.levelgen.structure.Structure structure : structures.keySet()) {
+            ResourceLocation structureId = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE).getKey(structure);
+            if (structureId == null || !structureId.getPath().contains("village")) {
+                continue;
+            }
+
+            net.minecraft.world.level.levelgen.structure.StructureStart start = structureManager.getStructureAt(pos, structure);
+            if (start == null || !start.isValid()) {
+                continue;
+            }
+
+            for (net.minecraft.world.level.levelgen.structure.StructurePiece piece : start.getPieces()) {
+                if (piece.getBoundingBox().isInside(pos)) {
+                    if (piece instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece poolPiece) {
+                        java.util.Optional<ResourceLocation> templateId = JigsawVillageBuildingTool.templateId(poolPiece.getElement());
+                        if (templateId.isPresent()) {
+                            source.sendSuccess(() -> Component.literal("You are standing in village building: " + templateId.get().toString()), false);
+                            foundPiece = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (foundPiece) break;
+        }
+
+        if (!foundPiece) {
+            source.sendFailure(Component.literal("You are not standing inside any village building piece."));
+            return 0;
+        }
+        return 1;
+    }
+
+    private static int listVillageBuildings(CommandSourceStack source) {
+        ServerPlayer player;
+        try {
+            player = source.getPlayerOrException();
+        } catch (Exception e) {
+            source.sendFailure(Component.literal("Only players can list village buildings."));
+            return 0;
+        }
+
+        ServerLevel level = player.serverLevel();
+        BlockPos pos = player.blockPosition();
+        StructureManager structureManager = level.structureManager();
+        java.util.Map<net.minecraft.world.level.levelgen.structure.Structure, ?> structures = structureManager.getAllStructuresAt(pos);
+
+        net.minecraft.world.level.levelgen.structure.StructureStart villageStart = null;
+        ResourceLocation villageId = null;
+        for (net.minecraft.world.level.levelgen.structure.Structure structure : structures.keySet()) {
+            ResourceLocation structureId = level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE).getKey(structure);
+            if (structureId != null && structureId.getPath().contains("village")) {
+                net.minecraft.world.level.levelgen.structure.StructureStart start = structureManager.getStructureAt(pos, structure);
+                if (start != null && start.isValid()) {
+                    villageStart = start;
+                    villageId = structureId;
+                    break;
+                }
+            }
+        }
+
+        if (villageStart == null || villageId == null) {
+            source.sendFailure(Component.literal("You are not inside a village."));
+            return 0;
+        }
+
+        java.util.Map<ResourceLocation, Integer> counts = new java.util.LinkedHashMap<>();
+        for (net.minecraft.world.level.levelgen.structure.StructurePiece piece : villageStart.getPieces()) {
+            if (piece instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece poolPiece) {
+                java.util.Optional<ResourceLocation> templateId = JigsawVillageBuildingTool.templateId(poolPiece.getElement());
+                templateId.ifPresent(id -> counts.merge(id, 1, Integer::sum));
+            }
+        }
+
+        if (counts.isEmpty()) {
+            source.sendFailure(Component.literal("No building pieces found in this village."));
+            return 0;
+        }
+
+        final ResourceLocation finalVillageId = villageId;
+        source.sendSuccess(() -> Component.literal("Buildings in village (" + finalVillageId.toString() + "):"), false);
+        for (java.util.Map.Entry<ResourceLocation, Integer> entry : counts.entrySet()) {
+            final ResourceLocation key = entry.getKey();
+            final int count = entry.getValue();
+            source.sendSuccess(() -> Component.literal("- " + key.toString() + " x" + count), false);
+        }
+
+        return counts.size();
     }
 }

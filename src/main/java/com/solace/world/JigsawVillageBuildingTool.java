@@ -83,7 +83,15 @@ public final class JigsawVillageBuildingTool {
         }
 
         if (session == null) {
-            return candidates;
+            List<StructurePoolElement> filtered = new ArrayList<>();
+            for (StructurePoolElement candidate : candidates) {
+                Optional<ResourceLocation> templateId = templateId(candidate);
+                if (templateId.isPresent() && isZombiePiece(templateId.get())) {
+                    continue;
+                }
+                filtered.add(candidate);
+            }
+            return filtered;
         }
 
         List<StructurePoolElement> allowedNonUnique = new ArrayList<>(candidates.size());
@@ -94,7 +102,14 @@ public final class JigsawVillageBuildingTool {
         for (StructurePoolElement candidate : candidates) {
             Optional<ResourceLocation> templateId = templateId(candidate);
             templateId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
-            if (templateId.isEmpty() || !isCustomBuilding(templateId.get())) {
+            if (templateId.isEmpty()) {
+                allowedNonUnique.add(candidate);
+                continue;
+            }
+            if (isZombiePiece(templateId.get())) {
+                continue;
+            }
+            if (!isCustomBuilding(templateId.get())) {
                 allowedNonUnique.add(candidate);
                 continue;
             }
@@ -146,6 +161,16 @@ public final class JigsawVillageBuildingTool {
     public static StructurePoolElement filterRandomCandidate(StructurePoolElement selected, List<StructurePoolElement> candidates) {
         Optional<ResourceLocation> selectedId = templateId(selected);
         selectedId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
+        
+        if (selectedId.isPresent() && isZombiePiece(selectedId.get())) {
+            for (StructurePoolElement candidate : candidates) {
+                Optional<ResourceLocation> candidateId = templateId(candidate);
+                if (candidateId.isPresent() && !isZombiePiece(candidateId.get())) {
+                    return filterRandomCandidate(candidate, candidates);
+                }
+            }
+        }
+
         if (selectedId.isEmpty() || !isCustomBuilding(selectedId.get())) {
             return selected;
         }
@@ -286,13 +311,18 @@ public final class JigsawVillageBuildingTool {
         return VillageBuildingSpawnConfig.describeEntries();
     }
 
-    private static Optional<ResourceLocation> templateId(StructurePoolElement element) {
+    public static Optional<ResourceLocation> templateId(StructurePoolElement element) {
         if (!(element instanceof SinglePoolElement)) {
             return Optional.empty();
         }
 
         Either<ResourceLocation, StructureTemplate> template = ((SinglePoolElementAccessor) element).solace$getTemplate();
         return template.left();
+    }
+
+    public static boolean isZombiePiece(ResourceLocation id) {
+        String path = id.getPath();
+        return path.contains("/zombie/") || path.contains("_zombie_") || path.contains("zombie/");
     }
 
     private static boolean hasCustomCandidate(List<StructurePoolElement> candidates) {
@@ -315,7 +345,11 @@ public final class JigsawVillageBuildingTool {
     }
 
     private static boolean isCustomBuilding(ResourceLocation id) {
-        return isConfigurableBuilding(id) && VillageBuildingSpawnConfig.discover(id).mode == Mode.CUSTOM;
+        if (!isConfigurableBuilding(id)) {
+            return false;
+        }
+        VillageBuildingSpawnConfig.Mode mode = VillageBuildingSpawnConfig.discover(id).mode;
+        return mode == VillageBuildingSpawnConfig.Mode.ONCE || mode == VillageBuildingSpawnConfig.Mode.RANGE;
     }
 
     private static boolean isPlainsVillageStart(ResourceLocation templateId) {
