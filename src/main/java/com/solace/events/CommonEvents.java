@@ -282,7 +282,13 @@ public final class CommonEvents {
         for (net.minecraft.world.level.levelgen.structure.StructurePiece piece : villageStart.getPieces()) {
             if (piece instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece poolPiece) {
                 java.util.Optional<ResourceLocation> templateId = JigsawVillageBuildingTool.templateId(poolPiece.getElement());
-                templateId.ifPresent(id -> counts.merge(id, 1, Integer::sum));
+                templateId.ifPresent(id -> {
+                    String path = id.getPath();
+                    if (path.contains("streets/") || path.contains("villagers/") || path.contains("common/") || path.contains("terminators/")) {
+                        return;
+                    }
+                    counts.merge(id, 1, Integer::sum);
+                });
             }
         }
 
