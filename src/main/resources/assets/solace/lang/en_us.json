@@ -1,0 +1,10 @@
+{
+  "solace.jade.cauldron.complete": "Completed: %s",
+  "solace.jade.cauldron.base": "  - Base: %s",
+  "solace.jade.cauldron.base_missing": "  - Missing Base",
+  "solace.jade.cauldron.catalyst": "  - Catalyst: %s",
+  "solace.jade.cauldron.catalyst_missing": "  - Missing Catalyst",
+  "solace.jade.cauldron.inhibitor": "  - Inhibitor: %s",
+  "solace.jade.cauldron.inhibitor_missing": "  - Missing Inhibitor",
+  "solace.jei.alchemist_cauldron.info": "The Alchemist Cauldron can be used to brew potions. Put water inside, place a heat source underneath, and add ingredients to brew custom potions and elixirs."
+}
