@@ -22,12 +22,19 @@
     "PoolElementStructurePieceMixin",
     "SinglePoolElementAccessor",
     "StructureTemplatePoolMixin",
-    "UGNoiseBasedChunkGeneratorMixin"
+    "UGNoiseBasedChunkGeneratorMixin",
+    "AbstractContainerMenuAccessor",
+    "EnchantmentTableBlockMixin",
+    "RunicTableScreenHandlerMixin"
   ],
   "client": [
     "CreateWorldScreenTabsMixin",
     "DifficultyButtonAccess",
-    "DifficultySelectionScreenMixin"
+    "DifficultySelectionScreenMixin",
+    "AlchemistCauldronRendererMixin",
+    "FluidStorageProviderMixin",
+    "FluidViewMixin",
+    "ClientProxyMixin"
   ],
   "server": [],
   "injectors": {
