@@ -94,6 +94,7 @@ dependencies {
     compileOnly files('../mods/jei-1.20.1-forge-15.20.0.112.jar')
     compileOnly files('../mods/emi-1.1.22+1.20.1+forge.jar')
     compileOnly files('../mods/mcde-1.6.4-1.20.jar')
+    compileOnly files('../mods/caverns_and_chasms-1.20.1-2.1.0.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }

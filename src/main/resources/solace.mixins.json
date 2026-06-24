@@ -25,7 +25,9 @@
     "StructureMixin",
     "UGNoiseBasedChunkGeneratorMixin",
     "AbstractContainerMenuAccessor",
+    "AtoningTableBlockMixin",
     "EnchantmentTableBlockMixin",
+    "RollBenchScreenHandlerMixin",
     "RunicTableScreenHandlerMixin"
   ],
   "client": [

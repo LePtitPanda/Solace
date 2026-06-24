@@ -1,0 +1,19 @@
+package com.solace.mixin;
+
+import com.solace.world.EnchantingReworkSupport;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.MenuProvider;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+@Mixin(targets = "com.teamabnormals.caverns_and_chasms.common.block.AtoningTableBlock", remap = false)
+public class AtoningTableBlockMixin {
+    @Inject(method = "m_7246_", at = @At("HEAD"), cancellable = true, remap = false)
+    private void solace$getMenuProvider(BlockState state, Level level, BlockPos pos, CallbackInfoReturnable<MenuProvider> cir) {
+        cir.setReturnValue(EnchantingReworkSupport.rollBenchProvider(level, pos));
+    }
+}
