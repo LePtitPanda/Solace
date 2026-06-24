@@ -10,21 +10,10 @@ import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemp
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PoolElementStructurePiece.class)
 public abstract class PoolElementStructurePieceMixin {
-    @ModifyVariable(
-            method = "<init>(Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager;Lnet/minecraft/world/level/levelgen/structure/pools/StructurePoolElement;Lnet/minecraft/core/BlockPos;ILnet/minecraft/world/level/block/Rotation;Lnet/minecraft/world/level/levelgen/structure/BoundingBox;)V",
-            at = @At("HEAD"),
-            argsOnly = true,
-            ordinal = 0
-    )
-    private static StructurePoolElement solace$prepareVillageJigsawPieceElement(StructurePoolElement element) {
-        return JigsawVillageBuildingTool.preparePieceElement(element);
-    }
-
     @Inject(
             method = "<init>(Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager;Lnet/minecraft/world/level/levelgen/structure/pools/StructurePoolElement;Lnet/minecraft/core/BlockPos;ILnet/minecraft/world/level/block/Rotation;Lnet/minecraft/world/level/levelgen/structure/BoundingBox;)V",
             at = @At("RETURN")
