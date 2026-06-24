@@ -3,7 +3,6 @@ package com.solace.world;
 import com.mojang.datafixers.util.Either;
 import com.mojang.logging.LogUtils;
 import com.solace.config.VillageBuildingSpawnConfig;
-import com.solace.config.VillageBuildingSpawnConfig.Mode;
 import com.solace.mixin.SinglePoolElementAccessor;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -21,6 +20,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
+import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 import org.slf4j.Logger;
 
@@ -98,6 +98,7 @@ public final class JigsawVillageBuildingTool {
         List<StructurePoolElement> customCandidates = new ArrayList<>();
         Set<ResourceLocation> customCandidateIds = new LinkedHashSet<>();
         Map<ResourceLocation, Integer> queuedCustomCounts = new LinkedHashMap<>();
+        boolean hasReplaceableHouseCandidate = false;
 
         for (StructurePoolElement candidate : candidates) {
             Optional<ResourceLocation> templateId = templateId(candidate);
@@ -111,6 +112,9 @@ public final class JigsawVillageBuildingTool {
             }
             if (!isCustomBuilding(templateId.get())) {
                 allowedNonUnique.add(candidate);
+                if (session.isReplaceableHouse(templateId.get())) {
+                    hasReplaceableHouseCandidate = true;
+                }
                 continue;
             }
 
@@ -124,6 +128,22 @@ public final class JigsawVillageBuildingTool {
             customCandidates.add(candidate);
             customCandidateIds.add(customId);
             queuedCustomCounts.merge(customId, 1, Integer::sum);
+        }
+
+        if (hasReplaceableHouseCandidate) {
+            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (customCandidateIds.contains(target)) {
+                    continue;
+                }
+                int queued = queuedCustomCounts.getOrDefault(target, 0);
+                if (!session.needsMore(target, queued)) {
+                    continue;
+                }
+
+                customCandidates.add(StructurePoolElement.single(target.toString()).apply(StructureTemplatePool.Projection.RIGID));
+                customCandidateIds.add(target);
+                queuedCustomCounts.merge(target, 1, Integer::sum);
+            }
         }
 
         if (customCandidates.isEmpty()) {
@@ -194,53 +214,6 @@ public final class JigsawVillageBuildingTool {
         session.recordOffered(selectedId.get());
         session.markPending(selectedId.get());
         return selected;
-    }
-
-    public static StructurePoolElement preparePieceElement(StructurePoolElement element) {
-        Optional<ResourceLocation> elementId = templateId(element);
-        elementId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
-        Session session = ACTIVE_SESSION.get();
-
-        if (session == null) {
-            if (elementId.isPresent() && isPlainsVillageStart(elementId.get())) {
-                Session ambientSession = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
-                ACTIVE_SESSION.set(ambientSession);
-                return element;
-            }
-            return element;
-        }
-
-        if (elementId.isPresent() && isCustomBuilding(elementId.get())) {
-            ResourceLocation id = elementId.get();
-            if (session.needsMore(id, 0)) {
-                session.markPending(id);
-                return element;
-            }
-
-            ResourceLocation missingTarget = session.selectMissingTarget();
-            if (missingTarget != null) {
-                session.recordOffered(missingTarget);
-                session.markPending(missingTarget);
-                LOGGER.info("[Solace] Replacing excess plains village piece {} with missing custom building {}", id, missingTarget);
-                return replacementElement(missingTarget, element);
-            }
-
-            session.recordSuppressed(id);
-            LOGGER.info("[Solace] Replacing excess plains village piece {} with empty element", id);
-            return emptyElement(element);
-        }
-
-        if (elementId.isPresent() && session.isReplaceableHouse(elementId.get())) {
-            ResourceLocation missingTarget = session.selectMissingTarget();
-            if (missingTarget != null) {
-                session.recordOffered(missingTarget);
-                session.markPending(missingTarget);
-                LOGGER.info("[Solace] Replacing plains village house {} with required custom building {}", elementId.get(), missingTarget);
-                return replacementElement(missingTarget, element);
-            }
-        }
-
-        return element;
     }
 
     public static void recordPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
@@ -409,14 +382,6 @@ public final class JigsawVillageBuildingTool {
         return new ResourceLocation(namespace, path);
     }
 
-    private static StructurePoolElement replacementElement(ResourceLocation target, StructurePoolElement original) {
-        return StructurePoolElement.single(target.toString()).apply(original.getProjection());
-    }
-
-    private static StructurePoolElement emptyElement(StructurePoolElement original) {
-        return StructurePoolElement.empty().apply(original.getProjection());
-    }
-
     private static void logObservedStart(Optional<ResourceLocation> startTemplate, PoolElementStructurePiece startPiece) {
         if (!DIAGNOSTICS || DIAGNOSTIC_STARTS.getAndIncrement() >= MAX_DIAGNOSTIC_STARTS) {
             return;
@@ -558,15 +523,6 @@ public final class JigsawVillageBuildingTool {
                 }
             }
             return selected;
-        }
-
-        private ResourceLocation selectMissingTarget() {
-            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
-                if (needsMore(target, 0)) {
-                    return target;
-                }
-            }
-            return null;
         }
 
         private boolean isReplaceableHouse(ResourceLocation id) {
