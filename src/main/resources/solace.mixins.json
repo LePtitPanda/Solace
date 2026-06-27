@@ -6,6 +6,7 @@
   "refmap": "solace.refmap.json",
   "mixins": [
     "AlchemistCauldronTileMixin",
+    "BloatedSunBurnMixin",
     "BreezyIntroBalloonMixin",
     "DifficultyPacketMixin",
     "MineCellsDataMixin",
@@ -24,6 +25,8 @@
     "StructureTemplatePoolMixin",
     "StructureMixin",
     "UGNoiseBasedChunkGeneratorMixin",
+    "WebSpiderClientRotationMixin",
+    "WebSpiderShootGoalMixin",
     "AbstractContainerMenuAccessor",
     "AtoningTableBlockMixin",
     "EnchantmentTableBlockMixin",
