@@ -151,7 +151,7 @@ public final class JigsawVillageBuildingTool {
         }
 
         ResourceLocation priorityId = session.selectPriorityCandidate(customCandidateIds);
-        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedNonUnique.size() + customCandidates.size());
+        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedNonUnique.size() + 1);
         if (priorityId != null) {
             for (StructurePoolElement candidate : customCandidates) {
                 Optional<ResourceLocation> candidateId = templateId(candidate);
@@ -161,15 +161,7 @@ public final class JigsawVillageBuildingTool {
                 }
             }
             session.recordOffered(priorityId);
-        }
-        boolean skippedPriorityCandidate = false;
-        for (StructurePoolElement candidate : customCandidates) {
-            Optional<ResourceLocation> candidateId = templateId(candidate);
-            if (!skippedPriorityCandidate && candidateId.isPresent() && candidateId.get().equals(priorityId)) {
-                skippedPriorityCandidate = true;
-                continue;
-            }
-            priorityFirstList.add(candidate);
+            session.markPending(priorityId);
         }
         priorityFirstList.addAll(allowedNonUnique);
         if (DIAGNOSTICS) {
