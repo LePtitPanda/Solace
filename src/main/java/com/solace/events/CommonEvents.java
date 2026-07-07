@@ -2,6 +2,7 @@ package com.solace.events;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.logging.LogUtils;
+import com.solace.compat.InstrumentCockroachBandSupport;
 import com.solace.world.BalloonIntroManager;
 import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
@@ -19,7 +20,9 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -60,6 +63,16 @@ public final class CommonEvents {
         if (!wasLanded && access.solace$hasLanded()) {
             BalloonIntroManager.completeIntroLanding(player, vehicle);
         }
+    }
+
+    @SubscribeEvent
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        InstrumentCockroachBandSupport.tryGiveInstrumentToMob(event);
+    }
+
+    @SubscribeEvent
+    public static void onLivingTick(LivingEvent.LivingTickEvent event) {
+        InstrumentCockroachBandSupport.tick(event.getEntity());
     }
 
     @SubscribeEvent
