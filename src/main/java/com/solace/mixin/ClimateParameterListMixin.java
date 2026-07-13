@@ -24,6 +24,13 @@ public abstract class ClimateParameterListMixin<T> {
             "tropical_island",
             "volcanic_island"
     );
+    private static final Set<String> DISABLED_BIOMES = Set.of(
+            "galosphere:lichen_caves",
+            "galosphere:pink_salt_caves",
+            "minecraft:deep_dark",
+            "regions_unexplored:prismachasm",
+            "regions_unexplored:redstone_caves"
+    );
 
     @ModifyVariable(
             method = "<init>",
@@ -37,7 +44,7 @@ public abstract class ClimateParameterListMixin<T> {
         List<Pair<Climate.ParameterPoint, T>> filtered = null;
 
         for (Pair<Climate.ParameterPoint, T> pair : values) {
-            if (solace$isInvalidSpawnIslandEntry(pair)) {
+            if (solace$shouldRemoveEntry(pair)) {
                 if (filtered == null) {
                     filtered = new ArrayList<>(values.size());
                     for (Pair<Climate.ParameterPoint, T> previous : values) {
@@ -56,6 +63,21 @@ public abstract class ClimateParameterListMixin<T> {
         }
 
         return filtered == null ? values : filtered;
+    }
+
+    private static boolean solace$shouldRemoveEntry(Pair<Climate.ParameterPoint, ?> pair) {
+        return solace$isDisabledBiome(pair.getSecond()) || solace$isInvalidSpawnIslandEntry(pair);
+    }
+
+    private static boolean solace$isDisabledBiome(Object value) {
+        if (!(value instanceof Holder<?> holder)) {
+            return false;
+        }
+
+        return holder.unwrapKey()
+                .map(key -> key.location().toString())
+                .filter(DISABLED_BIOMES::contains)
+                .isPresent();
     }
 
     private static boolean solace$isInvalidSpawnIslandEntry(Pair<Climate.ParameterPoint, ?> pair) {
