@@ -3,6 +3,7 @@ package com.solace.world;
 import com.mojang.datafixers.util.Either;
 import com.mojang.logging.LogUtils;
 import com.solace.config.VillageBuildingSpawnConfig;
+import com.solace.config.PerformanceConfig;
 import com.solace.mixin.SinglePoolElementAccessor;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -29,7 +30,7 @@ public final class JigsawVillageBuildingTool {
     private static final String VANILLA_PLAINS_TOWN_CENTER_PREFIX = "village/plains/town_centers/";
     private static final int MAX_RECENT_REPORTS = 8;
     private static final Deque<String> RECENT_REPORTS = new ArrayDeque<>();
-    private static final boolean DIAGNOSTICS = Boolean.getBoolean("solace.villageJigsawDiagnostics");
+    private static final boolean SYSTEM_DIAGNOSTICS = Boolean.getBoolean("solace.villageJigsawDiagnostics");
     private static final int MAX_DIAGNOSTIC_STARTS = 80;
     private static final int MAX_DIAGNOSTIC_PIECES = 200;
     private static final ResourceLocation AMBIENT_CANDIDATE_SESSION = id("solace", "ambient_plains_village_candidates");
@@ -57,7 +58,9 @@ public final class JigsawVillageBuildingTool {
         Session session = new Session(startPiece.getPosition(), startTemplate.get());
         ACTIVE_SESSION.set(session);
         session.record(startPiece.getElement(), startPiece.getPosition(), startPiece.getBoundingBox());
-        LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {}; configured buildings: {}", session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+        if (diagnostics()) {
+            LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {}; configured buildings: {}", session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+        }
     }
 
     public static void end() {
@@ -79,7 +82,9 @@ public final class JigsawVillageBuildingTool {
         if (session == null && hasCustomCandidate(candidates)) {
             session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
             ACTIVE_SESSION.set(session);
-            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient custom candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
+            if (diagnostics()) {
+                LOGGER.info("[Solace] Tracking plains village jigsaw from ambient custom candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
+            }
         }
 
         if (session == null) {
@@ -164,7 +169,7 @@ public final class JigsawVillageBuildingTool {
             session.markPending(priorityId);
         }
         priorityFirstList.addAll(allowedNonUnique);
-        if (DIAGNOSTICS) {
+        if (diagnostics()) {
             LOGGER.info("[Solace] Prioritizing plains village custom building candidate: {}", priorityId);
         }
         return priorityFirstList;
@@ -191,14 +196,18 @@ public final class JigsawVillageBuildingTool {
         if (session == null) {
             session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
             ACTIVE_SESSION.set(session);
-            LOGGER.info("[Solace] Tracking plains village jigsaw from ambient random candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
+            if (diagnostics()) {
+                LOGGER.info("[Solace] Tracking plains village jigsaw from ambient random candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
+            }
         }
 
         if (!session.needsMore(selectedId.get(), 0)) {
             StructurePoolElement replacement = session.selectRandomReplacement(candidates);
             if (replacement != null) {
                 Optional<ResourceLocation> replacementId = templateId(replacement);
-                replacementId.ifPresent(id -> LOGGER.info("[Solace] Replacing excess plains village random candidate {} with {}", selectedId.get(), id));
+                if (diagnostics()) {
+                    replacementId.ifPresent(id -> LOGGER.info("[Solace] Replacing excess plains village random candidate {} with {}", selectedId.get(), id));
+                }
                 return replacement;
             }
         }
@@ -215,8 +224,10 @@ public final class JigsawVillageBuildingTool {
             if (activeTemplateId.isPresent() && isPlainsVillageStart(activeTemplateId.get()) && !session.matchesStart(position, activeTemplateId.get())) {
                 session.logSummary();
                 session.startNew(position, activeTemplateId.get());
-                LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
-                        session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+                if (diagnostics()) {
+                    LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
+                            session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+                }
             }
             session.record(element, position, boundingBox);
             return;
@@ -227,8 +238,10 @@ public final class JigsawVillageBuildingTool {
             Session ambientSession = new Session(position, templateId.get(), true);
             ACTIVE_SESSION.set(ambientSession);
             ambientSession.record(element, position, boundingBox);
-            LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
-                    ambientSession.startPos, ambientSession.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+            if (diagnostics()) {
+                LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
+                        ambientSession.startPos, ambientSession.startTemplate, VillageBuildingSpawnConfig.describeEntries());
+            }
             return;
         }
 
@@ -240,7 +253,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     public static boolean isDiagnosticsEnabled() {
-        return DIAGNOSTICS;
+        return diagnostics();
     }
 
     public static boolean isUniqueTarget(ResourceLocation id) {
@@ -248,7 +261,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     private static void logObservedPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
-        if (!DIAGNOSTICS || DIAGNOSTIC_PIECES.getAndIncrement() >= MAX_DIAGNOSTIC_PIECES) {
+        if (!diagnostics() || DIAGNOSTIC_PIECES.getAndIncrement() >= MAX_DIAGNOSTIC_PIECES) {
             return;
         }
 
@@ -375,7 +388,7 @@ public final class JigsawVillageBuildingTool {
     }
 
     private static void logObservedStart(Optional<ResourceLocation> startTemplate, PoolElementStructurePiece startPiece) {
-        if (!DIAGNOSTICS || DIAGNOSTIC_STARTS.getAndIncrement() >= MAX_DIAGNOSTIC_STARTS) {
+        if (!diagnostics() || DIAGNOSTIC_STARTS.getAndIncrement() >= MAX_DIAGNOSTIC_STARTS) {
             return;
         }
 
@@ -415,7 +428,7 @@ public final class JigsawVillageBuildingTool {
             ResourceLocation id = templateId.get();
             spawnedCounts.merge(id, 1, Integer::sum);
             decrementPending(id);
-            if (isCustomBuilding(id)) {
+            if (isCustomBuilding(id) && diagnostics()) {
                 LOGGER.debug("[Solace] Plains village custom building placed: {} at {} with box {}", id, position, boundingBox);
             }
 
@@ -544,6 +557,9 @@ public final class JigsawVillageBuildingTool {
 
             String summary = "Plains village jigsaw at " + startPos + " from " + startTemplate + ": " + spawnedCounts;
             rememberReport(summary);
+            if (!diagnostics()) {
+                return;
+            }
             LOGGER.info("[Solace] {}", summary);
             for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
                 int target = targetCount(customId);
@@ -605,5 +621,9 @@ public final class JigsawVillageBuildingTool {
                 RECENT_REPORTS.removeLast();
             }
         }
+    }
+
+    private static boolean diagnostics() {
+        return SYSTEM_DIAGNOSTICS || PerformanceConfig.isVillageDiagnosticsEnabled();
     }
 }

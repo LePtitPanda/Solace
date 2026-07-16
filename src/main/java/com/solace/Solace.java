@@ -2,6 +2,7 @@ package com.solace;
 
 import com.solace.events.CommonEvents;
 import com.solace.config.EnchantingReworkConfig;
+import com.solace.config.PerformanceConfig;
 import com.solace.config.VillageBuildingSpawnConfig;
 import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
@@ -102,6 +103,7 @@ public class Solace {
         public static void onCommonSetup(FMLCommonSetupEvent event) {
             LOGGER.info("[Solace] FMLCommonSetupEvent Fired!");
             EnchantingReworkConfig.init();
+            PerformanceConfig.init();
             VillageBuildingSpawnConfig.init();
 
             event.enqueueWork(() -> {

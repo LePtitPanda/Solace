@@ -28,6 +28,7 @@ public abstract class ClimateParameterListMixin<T> {
             "galosphere:lichen_caves",
             "galosphere:pink_salt_caves",
             "minecraft:deep_dark",
+            "minecraft:mushroom_fields",
             "regions_unexplored:prismachasm",
             "regions_unexplored:redstone_caves"
     );

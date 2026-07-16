@@ -2,7 +2,12 @@ package com.solace.events;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.logging.LogUtils;
+import com.solace.compat.GulingSentinelProofSupport;
+import com.solace.compat.IntegratedApiLocatorShutdownSupport;
 import com.solace.compat.InstrumentCockroachBandSupport;
+import com.solace.config.PerformanceConfig;
+import com.solace.performance.ServerWorkScheduler;
+import com.solace.performance.VMinusIngredientFilterCache;
 import com.solace.world.BalloonIntroManager;
 import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
@@ -19,13 +24,17 @@ import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.ModList;
+import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
 import java.util.Set;
@@ -35,6 +44,8 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class CommonEvents {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<UUID> DEATH_DISMOUNT_BYPASS = ConcurrentHashMap.newKeySet();
+    private static final ResourceLocation MOON_ID = ResourceLocation.fromNamespaceAndPath("ad_astra", "moon");
+    private static final ResourceLocation GULING_SENTINEL_ID = ResourceLocation.fromNamespaceAndPath("eeeabsmobs", "guling_sentinel");
 
     private CommonEvents() {
     }
@@ -42,8 +53,27 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onLevelLoad(LevelEvent.Load event) {
         if (event.getLevel() instanceof ServerLevel level) {
+            ServerWorkScheduler.registerLevel(level);
             BalloonIntroManager.precomputeIntroVillage(level);
         }
+    }
+
+    @SubscribeEvent
+    public static void onLevelUnload(LevelEvent.Unload event) {
+        if (event.getLevel() instanceof ServerLevel level) {
+            ServerWorkScheduler.unregisterLevel(level);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerTick(TickEvent.ServerTickEvent event) {
+        ServerWorkScheduler.onServerTick(event);
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        ServerWorkScheduler.reset(event.getServer());
+        IntegratedApiLocatorShutdownSupport.shutdownAfterWorldSave();
     }
 
     @SubscribeEvent
@@ -68,6 +98,18 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         InstrumentCockroachBandSupport.tryGiveInstrumentToMob(event);
+    }
+
+    @SubscribeEvent
+    public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
+        if (!(event.getLevel() instanceof ServerLevel level)
+                || !MOON_ID.equals(level.dimension().location())
+                || !GULING_SENTINEL_ID.equals(ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType()))
+                || !ModList.get().isLoaded("ad_astra_giselle_addon")) {
+            return;
+        }
+
+        GulingSentinelProofSupport.applyGravityProof(event.getEntity());
     }
 
     @SubscribeEvent
@@ -115,7 +157,7 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            BalloonIntroManager.tryStartIntro(player);
+            BalloonIntroManager.requestIntro(player);
         }
     }
 
@@ -129,6 +171,11 @@ public final class CommonEvents {
                         .executes(context -> whatBuilding(context.getSource())))
                 .then(Commands.literal("village_buildings")
                         .executes(context -> listVillageBuildings(context.getSource())))
+                .then(Commands.literal("performance")
+                        .executes(context -> showPerformanceStatus(context.getSource()))
+                        .then(Commands.literal("reload")
+                                .requires(source -> source.hasPermission(4))
+                                .executes(context -> reloadPerformanceConfig(context.getSource()))))
                 .then(Commands.literal("village_jigsaws")
                         .then(Commands.literal("place_test")
                                 .requires(source -> source.hasPermission(4))
@@ -139,6 +186,20 @@ public final class CommonEvents {
                 .executes(context -> whatBuilding(context.getSource())));
         dispatcher.register(Commands.literal("village_buildings")
                 .executes(context -> listVillageBuildings(context.getSource())));
+    }
+
+    private static int showPerformanceStatus(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal(ServerWorkScheduler.describeStatus(source.getServer())), false);
+        if (ModList.get().isLoaded("vminus")) {
+            source.sendSuccess(() -> Component.literal(VMinusIngredientFilterCache.describeStatus()), false);
+        }
+        return 1;
+    }
+
+    private static int reloadPerformanceConfig(CommandSourceStack source) {
+        PerformanceConfig.reload();
+        source.sendSuccess(() -> Component.literal("Reloaded Solace performance prototype config."), false);
+        return showPerformanceStatus(source);
     }
 
     private static int stopIntroBalloon(CommandSourceStack source) {

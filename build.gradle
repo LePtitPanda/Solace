@@ -101,6 +101,10 @@ dependencies {
     compileOnly files('../mods/friendsandfoes-forge-mc1.20.1-3.0.8.jar')
     compileOnly files('../mods/immersive_melodies-0.3.0+1.20.1-forge.jar')
     compileOnly files('../mods/alexsmobs-1.22.9.jar')
+    compileOnly files('../mods/incontrol-1.20-9.4.1.jar')
+    compileOnly files('../mods/witherstormmod-1.20.1-4.2.1-all.jar')
+    compileOnly files('../mods/Ad-Astra-Giselle-Addon-forge-1.20.1-6.18.jar')
+    compileOnly files('../mods/vminus-3.3.1.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
