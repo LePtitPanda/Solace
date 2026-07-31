@@ -28,10 +28,10 @@
     "PoiManagerMixin",
     "ServerChunkCacheAccessor",
     "SinglePoolElementAccessor",
+    "SpawnDodoIslandSearchMixin",
     "StructureTemplatePoolMixin",
     "StructureMixin",
     "TuffGolemNaturalSpawnMixin",
-    "UGNoiseBasedChunkGeneratorMixin",
     "VMinusVisionCacheInvalidationMixin",
     "VMinusVisionTypeMixin",
     "VMinusVisionUtilsMixin",
@@ -52,7 +52,8 @@
     "AlchemistCauldronRendererMixin",
     "FluidStorageProviderMixin",
     "FluidViewMixin",
-    "ClientProxyMixin"
+    "ClientProxyMixin",
+    "RelicsCurioModelMixin"
   ],
   "server": [],
   "injectors": {

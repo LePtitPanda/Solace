@@ -141,7 +141,9 @@ public final class BalloonIntroManager {
 
     private static BlockPos getOrFindVerifiedVillage(ServerLevel level, SolaceWorldData data) {
         if (data.hasBreezyVillageIntroVillagePos(VILLAGE_LOCATOR_VERSION)) {
-            return data.getBreezyVillageIntroVillagePos();
+            BlockPos villagePos = data.getBreezyVillageIntroVillagePos();
+            IntroVillageStructureProtection.setTarget(level, villagePos);
+            return villagePos;
         }
 
         LOGGER.info("[Solace] Finding the authoritative Breezy intro village during world load.");
@@ -152,12 +154,14 @@ public final class BalloonIntroManager {
                 false
         );
         if (villagePos == null) {
+            IntroVillageStructureProtection.clearTarget(level);
             LOGGER.warn("[Solace] Could not find a generated village within {} placement rings for the Breezy intro.", SEARCH_RADIUS_CHUNKS);
             return null;
         }
 
         LOGGER.info("[Solace] Verified Breezy intro village at {} {} {}.", villagePos.getX(), villagePos.getY(), villagePos.getZ());
         data.setBreezyVillageIntroVillagePos(villagePos, VILLAGE_LOCATOR_VERSION);
+        IntroVillageStructureProtection.setTarget(level, villagePos);
         return villagePos;
     }
 

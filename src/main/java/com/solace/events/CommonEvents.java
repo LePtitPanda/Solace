@@ -9,6 +9,7 @@ import com.solace.config.PerformanceConfig;
 import com.solace.performance.ServerWorkScheduler;
 import com.solace.performance.VMinusIngredientFilterCache;
 import com.solace.world.BalloonIntroManager;
+import com.solace.world.IntroVillageStructureProtection;
 import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
 import net.minecraft.commands.CommandSourceStack;
@@ -61,6 +62,7 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onLevelUnload(LevelEvent.Unload event) {
         if (event.getLevel() instanceof ServerLevel level) {
+            IntroVillageStructureProtection.clearTarget(level);
             ServerWorkScheduler.unregisterLevel(level);
         }
     }
@@ -72,6 +74,7 @@ public final class CommonEvents {
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
+        IntroVillageStructureProtection.reset();
         ServerWorkScheduler.reset(event.getServer());
         IntegratedApiLocatorShutdownSupport.shutdownAfterWorldSave();
     }
