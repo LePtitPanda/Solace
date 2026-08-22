@@ -1,27 +1,33 @@
 package com.solace.world;
 
 import com.mojang.logging.LogUtils;
+import com.solace.access.BookChoiceLevelsAccess;
+import com.solace.access.EnchantedShelfSlotsAccess;
 import com.solace.config.EnchantingReworkConfig;
 import com.solace.mixin.AbstractContainerMenuAccessor;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import net.backupcup.mcde.util.Choice;
+import net.backupcup.mcde.util.SlotPosition;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.Container;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleMenuProvider;
@@ -31,31 +37,37 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerListener;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.EnchantmentTableBlock;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChiseledBookShelfBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import org.slf4j.Logger;
 
 public final class EnchantingReworkSupport {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final ResourceLocation RUNIC_TABLE = id("mcde", "runic_table");
     private static final ResourceLocation ROLL_BENCH = id("mcde", "roll_bench");
     private static final ResourceLocation ATONING_TABLE = id("caverns_and_chasms", "atoning_table");
-    private static final String SOLACE_LAYOUT_TAG = "SolaceEnchantingLayout";
-    private static final String SOLACE_LAYOUT_POWER_KEY = "Power";
-    private static final String SOLACE_LAYOUT_CHOICES_KEY = "Choices";
-    private static final String SOLACE_LAYOUT_FINGERPRINT_KEY = "Fingerprint";
-    private static final String SOLACE_LAYOUT_VERSION_KEY = "Version";
-    private static final int SOLACE_LAYOUT_VERSION = 2;
+    private static final String BOOK_LAYOUT_TAG = "SolaceBookshelfEnchanting";
+    private static final String BOOK_LAYOUT_FINGERPRINT_KEY = "Fingerprint";
+    private static final String BOOK_LAYOUT_CHOICES_KEY = "Sources";
+    private static final String BOOK_SOURCE_ENCHANTMENT_KEY = "Enchantment";
+    private static final String BOOK_SOURCE_LEVEL_KEY = "Level";
+    private static final String BOOK_SOURCE_POSITION_KEY = "ShelfPosition";
+    private static final String BOOK_SOURCE_SLOT_KEY = "ShelfSlot";
+    private static final String BOOK_LAYOUT_VERSION_KEY = "Version";
+    private static final int BOOK_LAYOUT_VERSION = 1;
 
     private EnchantingReworkSupport() {
     }
 
-    public static MenuProvider runicTableProvider(Level level, BlockPos pos) {
-        return menuProvider("net.backupcup.mcde.screen.handler.RunicTableScreenHandler", "block.mcde.runic_table", level, pos);
+    public static MenuProvider enchantingTableProvider(Level level, BlockPos pos) {
+        return menuProvider("net.backupcup.mcde.screen.handler.RollBenchScreenHandler", "block.minecraft.enchanting_table", level, pos);
     }
 
     public static MenuProvider rollBenchProvider(Level level, BlockPos pos) {
@@ -70,16 +82,21 @@ public final class EnchantingReworkSupport {
         return field(handler, "inventory", Container.class);
     }
 
-    public static void installSlotNormalizer(AbstractContainerMenu menu, ContainerLevelAccess context) {
+    public static void installSlotNormalizer(AbstractContainerMenu menu, ContainerLevelAccess context, Player player) {
+        if (!isEnchantingTable(context)) {
+            return;
+        }
+
         menu.addSlotListener(new ContainerListener() {
             @Override
             public void slotChanged(AbstractContainerMenu handler, int slotId, ItemStack stack) {
                 Optional<Container> inventory = inventory(handler);
                 if (slotId == 0 && inventory.isPresent()) {
                     ItemStack actualStack = inventory.get().getItem(0);
-                    if (normalizeSlotStack(actualStack, context)) {
+                    boolean changed = normalizeBookshelfStack(actualStack, context, false);
+                    if (changed) {
                         inventory.get().setChanged();
-                        scheduleHandlerSync(handler, context);
+                        scheduleHandlerSync(handler, context, player);
                     }
                 }
             }
@@ -90,47 +107,52 @@ public final class EnchantingReworkSupport {
         });
     }
 
-    public static boolean normalizeHandlerStack(Object handler) {
-        return normalizeHandlerStack(handler, false);
-    }
-
-    public static boolean normalizeHandlerStack(Object handler, boolean force) {
-        Optional<ContainerLevelAccess> context = context(handler);
-        Optional<Container> inventory = inventory(handler);
-        if (context.isEmpty() || inventory.isEmpty()) {
-            return false;
-        }
-
-        ItemStack stack = inventory.get().getItem(0);
-        if (!normalizeSlotStack(stack, context.get(), force)) {
-            return false;
-        }
-
-        inventory.get().setChanged();
-        return true;
-    }
-
-    public static void synchronizeHandlerInventory(Object handler) {
+    public static void synchronizeHandlerInventory(Object handler, Player player) {
         inventory(handler).ifPresent(Container::setChanged);
         if (handler instanceof AbstractContainerMenu menu) {
             menu.broadcastFullState();
         }
+        refreshBookshelfLocks(handler, player);
     }
 
-    private static void scheduleHandlerSync(AbstractContainerMenu handler, ContainerLevelAccess context) {
+    private static void scheduleHandlerSync(AbstractContainerMenu handler, ContainerLevelAccess context, Player player) {
         context.evaluate((level, pos) -> {
             if (!level.isClientSide() && level.getServer() != null) {
-                level.getServer().execute(handler::broadcastFullState);
+                level.getServer().execute(() -> {
+                    handler.broadcastFullState();
+                    refreshBookshelfLocks(handler, player);
+                });
             }
             return true;
         }, false);
     }
 
+    private static void refreshBookshelfLocks(Object handler, Player player) {
+        if (player == null || player.level().isClientSide()) {
+            return;
+        }
+
+        inventory(handler).ifPresent(inventory -> {
+            try {
+                Optional<?> slots = mcdeSlots(inventory.getItem(0));
+                if (slots.isEmpty()) {
+                    return;
+                }
+                Method sendLockedSlots = handler.getClass().getDeclaredMethod(
+                        "sendLockedSlots", slots.get().getClass(), Player.class);
+                sendLockedSlots.setAccessible(true);
+                sendLockedSlots.invoke(handler, slots.get(), player);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOGGER.debug("[Solace] Could not refresh bookshelf slot locks", e);
+            }
+        });
+    }
+
     public static boolean stillValidAtEnchantingTable(Object handler, Player player) {
         Optional<ContainerLevelAccess> context = context(handler);
         return context.isPresent()
-                && (AbstractContainerMenuAccessor.invokeStillValid(context.get(), player, net.minecraft.world.level.block.Blocks.ENCHANTING_TABLE)
-                || stillValidAt(context.get(), player, RUNIC_TABLE));
+                && AbstractContainerMenuAccessor.invokeStillValid(
+                        context.get(), player, net.minecraft.world.level.block.Blocks.ENCHANTING_TABLE);
     }
 
     public static boolean stillValidAtAtoningTable(Object handler, Player player) {
@@ -140,188 +162,623 @@ public final class EnchantingReworkSupport {
                 || stillValidAt(context.get(), player, ROLL_BENCH));
     }
 
-    public static boolean hasEnchantingPower(ContainerLevelAccess context, int requiredPower) {
-        return bookshelfPower(context) >= requiredPower;
+    public static boolean stillValidAtEnchantingOrAtoningTable(Object handler, Player player) {
+        return stillValidAtEnchantingTable(handler, player) || stillValidAtAtoningTable(handler, player);
     }
 
-    public static int bookshelfPower(ContainerLevelAccess context) {
-        return context.evaluate(EnchantingReworkSupport::bookshelfPower, 0);
+    public static boolean isEnchantingTable(ContainerLevelAccess context) {
+        return context.evaluate((level, pos) -> level.getBlockState(pos).is(net.minecraft.world.level.block.Blocks.ENCHANTING_TABLE), false);
     }
 
-    public static int xpCostReduction(ContainerLevelAccess context, int baseCost) {
-        if (baseCost <= 0) {
-            return 0;
-        }
-
-        int discount = context.evaluate(EnchantingReworkSupport::discountShelfCount, 0)
-                * EnchantingReworkConfig.xpCostReductionPerShelf();
-        discount = Math.min(discount, EnchantingReworkConfig.maxXpCostReduction());
-        return Math.min(discount, Math.max(0, baseCost - 1));
+    public static boolean isBookshelfHandler(Object handler) {
+        Optional<Container> inventory = inventory(handler);
+        return inventory.isPresent() && hasBookLayout(inventory.get().getItem(0));
     }
 
-    public static boolean normalizeSlotStack(ItemStack stack, ContainerLevelAccess context) {
-        return normalizeSlotStack(stack, context, false);
-    }
-
-    public static boolean normalizeSlotStack(ItemStack stack, ContainerLevelAccess context, boolean force) {
+    private static boolean normalizeBookshelfStack(ItemStack stack, ContainerLevelAccess context, boolean reroll) {
         if (stack.isEmpty()) {
             return false;
         }
+        return context.evaluate((level, pos) -> rebuildBookshelfLayout(level, pos, stack, reroll), false);
+    }
 
-        int power = bookshelfPower(context);
-        int[] targetChoices = EnchantingReworkConfig.slotChoicesForPower(power);
-        int fingerprint = layoutFingerprint(stack);
-        try {
-            Optional<?> currentSlots = mcdeSlots(stack);
-            if (!force && currentSlots.isPresent() && slotChoicesMatch(currentSlots.get(), targetChoices)) {
-                if (layoutMarkerMatches(stack, power, targetChoices, fingerprint)) {
-                    return false;
-                }
-                writeLayoutMarker(stack, power, targetChoices, fingerprint);
-                return true;
-            }
+    public static boolean rerollBookshelfChoices(Object handler) {
+        Optional<ContainerLevelAccess> context = context(handler);
+        Optional<Container> inventory = inventory(handler);
+        if (context.isEmpty() || inventory.isEmpty()) {
+            return false;
+        }
+        return normalizeBookshelfStack(inventory.get().getItem(0), context.get(), true);
+    }
 
-            Object replacementSlots = buildSlots(stack, currentSlots, targetChoices, layoutSeed(fingerprint), layoutMarkerTrusted(stack, fingerprint));
-            if (replacementSlots == null) {
+    public static boolean handleBookshelfClick(Object handler, Player player, int buttonId) {
+        Optional<ContainerLevelAccess> context = context(handler);
+        Optional<Container> inventory = inventory(handler);
+        if (context.isEmpty() || inventory.isEmpty() || player.level().isClientSide()) {
+            return false;
+        }
+
+        return context.get().evaluate((level, tablePos) -> {
+            ItemStack item = inventory.get().getItem(0);
+            ItemStack lapis = inventory.get().getItem(1);
+            if (item.isEmpty() || !hasBookLayout(item)) {
                 return false;
             }
 
-            method(replacementSlots, "updateItemStack", ItemStack.class).invoke(replacementSlots, stack);
-            writeLayoutMarker(stack, power, targetChoices, layoutFingerprint(stack));
+            if (buttonId == -1) {
+                int openCapacity = openChoiceCapacity(item);
+                int candidateCount = applicableBooks(level, tablePos, item).size();
+                if (candidateCount <= openCapacity || !canPay(player, lapis,
+                        EnchantingReworkConfig.rerollLapisCost(), EnchantingReworkConfig.rerollXpCost())) {
+                    return false;
+                }
+                if (!rerollBookshelfChoices(handler)) {
+                    return false;
+                }
+                pay(player, lapis, EnchantingReworkConfig.rerollLapisCost(), EnchantingReworkConfig.rerollXpCost());
+                inventory.get().setChanged();
+                synchronizeHandlerInventory(handler, player);
+                return true;
+            }
+
+            SlotPosition[] positions = SlotPosition.values();
+            if (buttonId < 0 || buttonId >= positions.length * positions.length) {
+                return false;
+            }
+            int mainIndex = buttonId / positions.length;
+            int choiceIndex = buttonId % positions.length;
+            SlotPosition mainPosition = positions[mainIndex];
+            SlotPosition choicePosition = positions[choiceIndex];
+
+            Object slots;
+            Object slot;
+            Optional<?> chosen;
+            ResourceLocation enchantmentId;
+            int targetLevel;
+            BookSource source;
+            SlotPosition selectedPosition;
+            try {
+                Optional<?> slotsOptional = mcdeSlots(item);
+                if (slotsOptional.isEmpty()) {
+                    return false;
+                }
+                slots = slotsOptional.get();
+                Optional<?> slotOptional = optionalResult(slots, "getEnchantmentSlot", slotPositionClass(), mainPosition);
+                if (slotOptional.isEmpty()) {
+                    return false;
+                }
+                slot = slotOptional.get();
+                chosen = optionalResult(slot, "getChosen");
+
+                if (chosen.isPresent()) {
+                    enchantmentId = toResourceLocation(method(chosen.get(), "getEnchantmentId").invoke(chosen.get()));
+                    targetLevel = intResult(slot, "getLevel") + 1;
+                    source = findUpgradeBook(level, tablePos, enchantmentId).orElse(null);
+                    selectedPosition = (SlotPosition) method(chosen.get(), "getChoicePosition").invoke(chosen.get());
+                } else {
+                    Optional<?> clickedEnchantment = optionalResult(slot, "getChoice", slotPositionClass(), choicePosition);
+                    source = readBookSource(item, mainPosition, choicePosition).orElse(null);
+                    if (clickedEnchantment.isEmpty() || source == null
+                            || !toResourceLocation(clickedEnchantment.get()).equals(source.enchantmentId())) {
+                        rebuildBookshelfLayout(level, tablePos, item, false);
+                        inventory.get().setChanged();
+                        synchronizeHandlerInventory(handler, player);
+                        return false;
+                    }
+                    enchantmentId = source.enchantmentId();
+                    targetLevel = source.level();
+                    selectedPosition = choicePosition;
+                }
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOGGER.debug("[Solace] Could not inspect bookshelf enchanting choice", e);
+                return false;
+            }
+
+            if (source == null || !nearbyEnchantedBooks(level, tablePos).contains(source)) {
+                rebuildBookshelfLayout(level, tablePos, item, false);
+                inventory.get().setChanged();
+                synchronizeHandlerInventory(handler, player);
+                return false;
+            }
+
+            Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(enchantmentId);
+            if (enchantment == null || targetLevel < enchantment.getMinLevel() || targetLevel > enchantment.getMaxLevel()) {
+                return false;
+            }
+
+            int baseXpCost;
+            try {
+                baseXpCost = enchantCost(enchantmentId, targetLevel);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOGGER.debug("[Solace] Could not calculate bookshelf enchanting cost", e);
+                return false;
+            }
+            int xpCost = Math.max(1, baseXpCost);
+            int lapisCost = EnchantingReworkConfig.enchantingLapisCost();
+            if (!canPay(player, lapis, lapisCost, xpCost)) {
+                return false;
+            }
+
+            try {
+                if (chosen.isPresent()) {
+                    method(slot, "setLevel", int.class).invoke(slot, targetLevel);
+                } else if (!(Boolean) method(slot, "setChosen", slotPositionClass(), int.class)
+                        .invoke(slot, selectedPosition, targetLevel)) {
+                    return false;
+                }
+                ((BookChoiceLevelsAccess) slot).solace$setChoiceLevel(selectedPosition, targetLevel);
+                method(slots, "updateItemStack", ItemStack.class).invoke(slots, item);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                LOGGER.debug("[Solace] Could not apply bookshelf enchantment", e);
+                return false;
+            }
+
+            if (!player.isCreative()) {
+                if (!consumeBook(level, source)) {
+                    rebuildBookshelfLayout(level, tablePos, item, false);
+                    inventory.get().setChanged();
+                    synchronizeHandlerInventory(handler, player);
+                    return false;
+                }
+                pay(player, lapis, lapisCost, xpCost);
+            }
+
+            rebuildBookshelfLayout(level, tablePos, item, false);
+            inventory.get().setChanged();
+            synchronizeHandlerInventory(handler, player);
+            level.playSound(null, tablePos, net.minecraft.sounds.SoundEvents.ENCHANTMENT_TABLE_USE,
+                    net.minecraft.sounds.SoundSource.BLOCKS, 1.0F, level.random.nextFloat() * 0.1F + 0.9F);
+            return true;
+        }, false);
+    }
+
+    public static boolean canPayForBookshelfAction(Object handler, Player player) {
+        Optional<Container> inventory = inventory(handler);
+        if (inventory.isEmpty()) {
+            return false;
+        }
+        return canPay(player, inventory.get().getItem(1), EnchantingReworkConfig.enchantingLapisCost(), 0);
+    }
+
+    public static int bookshelfChoiceXpCost(Choice choice) {
+        int sourceLevel = ((BookChoiceLevelsAccess) choice.getEnchantmentSlot())
+                .solace$getChoiceLevel(choice.getChoicePosition());
+        if (sourceLevel <= 0) {
+            return -1;
+        }
+
+        try {
+            int targetLevel = choice.isChosen() ? choice.getLevel() + 1 : sourceLevel;
+            ResourceLocation enchantmentId = toResourceLocation(method(choice, "getEnchantmentId").invoke(choice));
+            Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(enchantmentId);
+            if (enchantment == null || targetLevel < enchantment.getMinLevel()
+                    || targetLevel > enchantment.getMaxLevel()) {
+                return -1;
+            }
+            return Math.max(1, enchantCost(enchantmentId, targetLevel));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.debug("[Solace] Could not calculate bookshelf tooltip XP cost", e);
+            return -1;
+        }
+    }
+
+    public static Optional<Component> bookshelfUpgradeLabel(Choice choice) {
+        int sourceLevel = ((BookChoiceLevelsAccess) choice.getEnchantmentSlot())
+                .solace$getChoiceLevel(choice.getChoicePosition());
+        if (sourceLevel <= 0 || !choice.isChosen()) {
+            return Optional.empty();
+        }
+
+        try {
+            ResourceLocation enchantmentId = toResourceLocation(method(choice, "getEnchantmentId").invoke(choice));
+            Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(enchantmentId);
+            int currentLevel = choice.getEnchantmentSlot().getLevel();
+            int nextLevel = currentLevel + 1;
+            if (enchantment == null || nextLevel > enchantment.getMaxLevel()) {
+                return Optional.empty();
+            }
+            Component currentName = enchantment.getFullname(currentLevel);
+            if (currentLevel == 1 && enchantment.getMaxLevel() > 1) {
+                currentName = currentName.copy()
+                        .append(" ")
+                        .append(Component.translatable("enchantment.level.1"));
+            }
+            return Optional.of(currentName.copy()
+                    .append(" -> ")
+                    .append(Component.translatable("enchantment.level." + nextLevel)));
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.debug("[Solace] Could not build bookshelf upgrade tooltip", e);
+            return Optional.empty();
+        }
+    }
+
+    public static boolean isBookshelfChoiceSlotLocked(Object handler, Choice choice) {
+        if (!isBookshelfHandler(handler)) {
+            return true;
+        }
+        try {
+            Optional<?> locked = (Optional<?>) method(handler, "isSlotLocked", slotPositionClass())
+                    .invoke(handler, choice.getEnchantmentSlot().getSlotPosition());
+            return locked.isEmpty() || Boolean.TRUE.equals(locked.get());
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.debug("[Solace] Could not inspect bookshelf tooltip slot lock", e);
+            return true;
+        }
+    }
+
+    public static Optional<ResourceLocation> bookshelfSlotAction(Object handler, SlotPosition mainPosition) {
+        Optional<ContainerLevelAccess> context = context(handler);
+        Optional<Container> inventory = inventory(handler);
+        if (context.isEmpty() || inventory.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ItemStack item = inventory.get().getItem(0);
+        try {
+            Optional<?> slots = mcdeSlots(item);
+            if (slots.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<?> slot = optionalResult(slots.get(), "getEnchantmentSlot", slotPositionClass(), mainPosition);
+            if (slot.isEmpty()) {
+                return Optional.empty();
+            }
+            Optional<?> chosen = optionalResult(slot.get(), "getChosen");
+            if (chosen.isEmpty()) {
+                @SuppressWarnings("unchecked")
+                List<Object> choices = (List<Object>) method(slot.get(), "choices").invoke(slot.get());
+                if (choices.isEmpty()) {
+                    return Optional.empty();
+                }
+                return Optional.of(toResourceLocation(method(choices.get(0), "getEnchantmentId").invoke(choices.get(0))));
+            }
+
+            int nextLevel = intResult(slot.get(), "getLevel") + 1;
+            ResourceLocation enchantmentId = toResourceLocation(method(chosen.get(), "getEnchantmentId").invoke(chosen.get()));
+            Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(enchantmentId);
+            if (enchantment == null || nextLevel > enchantment.getMaxLevel()) {
+                return Optional.empty();
+            }
+            return context.get().evaluate((level, tablePos) ->
+                    findUpgradeBook(level, tablePos, enchantmentId).map(BookSource::enchantmentId), Optional.empty());
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            LOGGER.debug("[Solace] Could not inspect bookshelf slot availability", e);
+            return Optional.empty();
+        }
+    }
+
+    private static boolean rebuildBookshelfLayout(Level level, BlockPos tablePos, ItemStack item, boolean reroll) {
+        if (level.isClientSide() || item.isEmpty()) {
+            return false;
+        }
+
+        List<BookSource> nearbyBooks = nearbyEnchantedBooks(level, tablePos);
+        int fingerprint = bookshelfFingerprint(item, nearbyBooks);
+        try {
+            Optional<?> current = mcdeSlots(item);
+            if (!reroll && current.isPresent() && bookLayoutMatches(item, fingerprint)) {
+                return false;
+            }
+
+            EnumMap<SlotPosition, ChosenState> chosen = chosenStates(current);
+            Set<ResourceLocation> chosenIds = chosen.values().stream()
+                    .map(ChosenState::enchantmentId)
+                    .collect(Collectors.toSet());
+            List<BookSource> candidates = applicableBooks(item, nearbyBooks, chosenIds);
+            long seed = reroll ? level.random.nextLong() : (0x9E3779B97F4A7C15L ^ tablePos.asLong() ^ fingerprint);
+            Collections.shuffle(candidates, new Random(seed));
+
+            Object builder = Class.forName("net.backupcup.mcde.util.EnchantmentSlots").getMethod("builder").invoke(null);
+            EnumMap<SlotPosition, List<BookSource>> assigned = new EnumMap<>(SlotPosition.class);
+            int candidateIndex = 0;
+            for (SlotPosition mainPosition : SlotPosition.values()) {
+                ChosenState chosenState = chosen.get(mainPosition);
+                if (chosenState != null) {
+                    invokeWithSlot(builder, mainPosition, List.of(chosenState.enchantmentId()));
+                    continue;
+                }
+
+                List<BookSource> choices = new ArrayList<>(3);
+                while (choices.size() < 3 && candidateIndex < candidates.size()) {
+                    choices.add(candidates.get(candidateIndex++));
+                }
+                if (!choices.isEmpty()) {
+                    addBookSlot(builder, mainPosition, choices);
+                    assigned.put(mainPosition, choices);
+                }
+            }
+
+            Object built = method(builder, "build").invoke(builder);
+            for (Map.Entry<SlotPosition, ChosenState> entry : chosen.entrySet()) {
+                Optional<?> slot = optionalResult(built, "getEnchantmentSlot", slotPositionClass(), entry.getKey());
+                if (slot.isPresent()) {
+                    method(slot.get(), "setChosen", slotPositionClass(), int.class)
+                            .invoke(slot.get(), SlotPosition.FIRST, entry.getValue().level());
+                    ((BookChoiceLevelsAccess) slot.get()).solace$setChoiceLevel(SlotPosition.FIRST, entry.getValue().level());
+                }
+            }
+
+            CompoundTag sourceTags = new CompoundTag();
+            for (Map.Entry<SlotPosition, List<BookSource>> entry : assigned.entrySet()) {
+                Optional<?> slot = optionalResult(built, "getEnchantmentSlot", slotPositionClass(), entry.getKey());
+                if (slot.isEmpty()) {
+                    continue;
+                }
+                for (int choiceIndex = 0; choiceIndex < entry.getValue().size(); choiceIndex++) {
+                    SlotPosition choicePosition = SlotPosition.values()[choiceIndex];
+                    BookSource source = entry.getValue().get(choiceIndex);
+                    ((BookChoiceLevelsAccess) slot.get()).solace$setChoiceLevel(choicePosition, source.level());
+                    sourceTags.put(sourceKey(entry.getKey(), choicePosition), source.toTag());
+                }
+            }
+
+            int lapisCost = Math.max(0, EnchantingReworkConfig.enchantingLapisCost());
+            method(built, "setNextRerollCost", int.class).invoke(built, lapisCost);
+            method(built, "setNextRerollCostPowerful", int.class).invoke(built, lapisCost);
+            method(built, "updateItemStack", ItemStack.class).invoke(built, item);
+            writeBookLayout(item, fingerprint, sourceTags);
             return true;
         } catch (ReflectiveOperationException | RuntimeException e) {
-            LOGGER.debug("[Solace] Could not normalize MCDE enchantment slots", e);
+            LOGGER.debug("[Solace] Could not rebuild bookshelf enchantments", e);
             return false;
         }
     }
 
-    public static Optional<RunicClick> inspectRunicClick(Object handler, int buttonId) {
-        if (buttonId < 0) {
-            return Optional.empty();
+    private static EnumMap<SlotPosition, ChosenState> chosenStates(Optional<?> slots) throws ReflectiveOperationException {
+        EnumMap<SlotPosition, ChosenState> chosen = new EnumMap<>(SlotPosition.class);
+        if (slots.isEmpty()) {
+            return chosen;
         }
-
-        Optional<Container> inventory = inventory(handler);
-        if (inventory.isEmpty()) {
-            return Optional.empty();
+        for (SlotPosition position : SlotPosition.values()) {
+            Optional<?> slot = optionalResult(slots.get(), "getEnchantmentSlot", slotPositionClass(), position);
+            if (slot.isEmpty()) {
+                continue;
+            }
+            Optional<?> selected = optionalResult(slot.get(), "getChosen");
+            if (selected.isPresent()) {
+                ResourceLocation enchantmentId = toResourceLocation(method(selected.get(), "getEnchantmentId").invoke(selected.get()));
+                chosen.put(position, new ChosenState(enchantmentId, intResult(slot.get(), "getLevel")));
+            }
         }
+        return chosen;
+    }
 
+    private static void addBookSlot(Object builder, SlotPosition mainPosition, List<BookSource> choices)
+            throws ReflectiveOperationException {
+        invokeWithSlot(builder, mainPosition, choices.stream().map(BookSource::enchantmentId).toList());
+    }
+
+    private static List<BookSource> applicableBooks(Level level, BlockPos tablePos, ItemStack item) {
         try {
-            ItemStack stack = inventory.get().getItem(0);
-            Optional<?> slots = mcdeSlots(stack);
-            if (slots.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Object[] positions = slotPositions();
-            int slotIndex = buttonId / positions.length;
-            int choiceIndex = buttonId % positions.length;
-            if (slotIndex < 0 || slotIndex >= positions.length) {
-                return Optional.empty();
-            }
-
-            Optional<?> clickedSlot = optionalResult(slots.get(), "getEnchantmentSlot", slotPositionClass(), positions[slotIndex]);
-            if (clickedSlot.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Object slot = clickedSlot.get();
-            boolean maxedOut = booleanResult(slot, "isMaxedOut");
-            Optional<?> chosen = optionalResult(slot, "getChosen");
-            int level;
-            Object enchantmentId;
-            if (chosen.isPresent()) {
-                if (maxedOut) {
-                    return Optional.empty();
-                }
-                level = intResult(slot, "getLevel") + 1;
-                enchantmentId = method(chosen.get(), "getEnchantmentId").invoke(chosen.get());
-            } else {
-                if (choiceIndex < 0 || choiceIndex >= positions.length) {
-                    return Optional.empty();
-                }
-                Optional<?> choice = optionalResult(slot, "getChoice", slotPositionClass(), positions[choiceIndex]);
-                if (choice.isEmpty()) {
-                    return Optional.empty();
-                }
-                level = 1;
-                enchantmentId = choice.get();
-            }
-
-            int baseCost = enchantCost(enchantmentId, level);
-            return Optional.of(new RunicClick(level, baseCost));
+            Optional<?> slots = mcdeSlots(item);
+            Set<ResourceLocation> chosenIds = chosenStates(slots).values().stream()
+                    .map(ChosenState::enchantmentId)
+                    .collect(Collectors.toSet());
+            return applicableBooks(item, nearbyEnchantedBooks(level, tablePos), chosenIds);
         } catch (ReflectiveOperationException | RuntimeException e) {
-            LOGGER.debug("[Solace] Could not inspect MCDE runic table click", e);
-            return Optional.empty();
+            LOGGER.debug("[Solace] Could not inspect locked bookshelf enchantments", e);
+            return List.of();
         }
     }
 
-    public static Optional<RerollClick> inspectRerollClick(Object handler, int buttonId) {
-        if (buttonId == -1) {
-            return Optional.of(new RerollClick(1));
-        }
-        if (buttonId < 0) {
-            return Optional.empty();
-        }
-
-        Optional<Container> inventory = inventory(handler);
-        if (inventory.isEmpty()) {
-            return Optional.empty();
-        }
-
-        try {
-            ItemStack stack = inventory.get().getItem(0);
-            Optional<?> slots = mcdeSlots(stack);
-            if (slots.isEmpty()) {
-                return Optional.empty();
+    private static List<BookSource> applicableBooks(ItemStack item, List<BookSource> nearbyBooks,
+                                                     Set<ResourceLocation> chosenIds) {
+        Map<Enchantment, Integer> existing = EnchantmentHelper.getEnchantments(item);
+        Set<ResourceLocation> existingIds = existing.keySet().stream()
+                .map(BuiltInRegistries.ENCHANTMENT::getKey)
+                .collect(Collectors.toSet());
+        Set<ResourceLocation> offeredIds = new HashSet<>();
+        List<BookSource> applicable = new ArrayList<>();
+        for (BookSource source : nearbyBooks) {
+            if (chosenIds.contains(source.enchantmentId()) || existingIds.contains(source.enchantmentId())) {
+                continue;
             }
-
-            Object[] positions = slotPositions();
-            int slotIndex = buttonId / positions.length;
-            int choiceIndex = buttonId % positions.length;
-            if (slotIndex < 0 || slotIndex >= positions.length || choiceIndex < 0 || choiceIndex >= positions.length) {
-                return Optional.empty();
+            Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(source.enchantmentId());
+            if (enchantment == null || source.level() != Math.max(1, enchantment.getMinLevel())
+                    || !item.canApplyAtEnchantingTable(enchantment)) {
+                continue;
             }
-
-            Optional<?> clickedSlot = optionalResult(slots.get(), "getEnchantmentSlot", slotPositionClass(), positions[slotIndex]);
-            if (clickedSlot.isEmpty()) {
-                return Optional.empty();
+            boolean compatible = existing.keySet().stream().allMatch(existingEnchantment ->
+                    existingEnchantment == enchantment || existingEnchantment.isCompatibleWith(enchantment));
+            if (compatible && offeredIds.add(source.enchantmentId())) {
+                applicable.add(source);
             }
+        }
+        return applicable;
+    }
 
-            Object slot = clickedSlot.get();
-            Optional<?> chosen = optionalResult(slot, "getChosen");
-            Object enchantmentId;
-            if (chosen.isPresent()) {
-                enchantmentId = method(chosen.get(), "getEnchantmentId").invoke(chosen.get());
-            } else {
-                Optional<?> choice = optionalResult(slot, "getChoice", slotPositionClass(), positions[choiceIndex]);
-                if (choice.isEmpty()) {
-                    return Optional.empty();
+    private static List<BookSource> nearbyEnchantedBooks(Level level, BlockPos tablePos) {
+        List<BookSource> books = new ArrayList<>();
+        for (BlockPos offset : EnchantmentTableBlock.BOOKSHELF_OFFSETS) {
+            BlockPos gap = tablePos.offset(offset.getX() / 2, offset.getY(), offset.getZ() / 2);
+            if (!level.isEmptyBlock(gap)) {
+                continue;
+            }
+            BlockPos shelfPos = tablePos.offset(offset);
+            BlockEntity blockEntity = level.getBlockEntity(shelfPos);
+            if (!(blockEntity instanceof ChiseledBookShelfBlockEntity shelf)) {
+                continue;
+            }
+            for (int shelfSlot = 0; shelfSlot < shelf.getContainerSize(); shelfSlot++) {
+                ItemStack book = shelf.getItem(shelfSlot);
+                if (!book.is(Items.ENCHANTED_BOOK) || ArtifactEnchantingSupport.isIdentifiedArtifact(book)) {
+                    continue;
                 }
-                enchantmentId = choice.get();
+                for (Map.Entry<Enchantment, Integer> entry : EnchantmentHelper.getEnchantments(book).entrySet()) {
+                    ResourceLocation enchantmentId = BuiltInRegistries.ENCHANTMENT.getKey(entry.getKey());
+                    if (enchantmentId != null && entry.getValue() > 0) {
+                        books.add(new BookSource(shelfPos, shelfSlot, enchantmentId, entry.getValue()));
+                    }
+                }
+            }
+        }
+        return books;
+    }
+
+    public static void spawnEnchantingParticles(Level level, BlockPos tablePos, RandomSource random) {
+        for (BlockPos offset : EnchantmentTableBlock.BOOKSHELF_OFFSETS) {
+            BlockPos gap = tablePos.offset(offset.getX() / 2, offset.getY(), offset.getZ() / 2);
+            if (!level.isEmptyBlock(gap)) {
+                continue;
             }
 
-            int baseCost = intResult(slots.get(), "getNextRerollCost", enchantmentId);
-            return Optional.of(new RerollClick(baseCost));
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            LOGGER.debug("[Solace] Could not inspect MCDE roll bench click", e);
+            BlockPos shelfPos = tablePos.offset(offset);
+            BlockEntity blockEntity = level.getBlockEntity(shelfPos);
+            if (!(blockEntity instanceof ChiseledBookShelfBlockEntity shelf)) {
+                continue;
+            }
+
+            int enchantedSlotMask = ((EnchantedShelfSlotsAccess) shelf).solace$getEnchantedSlotMask();
+            List<Integer> enchantedSlots = new ArrayList<>(shelf.getContainerSize());
+            for (int shelfSlot = 0; shelfSlot < shelf.getContainerSize(); shelfSlot++) {
+                if ((enchantedSlotMask & 1 << shelfSlot) != 0) {
+                    enchantedSlots.add(shelfSlot);
+                }
+            }
+            if (enchantedSlots.isEmpty() || random.nextInt(4) != 0) {
+                continue;
+            }
+
+            int shelfSlot = enchantedSlots.get(random.nextInt(enchantedSlots.size()));
+            BlockState shelfState = level.getBlockState(shelfPos);
+            Direction facing = shelfState.hasProperty(HorizontalDirectionalBlock.FACING)
+                    ? shelfState.getValue(HorizontalDirectionalBlock.FACING)
+                    : Direction.getNearest(tablePos.getX() - shelfPos.getX(), 0, tablePos.getZ() - shelfPos.getZ());
+            Direction right = facing.getClockWise();
+
+            double columnOffset = (shelfSlot % 3 - 1) * 0.25D;
+            double sourceX = shelfPos.getX() + 0.5D + facing.getStepX() * 0.48D
+                    + right.getStepX() * columnOffset;
+            double sourceY = shelfPos.getY() + (shelfSlot < 3 ? 0.72D : 0.28D);
+            double sourceZ = shelfPos.getZ() + 0.5D + facing.getStepZ() * 0.48D
+                    + right.getStepZ() * columnOffset;
+            double tableX = tablePos.getX() + 0.5D;
+            double tableY = tablePos.getY() + 2.0D;
+            double tableZ = tablePos.getZ() + 0.5D;
+
+            level.addParticle(ParticleTypes.ENCHANT, tableX, tableY, tableZ,
+                    sourceX - tableX, sourceY - tableY, sourceZ - tableZ);
+        }
+    }
+
+    private static Optional<BookSource> findUpgradeBook(Level level, BlockPos tablePos,
+                                                        ResourceLocation enchantmentId) {
+        Enchantment enchantment = BuiltInRegistries.ENCHANTMENT.get(enchantmentId);
+        if (enchantment == null) {
             return Optional.empty();
         }
+        int baseLevel = Math.max(1, enchantment.getMinLevel());
+        return nearbyEnchantedBooks(level, tablePos).stream()
+                .filter(source -> source.enchantmentId().equals(enchantmentId) && source.level() == baseLevel)
+                .findFirst();
+    }
+
+    private static boolean consumeBook(Level level, BookSource source) {
+        BlockEntity blockEntity = level.getBlockEntity(source.shelfPosition());
+        if (!(blockEntity instanceof ChiseledBookShelfBlockEntity shelf)
+                || source.shelfSlot() < 0 || source.shelfSlot() >= shelf.getContainerSize()) {
+            return false;
+        }
+        ItemStack current = shelf.getItem(source.shelfSlot());
+        if (!current.is(Items.ENCHANTED_BOOK)
+                || EnchantmentHelper.getEnchantments(current).entrySet().stream().noneMatch(entry ->
+                source.enchantmentId().equals(BuiltInRegistries.ENCHANTMENT.getKey(entry.getKey()))
+                        && entry.getValue() == source.level())) {
+            return false;
+        }
+        shelf.setItem(source.shelfSlot(), new ItemStack(Items.BOOK));
+        shelf.setChanged();
+        BlockState state = level.getBlockState(source.shelfPosition());
+        level.sendBlockUpdated(source.shelfPosition(), state, state, Block.UPDATE_CLIENTS);
+        return true;
+    }
+
+    private static int bookshelfFingerprint(ItemStack item, List<BookSource> books) {
+        int fingerprint = layoutFingerprint(item);
+        List<String> entries = books.stream()
+                .map(BookSource::fingerprint)
+                .sorted()
+                .toList();
+        return 31 * fingerprint + entries.hashCode();
+    }
+
+    private static boolean bookLayoutMatches(ItemStack item, int fingerprint) {
+        CompoundTag tag = item.getTag();
+        if (tag == null || !tag.contains(BOOK_LAYOUT_TAG, 10)) {
+            return false;
+        }
+        CompoundTag layout = tag.getCompound(BOOK_LAYOUT_TAG);
+        return layout.getInt(BOOK_LAYOUT_VERSION_KEY) == BOOK_LAYOUT_VERSION
+                && layout.getInt(BOOK_LAYOUT_FINGERPRINT_KEY) == fingerprint;
+    }
+
+    private static boolean hasBookLayout(ItemStack item) {
+        CompoundTag tag = item.getTag();
+        return tag != null && tag.contains(BOOK_LAYOUT_TAG, 10)
+                && tag.getCompound(BOOK_LAYOUT_TAG).getInt(BOOK_LAYOUT_VERSION_KEY) == BOOK_LAYOUT_VERSION;
+    }
+
+    private static void writeBookLayout(ItemStack item, int fingerprint, CompoundTag sources) {
+        CompoundTag layout = new CompoundTag();
+        layout.putInt(BOOK_LAYOUT_VERSION_KEY, BOOK_LAYOUT_VERSION);
+        layout.putInt(BOOK_LAYOUT_FINGERPRINT_KEY, fingerprint);
+        layout.put(BOOK_LAYOUT_CHOICES_KEY, sources);
+        item.getOrCreateTag().put(BOOK_LAYOUT_TAG, layout);
+    }
+
+    private static Optional<BookSource> readBookSource(ItemStack item, SlotPosition mainPosition,
+                                                       SlotPosition choicePosition) {
+        CompoundTag tag = item.getTag();
+        if (tag == null || !tag.contains(BOOK_LAYOUT_TAG, 10)) {
+            return Optional.empty();
+        }
+        CompoundTag sources = tag.getCompound(BOOK_LAYOUT_TAG).getCompound(BOOK_LAYOUT_CHOICES_KEY);
+        String key = sourceKey(mainPosition, choicePosition);
+        return sources.contains(key, 10) ? BookSource.fromTag(sources.getCompound(key)) : Optional.empty();
+    }
+
+    private static String sourceKey(SlotPosition mainPosition, SlotPosition choicePosition) {
+        return mainPosition.ordinal() + "_" + choicePosition.ordinal();
+    }
+
+    private static int openChoiceCapacity(ItemStack item) {
+        try {
+            int locked = chosenStates(mcdeSlots(item)).size();
+            return Math.max(0, (SlotPosition.values().length - locked) * SlotPosition.values().length);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return 0;
+        }
+    }
+
+    private static boolean canPay(Player player, ItemStack lapis, int lapisCost, int xpCost) {
+        boolean hasLapis = lapisCost == 0 || (lapis.is(Items.LAPIS_LAZULI) && lapis.getCount() >= lapisCost);
+        return player.isCreative() || (hasLapis && player.experienceLevel >= xpCost);
+    }
+
+    private static void pay(Player player, ItemStack lapis, int lapisCost, int xpCost) {
+        if (player.isCreative()) {
+            return;
+        }
+        lapis.shrink(lapisCost);
+        player.giveExperienceLevels(-xpCost);
     }
 
     private static MenuProvider menuProvider(String className, String titleKey, Level level, BlockPos pos) {
         return new SimpleMenuProvider(
-                (containerId, playerInventory, player) -> createMenu(className, containerId, playerInventory, level, pos),
+                (containerId, playerInventory, player) ->
+                        createMenu(className, containerId, playerInventory, player, level, pos),
                 Component.translatable(titleKey)
         );
     }
 
-    private static AbstractContainerMenu createMenu(String className, int containerId, Inventory playerInventory, Level level, BlockPos pos) {
+    private static AbstractContainerMenu createMenu(String className, int containerId, Inventory playerInventory,
+                                                     Player player, Level level, BlockPos pos) {
         try {
             Class<?> handlerClass = Class.forName(className);
             Constructor<?> constructor = handlerClass.getConstructor(int.class, Inventory.class, ContainerLevelAccess.class);
             ContainerLevelAccess context = ContainerLevelAccess.create(level, pos);
             AbstractContainerMenu menu = (AbstractContainerMenu) constructor.newInstance(containerId, playerInventory, context);
-            installSlotNormalizer(menu, context);
+            installSlotNormalizer(menu, context, player);
             return menu;
         } catch (ReflectiveOperationException e) {
             LOGGER.error("[Solace] Failed to create {}", className, e);
@@ -335,173 +792,6 @@ public final class EnchantingReworkSupport {
             return false;
         }
         return AbstractContainerMenuAccessor.invokeStillValid(context, player, block);
-    }
-
-    private static int bookshelfPower(Level level, BlockPos tablePos) {
-        float power = 0.0F;
-        for (BlockPos offset : EnchantmentTableBlock.BOOKSHELF_OFFSETS) {
-            if (EnchantmentTableBlock.isValidBookShelf(level, tablePos, offset)) {
-                BlockPos shelfPos = tablePos.offset(offset);
-                BlockState shelfState = level.getBlockState(shelfPos);
-                power += shelfState.getEnchantPowerBonus(level, shelfPos);
-            }
-        }
-        return Math.round(power);
-    }
-
-    private static int discountShelfCount(Level level, BlockPos tablePos) {
-        List<ResourceLocation> discountShelves = EnchantingReworkConfig.xpCostReductionBookshelves();
-        if (discountShelves.isEmpty()) {
-            return 0;
-        }
-
-        int count = 0;
-        for (BlockPos offset : EnchantmentTableBlock.BOOKSHELF_OFFSETS) {
-            if (!EnchantmentTableBlock.isValidBookShelf(level, tablePos, offset)) {
-                continue;
-            }
-
-            BlockPos shelfPos = tablePos.offset(offset);
-            ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(level.getBlockState(shelfPos).getBlock());
-            if (discountShelves.contains(blockId)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static Object buildSlots(ItemStack stack, Optional<?> currentSlots, int[] targetChoices, long seed, boolean preserveCurrentChoices) throws ReflectiveOperationException {
-        List<ResourceLocation> candidates = enchantmentCandidates(stack, seed);
-        Object builder = Class.forName("net.backupcup.mcde.util.EnchantmentSlots").getMethod("builder").invoke(null);
-        Object[] positions = slotPositions();
-        List<ResourceLocation> selected = new ArrayList<>();
-        boolean addedAnySlot = false;
-
-        for (int slot = 0; slot < Math.min(targetChoices.length, positions.length); slot++) {
-            int choiceCount = Math.min(3, Math.max(0, targetChoices[slot]));
-            Optional<?> currentSlot = currentSlots.isPresent()
-                    ? optionalResult(currentSlots.get(), "getEnchantmentSlot", slotPositionClass(), positions[slot])
-                    : Optional.empty();
-            List<ResourceLocation> choices = chosenSlotChoices(currentSlot);
-            if (choices.isEmpty() && preserveCurrentChoices) {
-                choices = currentSlotChoices(currentSlot, choiceCount);
-            }
-            if (choices.isEmpty()) {
-                choices = takeChoices(candidates, selected, choiceCount);
-            } else if (choices.size() < choiceCount) {
-                choices = new ArrayList<>(choices);
-                List<ResourceLocation> alreadyPresent = new ArrayList<>(selected);
-                alreadyPresent.addAll(choices);
-                choices.addAll(takeChoices(candidates, alreadyPresent, choiceCount - choices.size()));
-            }
-            if (choices.isEmpty()) {
-                continue;
-            }
-
-            invokeWithSlot(builder, positions[slot], choices);
-            selected.addAll(choices);
-            addedAnySlot = true;
-        }
-
-        if (!addedAnySlot) {
-            return null;
-        }
-
-        Object built = method(builder, "build").invoke(builder);
-        if (currentSlots.isPresent()) {
-            copyRerollState(currentSlots.get(), built);
-            copyChosenState(currentSlots.get(), built);
-        }
-        return built;
-    }
-
-    private static List<ResourceLocation> currentSlotChoices(Optional<?> currentSlot, int choiceCount) throws ReflectiveOperationException {
-        if (currentSlot.isEmpty() || choiceCount <= 0) {
-            return List.of();
-        }
-
-        List<ResourceLocation> choices = new ArrayList<>();
-        for (Object position : slotPositions()) {
-            if (choices.size() >= choiceCount) {
-                break;
-            }
-            Optional<?> choice = optionalResult(currentSlot.get(), "getChoice", slotPositionClass(), position);
-            if (choice.isPresent()) {
-                choices.add(toResourceLocation(choice.get()));
-            }
-        }
-        return choices;
-    }
-
-    private static List<ResourceLocation> chosenSlotChoices(Optional<?> currentSlot) throws ReflectiveOperationException {
-        if (currentSlot.isEmpty() || optionalResult(currentSlot.get(), "getChosen").isEmpty()) {
-            return List.of();
-        }
-
-        List<ResourceLocation> choices = new ArrayList<>();
-        for (Object position : slotPositions()) {
-            Optional<?> choice = optionalResult(currentSlot.get(), "getChoice", slotPositionClass(), position);
-            if (choice.isPresent()) {
-                choices.add(toResourceLocation(choice.get()));
-            }
-        }
-        return choices;
-    }
-
-    private static List<ResourceLocation> enchantmentCandidates(ItemStack stack, long seed) throws ReflectiveOperationException {
-        Class<?> utilsClass = Class.forName("net.backupcup.mcde.util.EnchantmentUtils");
-        @SuppressWarnings("unchecked")
-        Stream<ResourceLocation> stream = (Stream<ResourceLocation>) utilsClass.getMethod("getAllEnchantmentsForItem", ItemStack.class).invoke(null, stack);
-        List<ResourceLocation> candidates = stream.collect(Collectors.toCollection(ArrayList::new));
-        Set<ResourceLocation> existing = existingEnchantments(stack);
-        candidates.removeIf(existing::contains);
-        Collections.shuffle(candidates, new Random(seed));
-        return candidates;
-    }
-
-    private static boolean layoutMarkerMatches(ItemStack stack, int power, int[] targetChoices, int fingerprint) {
-        CompoundTag tag = stack.getTag();
-        if (tag == null || !tag.contains(SOLACE_LAYOUT_TAG, 10)) {
-            return false;
-        }
-
-        CompoundTag layout = tag.getCompound(SOLACE_LAYOUT_TAG);
-        return layout.getInt(SOLACE_LAYOUT_VERSION_KEY) == SOLACE_LAYOUT_VERSION
-                && layout.getInt(SOLACE_LAYOUT_POWER_KEY) == power
-                && layout.getInt(SOLACE_LAYOUT_FINGERPRINT_KEY) == fingerprint
-                && Arrays.equals(layout.getIntArray(SOLACE_LAYOUT_CHOICES_KEY), normalizedChoices(targetChoices));
-    }
-
-    private static boolean layoutMarkerTrusted(ItemStack stack, int fingerprint) {
-        CompoundTag tag = stack.getTag();
-        if (tag == null || !tag.contains(SOLACE_LAYOUT_TAG, 10)) {
-            return false;
-        }
-
-        CompoundTag layout = tag.getCompound(SOLACE_LAYOUT_TAG);
-        return layout.getInt(SOLACE_LAYOUT_VERSION_KEY) == SOLACE_LAYOUT_VERSION
-                && layout.getInt(SOLACE_LAYOUT_FINGERPRINT_KEY) == fingerprint;
-    }
-
-    private static void writeLayoutMarker(ItemStack stack, int power, int[] targetChoices, int fingerprint) {
-        CompoundTag layout = new CompoundTag();
-        layout.putInt(SOLACE_LAYOUT_VERSION_KEY, SOLACE_LAYOUT_VERSION);
-        layout.putInt(SOLACE_LAYOUT_POWER_KEY, power);
-        layout.putIntArray(SOLACE_LAYOUT_CHOICES_KEY, normalizedChoices(targetChoices));
-        layout.putInt(SOLACE_LAYOUT_FINGERPRINT_KEY, fingerprint);
-        stack.getOrCreateTag().put(SOLACE_LAYOUT_TAG, layout);
-    }
-
-    private static int[] normalizedChoices(int[] targetChoices) {
-        int[] choices = {0, 0, 0};
-        for (int i = 0; i < choices.length && i < targetChoices.length; i++) {
-            choices[i] = Math.max(0, Math.min(3, targetChoices[i]));
-        }
-        return choices;
-    }
-
-    private static long layoutSeed(int fingerprint) {
-        return 0x5DEECE66DL * 31 + fingerprint;
     }
 
     private static int layoutFingerprint(ItemStack stack) {
@@ -521,60 +811,6 @@ public final class EnchantingReworkSupport {
         return fingerprint;
     }
 
-    private static Set<ResourceLocation> existingEnchantments(ItemStack stack) {
-        Set<ResourceLocation> existing = new HashSet<>();
-        for (Enchantment enchantment : EnchantmentHelper.getEnchantments(stack).keySet()) {
-            ResourceLocation id = BuiltInRegistries.ENCHANTMENT.getKey(enchantment);
-            if (id != null) {
-                existing.add(id);
-            }
-        }
-        return existing;
-    }
-
-    private static List<ResourceLocation> takeChoices(List<ResourceLocation> candidates, List<ResourceLocation> selected, int count) throws ReflectiveOperationException {
-        List<ResourceLocation> choices = new ArrayList<>();
-        for (int i = 0; i < count; i++) {
-            ResourceLocation choice = takeCompatibleChoice(candidates, selected, choices);
-            if (choice == null) {
-                choice = takeAnyChoice(candidates, selected, choices);
-            }
-            if (choice == null) {
-                break;
-            }
-            choices.add(choice);
-        }
-        return choices;
-    }
-
-    private static ResourceLocation takeCompatibleChoice(List<ResourceLocation> candidates, List<ResourceLocation> selected, List<ResourceLocation> choices) throws ReflectiveOperationException {
-        List<ResourceLocation> present = new ArrayList<>(selected);
-        present.addAll(choices);
-        for (ResourceLocation candidate : candidates) {
-            if (!present.contains(candidate) && isCompatible(present, candidate)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    private static ResourceLocation takeAnyChoice(List<ResourceLocation> candidates, List<ResourceLocation> selected, List<ResourceLocation> choices) {
-        for (ResourceLocation candidate : candidates) {
-            if (!selected.contains(candidate) && !choices.contains(candidate)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    private static boolean isCompatible(Collection<ResourceLocation> present, ResourceLocation candidate) throws ReflectiveOperationException {
-        if (present.isEmpty()) {
-            return true;
-        }
-        Class<?> utilsClass = Class.forName("net.backupcup.mcde.util.EnchantmentUtils");
-        return (Boolean) utilsClass.getMethod("isCompatible", Collection.class, ResourceLocation.class).invoke(null, present, candidate);
-    }
-
     private static void invokeWithSlot(Object builder, Object slotPosition, List<ResourceLocation> choices) throws ReflectiveOperationException {
         if (choices.size() >= 3) {
             method(builder, "withSlot", slotPositionClass(), ResourceLocation.class, ResourceLocation.class, ResourceLocation.class)
@@ -588,67 +824,10 @@ public final class EnchantingReworkSupport {
         }
     }
 
-    private static void copyRerollState(Object sourceSlots, Object targetSlots) throws ReflectiveOperationException {
-        int nextRerollCost = intResult(sourceSlots, "getNextRerollCost");
-        int nextPowerfulRerollCost = intResult(sourceSlots, "getNextRerollCostPowerful");
-        method(targetSlots, "setNextRerollCost", int.class).invoke(targetSlots, nextRerollCost);
-        method(targetSlots, "setNextRerollCostPowerful", int.class).invoke(targetSlots, nextPowerfulRerollCost);
-
-        @SuppressWarnings("unchecked")
-        Set<ResourceLocation> gilding = (Set<ResourceLocation>) method(sourceSlots, "getGildingIds").invoke(sourceSlots);
-        method(targetSlots, "addAllGilding", Collection.class).invoke(targetSlots, gilding);
-    }
-
-    private static void copyChosenState(Object sourceSlots, Object targetSlots) throws ReflectiveOperationException {
-        @SuppressWarnings("unchecked")
-        Stream<Object> stream = (Stream<Object>) method(sourceSlots, "stream").invoke(sourceSlots);
-        for (Object sourceSlot : stream.toList()) {
-            Optional<?> chosen = optionalResult(sourceSlot, "getChosen");
-            if (chosen.isEmpty()) {
-                continue;
-            }
-
-            Object slotPosition = method(sourceSlot, "getSlotPosition").invoke(sourceSlot);
-            Optional<?> targetSlot = optionalResult(targetSlots, "getEnchantmentSlot", slotPositionClass(), slotPosition);
-            if (targetSlot.isEmpty()) {
-                continue;
-            }
-
-            Object choicePosition = method(chosen.get(), "getChoicePosition").invoke(chosen.get());
-            int level = intResult(chosen.get(), "getLevel");
-            method(targetSlot.get(), "setChosen", slotPositionClass(), int.class).invoke(targetSlot.get(), choicePosition, level);
-        }
-    }
-
-    private static boolean slotChoicesMatch(Object slots, int[] targetChoices) throws ReflectiveOperationException {
-        int[] actualChoices = new int[]{0, 0, 0};
-        @SuppressWarnings("unchecked")
-        Stream<Object> stream = (Stream<Object>) method(slots, "stream").invoke(slots);
-        for (Object slot : stream.toList()) {
-            Object slotPosition = method(slot, "getSlotPosition").invoke(slot);
-            int slotIndex = ((Enum<?>) slotPosition).ordinal();
-            if (slotIndex < actualChoices.length) {
-                List<?> choices = (List<?>) method(slot, "choices").invoke(slot);
-                actualChoices[slotIndex] = choices.size();
-            }
-        }
-
-        for (int i = 0; i < actualChoices.length; i++) {
-            if (actualChoices[i] != Math.max(0, Math.min(3, targetChoices[i]))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static Optional<?> mcdeSlots(ItemStack stack) throws ReflectiveOperationException {
         Class<?> slotsClass = Class.forName("net.backupcup.mcde.util.EnchantmentSlots");
         Method fromItemStack = slotsClass.getMethod("fromItemStack", ItemStack.class);
         return (Optional<?>) fromItemStack.invoke(null, stack);
-    }
-
-    private static Object[] slotPositions() throws ReflectiveOperationException {
-        return (Object[]) slotPositionClass().getMethod("values").invoke(null);
     }
 
     private static Class<?> slotPositionClass() throws ClassNotFoundException {
@@ -659,90 +838,6 @@ public final class EnchantingReworkSupport {
         ResourceLocation id = toResourceLocation(enchantmentId);
         Object config = Class.forName("net.backupcup.mcde.MCDEnchantments").getMethod("getConfig").invoke(null);
         return (Integer) config.getClass().getMethod("getEnchantCost", ResourceLocation.class, int.class).invoke(config, id, level);
-    }
-
-    public static int rerollCost(Object slots, Object enchantmentId) {
-        try {
-            return intResult(slots, "getNextRerollCost", enchantmentId);
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            LOGGER.debug("[Solace] Could not inspect MCDE reroll cost", e);
-            return 1;
-        }
-    }
-
-    public static Optional<ResourceLocation> fallbackRerollChoice(Object handler, Object clickedSlotPosition) {
-        Optional<Container> inventory = inventory(handler);
-        if (inventory.isEmpty()) {
-            return Optional.empty();
-        }
-
-        try {
-            ItemStack stack = inventory.get().getItem(0);
-            Optional<?> slots = mcdeSlots(stack);
-            if (slots.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Optional<?> clickedSlot = optionalResult(slots.get(), "getEnchantmentSlot", slotPositionClass(), clickedSlotPosition);
-            if (clickedSlot.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Set<ResourceLocation> currentClickedChoices = new HashSet<>();
-            for (Object choice : (List<?>) method(clickedSlot.get(), "choices").invoke(clickedSlot.get())) {
-                Object enchantmentId = method(choice, "getEnchantmentId").invoke(choice);
-                currentClickedChoices.add(toResourceLocation(enchantmentId));
-            }
-            List<ResourceLocation> protectedChoices = otherSlotChoices(slots.get(), clickedSlotPosition);
-
-            Class<?> utilsClass = Class.forName("net.backupcup.mcde.util.EnchantmentUtils");
-            @SuppressWarnings("unchecked")
-            Stream<ResourceLocation> stream = (Stream<ResourceLocation>) utilsClass.getMethod("getEnchantmentsNotInItem", ItemStack.class).invoke(null, stack);
-            List<ResourceLocation> candidates = stream
-                    .filter(candidate -> !currentClickedChoices.contains(candidate))
-                    .filter(candidate -> !protectedChoices.contains(candidate))
-                    .collect(Collectors.toCollection(ArrayList::new));
-            List<ResourceLocation> compatibleCandidates = new ArrayList<>();
-            for (ResourceLocation candidate : candidates) {
-                if (isCompatible(protectedChoices, candidate)) {
-                    compatibleCandidates.add(candidate);
-                }
-            }
-            if (!compatibleCandidates.isEmpty()) {
-                candidates = compatibleCandidates;
-            }
-            Collections.shuffle(candidates, new Random(System.nanoTime() ^ layoutFingerprint(stack) ^ ((Enum<?>) clickedSlotPosition).ordinal()));
-            if (candidates.isEmpty()) {
-                return Optional.empty();
-            }
-
-            @SuppressWarnings("unchecked")
-            Optional<ResourceLocation> generated = (Optional<ResourceLocation>) utilsClass
-                    .getMethod("generateEnchantment", ItemStack.class, Optional.class, List.class)
-                    .invoke(null, stack, Optional.empty(), candidates);
-            return generated.isPresent() ? generated : Optional.of(candidates.get(0));
-        } catch (ReflectiveOperationException | RuntimeException e) {
-            LOGGER.debug("[Solace] Could not generate fallback MCDE reroll choice", e);
-            return Optional.empty();
-        }
-    }
-
-    private static List<ResourceLocation> otherSlotChoices(Object slots, Object clickedSlotPosition) throws ReflectiveOperationException {
-        List<ResourceLocation> choices = new ArrayList<>();
-        @SuppressWarnings("unchecked")
-        Stream<Object> stream = (Stream<Object>) method(slots, "stream").invoke(slots);
-        for (Object slot : stream.toList()) {
-            Object slotPosition = method(slot, "getSlotPosition").invoke(slot);
-            if (slotPosition.equals(clickedSlotPosition)) {
-                continue;
-            }
-
-            for (Object choice : (List<?>) method(slot, "choices").invoke(slot)) {
-                Object enchantmentId = method(choice, "getEnchantmentId").invoke(choice);
-                choices.add(toResourceLocation(enchantmentId));
-            }
-        }
-        return choices;
     }
 
     private static ResourceLocation toResourceLocation(Object value) {
@@ -763,16 +858,8 @@ public final class EnchantingReworkSupport {
         return (Optional<?>) method(target, name).invoke(target);
     }
 
-    private static boolean booleanResult(Object target, String name) throws ReflectiveOperationException {
-        return (Boolean) method(target, name).invoke(target);
-    }
-
     private static int intResult(Object target, String name) throws ReflectiveOperationException {
         return (Integer) method(target, name).invoke(target);
-    }
-
-    private static int intResult(Object target, String name, Object argument) throws ReflectiveOperationException {
-        return (Integer) method(target, name, argument.getClass()).invoke(target, argument);
     }
 
     private static <T> Optional<T> field(Object target, String name, Class<T> type) {
@@ -791,9 +878,40 @@ public final class EnchantingReworkSupport {
         return new ResourceLocation(namespace, path);
     }
 
-    public record RunicClick(int level, int baseCost) {
+    private record ChosenState(ResourceLocation enchantmentId, int level) {
     }
 
-    public record RerollClick(int baseCost) {
+    private record BookSource(BlockPos shelfPosition, int shelfSlot, ResourceLocation enchantmentId, int level) {
+        private CompoundTag toTag() {
+            CompoundTag tag = new CompoundTag();
+            tag.putLong(BOOK_SOURCE_POSITION_KEY, shelfPosition.asLong());
+            tag.putInt(BOOK_SOURCE_SLOT_KEY, shelfSlot);
+            tag.putString(BOOK_SOURCE_ENCHANTMENT_KEY, enchantmentId.toString());
+            tag.putInt(BOOK_SOURCE_LEVEL_KEY, level);
+            return tag;
+        }
+
+        private String fingerprint() {
+            return shelfPosition.asLong() + ":" + shelfSlot + ":" + enchantmentId + ":" + level;
+        }
+
+        private static Optional<BookSource> fromTag(CompoundTag tag) {
+            try {
+                if (!tag.contains(BOOK_SOURCE_POSITION_KEY, 4)
+                        || !tag.contains(BOOK_SOURCE_SLOT_KEY, 3)
+                        || !tag.contains(BOOK_SOURCE_ENCHANTMENT_KEY, 8)
+                        || !tag.contains(BOOK_SOURCE_LEVEL_KEY, 3)) {
+                    return Optional.empty();
+                }
+                return Optional.of(new BookSource(
+                        BlockPos.of(tag.getLong(BOOK_SOURCE_POSITION_KEY)),
+                        tag.getInt(BOOK_SOURCE_SLOT_KEY),
+                        new ResourceLocation(tag.getString(BOOK_SOURCE_ENCHANTMENT_KEY)),
+                        tag.getInt(BOOK_SOURCE_LEVEL_KEY)
+                ));
+            } catch (RuntimeException e) {
+                return Optional.empty();
+            }
+        }
     }
 }

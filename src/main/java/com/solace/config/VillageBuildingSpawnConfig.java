@@ -15,7 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import com.google.gson.annotations.SerializedName;
-import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
@@ -90,7 +89,7 @@ public final class VillageBuildingSpawnConfig {
         return DEFAULT_CUSTOM_BUILDINGS;
     }
 
-    public static int chooseTargetCount(ResourceLocation buildingId, BlockPos startPos, ResourceLocation startTemplate) {
+    public static int minimumCount(ResourceLocation buildingId) {
         Entry entry = discover(buildingId);
         if (entry.mode == Mode.DEFAULT) {
             return -1;
@@ -98,17 +97,18 @@ public final class VillageBuildingSpawnConfig {
         if (entry.mode == Mode.ONCE) {
             return 1;
         }
+        return entry.min;
+    }
 
-        if (entry.min == entry.max) {
-            return entry.min;
+    public static int maximumCount(ResourceLocation buildingId) {
+        Entry entry = discover(buildingId);
+        if (entry.mode == Mode.DEFAULT) {
+            return -1;
         }
-
-        int range = entry.max - entry.min + 1;
-        int hash = 17;
-        hash = 31 * hash + buildingId.toString().hashCode();
-        hash = 31 * hash + startTemplate.toString().hashCode();
-        hash = 31 * hash + Long.hashCode(startPos.asLong());
-        return entry.min + Math.floorMod(hash, range);
+        if (entry.mode == Mode.ONCE) {
+            return 1;
+        }
+        return entry.max;
     }
 
     private static ConfigData load() {

@@ -6,5 +6,13 @@
   "solace.jade.cauldron.catalyst_missing": "  - Missing Catalyst",
   "solace.jade.cauldron.inhibitor": "  - Inhibitor: %s",
   "solace.jade.cauldron.inhibitor_missing": "  - Missing Inhibitor",
-  "solace.jei.alchemist_cauldron.info": "The Alchemist Cauldron can be used to brew potions. Put water inside, place a heat source underneath, and add ingredients to brew custom potions and elixirs."
+  "solace.jei.alchemist_cauldron.info": "The Alchemist Cauldron can be used to brew potions. Put water inside, place a heat source underneath, and add ingredients to brew custom potions and elixirs.",
+  "item.solace.identified_artifact": "Identified Artifact",
+  "solace.jei.arcane_anvil.info": "The Arcane Anvil now only combines an Infused Book with an Identified Artifact. Both inputs are consumed to create the artifact's corresponding Enchanted Book.",
+  "attribute.name.solace.sack_capacity": "Sack Capacity",
+  "container.solace.horse_cargo": "Horse Cargo",
+  "solace.jade.horse.sack_capacity": "Sack Capacity: %s",
+  "item.modifiers.horse": "When on Horse:",
+  "solace.horse_armor.knockback_resistance": "+0.4 Knockback Resistance",
+  "solace.horse_armor.slowness_infliction": "+4 Slowness Infliction"
 }

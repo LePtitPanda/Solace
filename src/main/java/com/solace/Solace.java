@@ -4,6 +4,7 @@ import com.solace.events.CommonEvents;
 import com.solace.config.EnchantingReworkConfig;
 import com.solace.config.PerformanceConfig;
 import com.solace.config.VillageBuildingSpawnConfig;
+import com.solace.registry.SolaceItems;
 import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraftforge.common.brewing.BrewingRecipeRegistry;
 import net.minecraftforge.common.brewing.IBrewingRecipe;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLLoadCompleteEvent;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -33,6 +35,7 @@ public class Solace {
 
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");
+        SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
         updateCraftPresenceConfig();
     }

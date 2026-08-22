@@ -15,14 +15,18 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import org.slf4j.Logger;
 
 public final class JigsawVillageBuildingTool {
@@ -32,10 +36,8 @@ public final class JigsawVillageBuildingTool {
     private static final Deque<String> RECENT_REPORTS = new ArrayDeque<>();
     private static final boolean SYSTEM_DIAGNOSTICS = Boolean.getBoolean("solace.villageJigsawDiagnostics");
     private static final int MAX_DIAGNOSTIC_STARTS = 80;
-    private static final int MAX_DIAGNOSTIC_PIECES = 200;
-    private static final ResourceLocation AMBIENT_CANDIDATE_SESSION = id("solace", "ambient_plains_village_candidates");
     private static final AtomicInteger DIAGNOSTIC_STARTS = new AtomicInteger();
-    private static final AtomicInteger DIAGNOSTIC_PIECES = new AtomicInteger();
+    private static final Pattern ELEMENT_TEMPLATE_ID = Pattern.compile("([a-z0-9_.-]+):([a-z0-9_./-]+)");
 
     private static final ThreadLocal<Session> ACTIVE_SESSION = new ThreadLocal<>();
 
@@ -45,30 +47,22 @@ public final class JigsawVillageBuildingTool {
     public static void begin(PoolElementStructurePiece startPiece) {
         Optional<ResourceLocation> startTemplate = templateId(startPiece.getElement());
         logObservedStart(startTemplate, startPiece);
-        Session activeSession = ACTIVE_SESSION.get();
-        if (activeSession != null) {
-            activeSession.record(startPiece.getElement(), startPiece.getPosition(), startPiece.getBoundingBox());
-            return;
-        }
-
         if (startTemplate.isEmpty() || !isPlainsVillageStart(startTemplate.get())) {
+            clearSession();
             return;
         }
 
-        Session session = new Session(startPiece.getPosition(), startTemplate.get());
-        ACTIVE_SESSION.set(session);
+        Session session = activateSession(startPiece, startTemplate.get());
         session.record(startPiece.getElement(), startPiece.getPosition(), startPiece.getBoundingBox());
-        if (diagnostics()) {
-            LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {}; configured buildings: {}", session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
-        }
     }
 
-    public static void end() {
+    public static void end(List<PoolElementStructurePiece> pieces) {
         Session session = ACTIVE_SESSION.get();
         if (session == null) {
             return;
         }
 
+        session.reconcile(pieces);
         session.logSummary();
         ACTIVE_SESSION.remove();
     }
@@ -77,14 +71,6 @@ public final class JigsawVillageBuildingTool {
         Session session = ACTIVE_SESSION.get();
         if (candidates.isEmpty()) {
             return candidates;
-        }
-
-        if (session == null && hasCustomCandidate(candidates)) {
-            session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
-            ACTIVE_SESSION.set(session);
-            if (diagnostics()) {
-                LOGGER.info("[Solace] Tracking plains village jigsaw from ambient custom candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
-            }
         }
 
         if (session == null) {
@@ -99,76 +85,80 @@ public final class JigsawVillageBuildingTool {
             return filtered;
         }
 
-        List<StructurePoolElement> allowedNonUnique = new ArrayList<>(candidates.size());
-        List<StructurePoolElement> customCandidates = new ArrayList<>();
-        Set<ResourceLocation> customCandidateIds = new LinkedHashSet<>();
-        Map<ResourceLocation, Integer> queuedCustomCounts = new LinkedHashMap<>();
-        boolean hasReplaceableHouseCandidate = false;
+        List<StructurePoolElement> allowedCandidates = new ArrayList<>(candidates.size());
+        Map<ResourceLocation, StructurePoolElement> requiredCandidates = new LinkedHashMap<>();
+        boolean hasBuildingAttachmentCandidate = false;
+        boolean hasUnmetMinimum = session.hasUnmetMinimum();
 
         for (StructurePoolElement candidate : candidates) {
             Optional<ResourceLocation> templateId = templateId(candidate);
             templateId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
             if (templateId.isEmpty()) {
-                allowedNonUnique.add(candidate);
+                allowedCandidates.add(candidate);
                 continue;
             }
             if (isZombiePiece(templateId.get())) {
                 continue;
             }
             if (!isCustomBuilding(templateId.get())) {
-                allowedNonUnique.add(candidate);
-                if (session.isReplaceableHouse(templateId.get())) {
-                    hasReplaceableHouseCandidate = true;
+                allowedCandidates.add(candidate);
+                if (session.isReplaceableHouse(templateId.get()) || isPlainsTerminator(templateId.get())) {
+                    hasBuildingAttachmentCandidate = true;
                 }
                 continue;
             }
 
             ResourceLocation customId = templateId.get();
-            int queued = queuedCustomCounts.getOrDefault(customId, 0);
-            if (!session.needsMore(customId, queued)) {
+            if (!session.canPlace(customId)) {
                 session.recordSuppressed(customId);
                 continue;
             }
+            if (hasUnmetMinimum && !session.needsMinimum(customId)) {
+                continue;
+            }
 
-            customCandidates.add(candidate);
-            customCandidateIds.add(customId);
-            queuedCustomCounts.merge(customId, 1, Integer::sum);
+            allowedCandidates.add(candidate);
+            if (session.needsMinimum(customId)) {
+                requiredCandidates.putIfAbsent(customId, candidate);
+            }
         }
 
-        if (hasReplaceableHouseCandidate) {
+        if (hasBuildingAttachmentCandidate) {
             for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
-                if (customCandidateIds.contains(target)) {
+                if (requiredCandidates.containsKey(target)) {
                     continue;
                 }
-                int queued = queuedCustomCounts.getOrDefault(target, 0);
-                if (!session.needsMore(target, queued)) {
+                if (!session.needsMinimum(target)) {
                     continue;
                 }
 
-                customCandidates.add(StructurePoolElement.single(target.toString()).apply(StructureTemplatePool.Projection.RIGID));
-                customCandidateIds.add(target);
-                queuedCustomCounts.merge(target, 1, Integer::sum);
+                requiredCandidates.put(target, StructurePoolElement.single(target.toString()).apply(StructureTemplatePool.Projection.RIGID));
             }
         }
 
-        if (customCandidates.isEmpty()) {
-            return allowedNonUnique;
+        if (requiredCandidates.isEmpty()) {
+            return allowedCandidates;
         }
 
-        ResourceLocation priorityId = session.selectPriorityCandidate(customCandidateIds);
-        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedNonUnique.size() + 1);
+        ResourceLocation priorityId = session.selectPriorityCandidate(requiredCandidates);
+        List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedCandidates.size() + requiredCandidates.size());
         if (priorityId != null) {
-            for (StructurePoolElement candidate : customCandidates) {
-                Optional<ResourceLocation> candidateId = templateId(candidate);
-                if (candidateId.isPresent() && candidateId.get().equals(priorityId)) {
-                    priorityFirstList.add(candidate);
-                    break;
-                }
-            }
-            session.recordOffered(priorityId);
-            session.markPending(priorityId);
+            priorityFirstList.add(requiredCandidates.get(priorityId));
+            session.recordPriority(priorityId);
         }
-        priorityFirstList.addAll(allowedNonUnique);
+        for (Map.Entry<ResourceLocation, StructurePoolElement> entry : session.orderRequiredCandidates(requiredCandidates)) {
+            if (!entry.getKey().equals(priorityId)) {
+                priorityFirstList.add(entry.getValue());
+            }
+            session.recordOffered(entry.getKey());
+        }
+        for (StructurePoolElement candidate : allowedCandidates) {
+            Optional<ResourceLocation> candidateId = templateId(candidate);
+            if (candidateId.isPresent() && requiredCandidates.containsKey(candidateId.get())) {
+                continue;
+            }
+            priorityFirstList.add(candidate);
+        }
         if (diagnostics()) {
             LOGGER.info("[Solace] Prioritizing plains village custom building candidate: {}", priorityId);
         }
@@ -178,7 +168,7 @@ public final class JigsawVillageBuildingTool {
     public static StructurePoolElement filterRandomCandidate(StructurePoolElement selected, List<StructurePoolElement> candidates) {
         Optional<ResourceLocation> selectedId = templateId(selected);
         selectedId.ifPresent(JigsawVillageBuildingTool::discoverBuilding);
-        
+
         if (selectedId.isPresent() && isZombiePiece(selectedId.get())) {
             for (StructurePoolElement candidate : candidates) {
                 Optional<ResourceLocation> candidateId = templateId(candidate);
@@ -194,14 +184,10 @@ public final class JigsawVillageBuildingTool {
 
         Session session = ACTIVE_SESSION.get();
         if (session == null) {
-            session = new Session(BlockPos.ZERO, AMBIENT_CANDIDATE_SESSION, true);
-            ACTIVE_SESSION.set(session);
-            if (diagnostics()) {
-                LOGGER.info("[Solace] Tracking plains village jigsaw from ambient random candidate pool; configured buildings: {}", VillageBuildingSpawnConfig.describeEntries());
-            }
+            return selected;
         }
 
-        if (!session.needsMore(selectedId.get(), 0)) {
+        if (!session.canPlace(selectedId.get())) {
             StructurePoolElement replacement = session.selectRandomReplacement(candidates);
             if (replacement != null) {
                 Optional<ResourceLocation> replacementId = templateId(replacement);
@@ -213,70 +199,55 @@ public final class JigsawVillageBuildingTool {
         }
 
         session.recordOffered(selectedId.get());
-        session.markPending(selectedId.get());
+        session.recordPriority(selectedId.get());
         return selected;
     }
 
-    public static void recordPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
+    public static void enterParentElement(
+            StructurePoolElement parentElement,
+            BlockPos position,
+            StructureTemplateManager structureTemplateManager
+    ) {
+        Optional<ResourceLocation> parentId = templateId(parentElement);
+        if (parentId.isEmpty()) {
+            return;
+        }
+
+        ResourceLocation id = parentId.get();
+        if (isPlainsVillageStart(id)) {
+            activateSession(position, id, structureTemplateManager);
+            return;
+        }
+
+        if (isPlainsVillagePiece(id)) {
+            if (ACTIVE_SESSION.get() == null) {
+                activateSession(position, id, structureTemplateManager);
+            } else {
+                ACTIVE_SESSION.get().setStructureTemplateManager(structureTemplateManager);
+            }
+            return;
+        }
+
+        if (ACTIVE_SESSION.get() != null && isConfigurableBuilding(id)) {
+            return;
+        }
+
+        if (id.getPath().contains("village/")) {
+            return;
+        }
+
+        clearSession();
+    }
+
+    public static void recordAcceptedPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
         Session session = ACTIVE_SESSION.get();
         if (session != null) {
-            Optional<ResourceLocation> activeTemplateId = templateId(element);
-            if (activeTemplateId.isPresent() && isPlainsVillageStart(activeTemplateId.get()) && !session.matchesStart(position, activeTemplateId.get())) {
-                session.logSummary();
-                session.startNew(position, activeTemplateId.get());
-                if (diagnostics()) {
-                    LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
-                            session.startPos, session.startTemplate, VillageBuildingSpawnConfig.describeEntries());
-                }
-            }
             session.record(element, position, boundingBox);
-            return;
         }
-
-        Optional<ResourceLocation> templateId = templateId(element);
-        if (templateId.isPresent() && isPlainsVillageStart(templateId.get())) {
-            Session ambientSession = new Session(position, templateId.get(), true);
-            ACTIVE_SESSION.set(ambientSession);
-            ambientSession.record(element, position, boundingBox);
-            if (diagnostics()) {
-                LOGGER.info("[Solace] Tracking plains village jigsaw at {} from observed start piece {}; configured buildings: {}",
-                        ambientSession.startPos, ambientSession.startTemplate, VillageBuildingSpawnConfig.describeEntries());
-            }
-            return;
-        }
-
-        logObservedPiece(element, position, boundingBox);
-    }
-
-    public static int activeSessionCount() {
-        return ACTIVE_SESSION.get() == null ? 0 : 1;
-    }
-
-    public static boolean isDiagnosticsEnabled() {
-        return diagnostics();
     }
 
     public static boolean isUniqueTarget(ResourceLocation id) {
         return isCustomBuilding(id);
-    }
-
-    private static void logObservedPiece(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
-        if (!diagnostics() || DIAGNOSTIC_PIECES.getAndIncrement() >= MAX_DIAGNOSTIC_PIECES) {
-            return;
-        }
-
-        Optional<ResourceLocation> templateId = templateId(element);
-        if (templateId.isEmpty()) {
-            return;
-        }
-
-        ResourceLocation id = templateId.get();
-        if (!isInterestingDiagnosticPiece(id)) {
-            return;
-        }
-
-        LOGGER.info("[Solace] Observed jigsaw piece outside tracked plains village session: {} at {} with box {}",
-                id, position, boundingBox);
     }
 
     public static List<String> describeRecentReports() {
@@ -290,30 +261,24 @@ public final class JigsawVillageBuildingTool {
     }
 
     public static Optional<ResourceLocation> templateId(StructurePoolElement element) {
-        if (!(element instanceof SinglePoolElement)) {
-            return Optional.empty();
+        if (element instanceof SinglePoolElement) {
+            Either<ResourceLocation, StructureTemplate> template = ((SinglePoolElementAccessor) element).solace$getTemplate();
+            Optional<ResourceLocation> directId = template.left();
+            if (directId.isPresent()) {
+                return directId;
+            }
         }
 
-        Either<ResourceLocation, StructureTemplate> template = ((SinglePoolElementAccessor) element).solace$getTemplate();
-        return template.left();
+        Matcher matcher = ELEMENT_TEMPLATE_ID.matcher(element.toString());
+        if (!matcher.find()) {
+            return Optional.empty();
+        }
+        return Optional.of(new ResourceLocation(matcher.group(1), matcher.group(2)));
     }
 
     public static boolean isZombiePiece(ResourceLocation id) {
         String path = id.getPath();
         return path.contains("/zombie/") || path.contains("_zombie_") || path.contains("zombie/");
-    }
-
-    private static boolean hasCustomCandidate(List<StructurePoolElement> candidates) {
-        for (StructurePoolElement candidate : candidates) {
-            Optional<ResourceLocation> templateId = templateId(candidate);
-            if (templateId.isPresent()) {
-                discoverBuilding(templateId.get());
-            }
-            if (templateId.isPresent() && isCustomBuilding(templateId.get())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static void discoverBuilding(ResourceLocation id) {
@@ -341,22 +306,8 @@ public final class JigsawVillageBuildingTool {
                 && path.contains("town_center");
     }
 
-    private static boolean isInterestingDiagnosticPiece(ResourceLocation templateId) {
-        if (isConfigurableBuilding(templateId)) {
-            return true;
-        }
-
-        String namespace = templateId.getNamespace();
-        String path = templateId.getPath();
-        return path.contains("village")
-                || path.contains("chef")
-                || path.contains("cook")
-                || path.contains("alchemist")
-                || path.contains("horticulturist")
-                || path.contains("occultist")
-                || path.contains("oceanographer")
-                || "villagersplus".equals(namespace)
-                || "chefsdelight".equals(namespace);
+    private static boolean isPlainsVillagePiece(ResourceLocation templateId) {
+        return templateId.getPath().contains("village/plains/");
     }
 
     private static boolean isConfigurableBuilding(ResourceLocation templateId) {
@@ -398,42 +349,123 @@ public final class JigsawVillageBuildingTool {
                 startPiece.getElement().getClass().getName());
     }
 
+    private static boolean isPlainsTerminator(ResourceLocation id) {
+        return id.getPath().contains("village/plains/terminators/");
+    }
+
+    private static Session activateSession(PoolElementStructurePiece startPiece, ResourceLocation startTemplate) {
+        return activateSession(startPiece.getPosition(), startTemplate);
+    }
+
+    private static Session activateSession(BlockPos startPosition, ResourceLocation startTemplate) {
+        return activateSession(startPosition, startTemplate, null);
+    }
+
+    private static Session activateSession(
+            BlockPos startPosition,
+            ResourceLocation startTemplate,
+            StructureTemplateManager structureTemplateManager
+    ) {
+        Session activeSession = ACTIVE_SESSION.get();
+        if (activeSession != null && activeSession.matchesStart(startPosition, startTemplate)) {
+            activeSession.setStructureTemplateManager(structureTemplateManager);
+            return activeSession;
+        }
+        if (activeSession != null) {
+            activeSession.logSummary();
+        }
+
+        Session session = new Session(startPosition, startTemplate, structureTemplateManager);
+        ACTIVE_SESSION.set(session);
+        LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {} with {} controlled building rules",
+                session.startPos, session.startTemplate, VillageBuildingSpawnConfig.customBuildingIds().size());
+        if (diagnostics()) {
+            LOGGER.info("[Solace] Configured plains village buildings: {}", VillageBuildingSpawnConfig.describeEntries());
+        }
+        return session;
+    }
+
+    private static void clearSession() {
+        Session session = ACTIVE_SESSION.get();
+        if (session != null) {
+            session.logSummary();
+            ACTIVE_SESSION.remove();
+        }
+    }
+
+    private record PiecePlacement(
+            ResourceLocation templateId,
+            BlockPos position,
+            int minX,
+            int minY,
+            int minZ,
+            int maxX,
+            int maxY,
+            int maxZ
+    ) {
+        private static PiecePlacement of(ResourceLocation templateId, BlockPos position, BoundingBox box) {
+            return new PiecePlacement(
+                    templateId,
+                    position.immutable(),
+                    box.minX(),
+                    box.minY(),
+                    box.minZ(),
+                    box.maxX(),
+                    box.maxY(),
+                    box.maxZ()
+            );
+        }
+    }
+
     private static final class Session {
-        private BlockPos startPos;
-        private ResourceLocation startTemplate;
-        private final boolean ambient;
+        private final BlockPos startPos;
+        private final ResourceLocation startTemplate;
         private final Map<ResourceLocation, Integer> spawnedCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> suppressedCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> offeredCounts = new LinkedHashMap<>();
-        private final Map<ResourceLocation, Integer> pendingCounts = new LinkedHashMap<>();
-        private final Map<ResourceLocation, Integer> targetCounts = new LinkedHashMap<>();
+        private final Map<ResourceLocation, Integer> priorityCounts = new LinkedHashMap<>();
+        private final Map<ResourceLocation, Integer> footprintAreas = new LinkedHashMap<>();
+        private final Set<PiecePlacement> recordedPieces = new LinkedHashSet<>();
+        private StructureTemplateManager structureTemplateManager;
         private String lastLoggedCustomSignal = "";
 
-        private Session(BlockPos startPos, ResourceLocation startTemplate) {
-            this(startPos, startTemplate, false);
-        }
-
-        private Session(BlockPos startPos, ResourceLocation startTemplate, boolean ambient) {
-            this.startPos = startPos;
+        private Session(
+                BlockPos startPos,
+                ResourceLocation startTemplate,
+                StructureTemplateManager structureTemplateManager
+        ) {
+            this.startPos = startPos.immutable();
             this.startTemplate = startTemplate;
-            this.ambient = ambient;
+            this.structureTemplateManager = structureTemplateManager;
         }
 
         private void record(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
+            record(element, position, boundingBox, true);
+        }
+
+        private void record(StructurePoolElement element, BlockPos position, BoundingBox boundingBox, boolean logPlacement) {
             Optional<ResourceLocation> templateId = templateId(element);
             if (templateId.isEmpty()) {
                 return;
             }
 
             ResourceLocation id = templateId.get();
+            if (!recordedPieces.add(PiecePlacement.of(id, position, boundingBox))) {
+                return;
+            }
             spawnedCounts.merge(id, 1, Integer::sum);
-            decrementPending(id);
-            if (isCustomBuilding(id) && diagnostics()) {
+            if (logPlacement && isCustomBuilding(id) && diagnostics()) {
                 LOGGER.debug("[Solace] Plains village custom building placed: {} at {} with box {}", id, position, boundingBox);
             }
+        }
 
-            if (ambient && id.getPath().contains("/terminators/")) {
-                logSummary();
+        private void reconcile(List<?> pieces) {
+            spawnedCounts.clear();
+            recordedPieces.clear();
+            for (Object value : pieces) {
+                if (value instanceof PoolElementStructurePiece piece) {
+                    record(piece.getElement(), piece.getPosition(), piece.getBoundingBox(), false);
+                }
             }
         }
 
@@ -441,44 +473,37 @@ public final class JigsawVillageBuildingTool {
             return id.equals(startTemplate) && position.equals(startPos);
         }
 
-        private void startNew(BlockPos startPos, ResourceLocation startTemplate) {
-            this.startPos = startPos;
-            this.startTemplate = startTemplate;
-            this.spawnedCounts.clear();
-            this.suppressedCounts.clear();
-            this.offeredCounts.clear();
-            this.pendingCounts.clear();
-            this.targetCounts.clear();
-            this.lastLoggedCustomSignal = "";
-        }
-
         private void recordOffered(ResourceLocation id) {
             offeredCounts.merge(id, 1, Integer::sum);
         }
 
-        private void markPending(ResourceLocation id) {
-            pendingCounts.merge(id, 1, Integer::sum);
+        private void recordPriority(ResourceLocation id) {
+            priorityCounts.merge(id, 1, Integer::sum);
         }
 
-        private void decrementPending(ResourceLocation id) {
-            int pending = pendingCounts.getOrDefault(id, 0);
-            if (pending <= 1) {
-                pendingCounts.remove(id);
-            } else {
-                pendingCounts.put(id, pending - 1);
-            }
-        }
-
-        private boolean needsMore(ResourceLocation id, int queued) {
-            int target = targetCount(id);
-            if (target < 0) {
+        private boolean needsMinimum(ResourceLocation id) {
+            int minimum = VillageBuildingSpawnConfig.minimumCount(id);
+            if (minimum < 0) {
                 return false;
             }
-            return spawnedCounts.getOrDefault(id, 0) + pendingCounts.getOrDefault(id, 0) + queued < target;
+            return spawnedCounts.getOrDefault(id, 0) < minimum;
         }
 
-        private int targetCount(ResourceLocation id) {
-            return targetCounts.computeIfAbsent(id, target -> VillageBuildingSpawnConfig.chooseTargetCount(target, startPos, startTemplate));
+        private boolean canPlace(ResourceLocation id) {
+            int maximum = VillageBuildingSpawnConfig.maximumCount(id);
+            if (maximum < 0) {
+                return false;
+            }
+            return spawnedCounts.getOrDefault(id, 0) < maximum;
+        }
+
+        private boolean hasUnmetMinimum() {
+            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+                if (needsMinimum(target)) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private void recordSuppressed(ResourceLocation id) {
@@ -488,7 +513,7 @@ public final class JigsawVillageBuildingTool {
         private StructurePoolElement selectRandomReplacement(List<StructurePoolElement> candidates) {
             StructurePoolElement nonUniqueFallback = null;
             for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
-                if (!needsMore(target, 0)) {
+                if (!needsMinimum(target)) {
                     continue;
                 }
 
@@ -496,7 +521,7 @@ public final class JigsawVillageBuildingTool {
                     Optional<ResourceLocation> candidateId = templateId(candidate);
                     if (candidateId.isPresent() && candidateId.get().equals(target)) {
                         recordOffered(target);
-                        markPending(target);
+                        recordPriority(target);
                         return candidate;
                     }
                 }
@@ -513,21 +538,66 @@ public final class JigsawVillageBuildingTool {
             return nonUniqueFallback;
         }
 
-        private ResourceLocation selectPriorityCandidate(Set<ResourceLocation> candidateIds) {
+        private ResourceLocation selectPriorityCandidate(Map<ResourceLocation, StructurePoolElement> candidates) {
             ResourceLocation selected = null;
-            int selectedOffers = Integer.MAX_VALUE;
+            int selectedPriorities = Integer.MAX_VALUE;
+            int selectedArea = Integer.MIN_VALUE;
             for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
-                if (!needsMore(target, 0) || !candidateIds.contains(target)) {
+                StructurePoolElement candidate = candidates.get(target);
+                if (!needsMinimum(target) || candidate == null) {
                     continue;
                 }
 
-                int offers = offeredCounts.getOrDefault(target, 0);
-                if (selected == null || offers < selectedOffers) {
+                int priorities = priorityCounts.getOrDefault(target, 0);
+                int area = footprintArea(target, candidate);
+                if (selected == null
+                        || priorities < selectedPriorities
+                        || (priorities == selectedPriorities && area > selectedArea)) {
                     selected = target;
-                    selectedOffers = offers;
+                    selectedPriorities = priorities;
+                    selectedArea = area;
                 }
             }
             return selected;
+        }
+
+        private List<Map.Entry<ResourceLocation, StructurePoolElement>> orderRequiredCandidates(
+                Map<ResourceLocation, StructurePoolElement> candidates
+        ) {
+            List<Map.Entry<ResourceLocation, StructurePoolElement>> ordered = new ArrayList<>(candidates.entrySet());
+            ordered.sort((left, right) -> Integer.compare(
+                    footprintArea(right.getKey(), right.getValue()),
+                    footprintArea(left.getKey(), left.getValue())
+            ));
+            return ordered;
+        }
+
+        private int footprintArea(ResourceLocation id, StructurePoolElement element) {
+            Integer cached = footprintAreas.get(id);
+            if (cached != null) {
+                return cached;
+            }
+            if (structureTemplateManager == null) {
+                return 0;
+            }
+
+            try {
+                BoundingBox box = element.getBoundingBox(structureTemplateManager, BlockPos.ZERO, Rotation.NONE);
+                int area = box.getXSpan() * box.getZSpan();
+                footprintAreas.put(id, area);
+                return area;
+            } catch (RuntimeException exception) {
+                footprintAreas.put(id, 0);
+                return 0;
+            }
+        }
+
+        private void setStructureTemplateManager(
+                StructureTemplateManager structureTemplateManager
+        ) {
+            if (structureTemplateManager != null) {
+                this.structureTemplateManager = structureTemplateManager;
+            }
         }
 
         private boolean isReplaceableHouse(ResourceLocation id) {
@@ -546,28 +616,27 @@ public final class JigsawVillageBuildingTool {
             if (spawnedCounts.isEmpty()) {
                 return;
             }
-            if (!hasCustomTargetSignal()) {
-                return;
-            }
             String customSignal = customSignal();
             if (customSignal.equals(lastLoggedCustomSignal)) {
                 return;
             }
             lastLoggedCustomSignal = customSignal;
 
-            String summary = "Plains village jigsaw at " + startPos + " from " + startTemplate + ": " + spawnedCounts;
-            rememberReport(summary);
-            if (!diagnostics()) {
-                return;
+            Map<ResourceLocation, Integer> controlledCounts = new LinkedHashMap<>();
+            for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
+                controlledCounts.put(customId, spawnedCounts.getOrDefault(customId, 0));
             }
+            String summary = "Plains village jigsaw at " + startPos + " from " + startTemplate + ": " + controlledCounts;
+            rememberReport(summary);
             LOGGER.info("[Solace] {}", summary);
             for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
-                int target = targetCount(customId);
+                int minimum = VillageBuildingSpawnConfig.minimumCount(customId);
+                int maximum = VillageBuildingSpawnConfig.maximumCount(customId);
                 int count = spawnedCounts.getOrDefault(customId, 0);
-                if (count < target) {
-                    LOGGER.warn("[Solace] Plains village placed {} of required {} custom building {}", count, target, customId);
-                } else if (count > target) {
-                    LOGGER.warn("[Solace] Plains village placed {} above target {} for custom building {}", count, target, customId);
+                if (count < minimum) {
+                    LOGGER.warn("[Solace] Plains village placed {} below minimum {} for controlled building {}", count, minimum, customId);
+                } else if (count > maximum) {
+                    LOGGER.warn("[Solace] Plains village placed {} above maximum {} for controlled building {}", count, maximum, customId);
                 }
             }
 
@@ -575,23 +644,21 @@ public final class JigsawVillageBuildingTool {
                 LOGGER.info("[Solace] Suppressed duplicate plains village jigsaw candidates: {}", suppressedCounts);
             }
 
-            Set<ResourceLocation> offeredButMissing = new LinkedHashSet<>(offeredCounts.keySet());
-            offeredButMissing.removeAll(spawnedCounts.keySet());
-            if (!offeredButMissing.isEmpty()) {
-                LOGGER.warn("[Solace] Plains village offered custom candidates that did not become pieces: {}", offeredButMissing);
-            }
-        }
-
-        private boolean hasCustomTargetSignal() {
-            for (ResourceLocation customId : VillageBuildingSpawnConfig.customBuildingIds()) {
-                if (spawnedCounts.containsKey(customId)
-                        || suppressedCounts.containsKey(customId)
-                        || offeredCounts.containsKey(customId)
-                        || pendingCounts.containsKey(customId)) {
-                    return true;
+            Map<ResourceLocation, Integer> offeredButMissing = new LinkedHashMap<>();
+            for (Map.Entry<ResourceLocation, Integer> entry : offeredCounts.entrySet()) {
+                int missingOffers = entry.getValue() - spawnedCounts.getOrDefault(entry.getKey(), 0);
+                if (missingOffers > 0) {
+                    offeredButMissing.put(entry.getKey(), missingOffers);
                 }
             }
-            return false;
+
+            if (!diagnostics()) {
+                return;
+            }
+            LOGGER.info("[Solace] Full plains village piece counts: {}", spawnedCounts);
+            if (!offeredButMissing.isEmpty()) {
+                LOGGER.warn("[Solace] Plains village listed custom candidates that did not become pieces: {}", offeredButMissing);
+            }
         }
 
         private String customSignal() {
@@ -605,9 +672,11 @@ public final class JigsawVillageBuildingTool {
                         .append('/')
                         .append(offeredCounts.getOrDefault(customId, 0))
                         .append('/')
-                        .append(pendingCounts.getOrDefault(customId, 0))
+                        .append(priorityCounts.getOrDefault(customId, 0))
                         .append('/')
-                        .append(targetCount(customId))
+                        .append(VillageBuildingSpawnConfig.minimumCount(customId))
+                        .append('-')
+                        .append(VillageBuildingSpawnConfig.maximumCount(customId))
                         .append(';');
             }
             return signal.toString();

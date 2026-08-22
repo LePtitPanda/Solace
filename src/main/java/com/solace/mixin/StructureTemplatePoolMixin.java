@@ -2,7 +2,6 @@ package com.solace.mixin;
 
 import com.solace.world.JigsawVillageBuildingTool;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import java.util.List;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
@@ -18,11 +17,6 @@ public abstract class StructureTemplatePoolMixin {
     @Shadow
     @Final
     private ObjectArrayList<StructurePoolElement> templates;
-
-    @Inject(method = "getShuffledTemplates", at = @At("RETURN"), cancellable = true)
-    private void solace$filterVillageJigsawCandidates(RandomSource random, CallbackInfoReturnable<List<StructurePoolElement>> cir) {
-        cir.setReturnValue(JigsawVillageBuildingTool.filterCandidates(cir.getReturnValue()));
-    }
 
     @Inject(method = "getRandomTemplate", at = @At("RETURN"), cancellable = true)
     private void solace$filterVillageJigsawRandomCandidate(RandomSource random, CallbackInfoReturnable<StructurePoolElement> cir) {

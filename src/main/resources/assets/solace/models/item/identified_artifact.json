@@ -1,0 +1,26 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "betterarcheology:citresewn/cit/penetrating_strike_artifact"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "custom_model_data": 1
+      },
+      "model": "solace:item/identified_artifact_1"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 2
+      },
+      "model": "solace:item/identified_artifact_2"
+    },
+    {
+      "predicate": {
+        "custom_model_data": 3
+      },
+      "model": "solace:item/identified_artifact_3"
+    }
+  ]
+}

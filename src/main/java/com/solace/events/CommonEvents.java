@@ -5,6 +5,7 @@ import com.mojang.logging.LogUtils;
 import com.solace.compat.GulingSentinelProofSupport;
 import com.solace.compat.IntegratedApiLocatorShutdownSupport;
 import com.solace.compat.InstrumentCockroachBandSupport;
+import com.solace.config.EnchantingReworkConfig;
 import com.solace.config.PerformanceConfig;
 import com.solace.performance.ServerWorkScheduler;
 import com.solace.performance.VMinusIngredientFilterCache;
@@ -12,6 +13,7 @@ import com.solace.world.BalloonIntroManager;
 import com.solace.world.IntroVillageStructureProtection;
 import com.solace.world.JigsawVillageBuildingTool;
 import com.solace.world.SolaceIntroBalloonAccess;
+import com.solace.world.VillageBarrelGolemLimiter;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -19,11 +21,15 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
+import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.AddReloadListenerEvent;
 import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -80,6 +86,21 @@ public final class CommonEvents {
     }
 
     @SubscribeEvent
+    public static void onAddReloadListeners(AddReloadListenerEvent event) {
+        event.addListener(new SimplePreparableReloadListener<Void>() {
+            @Override
+            protected Void prepare(ResourceManager resourceManager, ProfilerFiller profiler) {
+                return null;
+            }
+
+            @Override
+            protected void apply(Void ignored, ResourceManager resourceManager, ProfilerFiller profiler) {
+                EnchantingReworkConfig.reload();
+            }
+        });
+    }
+
+    @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) {
             return;
@@ -105,8 +126,16 @@ public final class CommonEvents {
 
     @SubscribeEvent
     public static void onEntityJoinLevel(EntityJoinLevelEvent event) {
-        if (!(event.getLevel() instanceof ServerLevel level)
-                || !MOON_ID.equals(level.dimension().location())
+        if (!(event.getLevel() instanceof ServerLevel level)) {
+            return;
+        }
+
+        if (VillageBarrelGolemLimiter.shouldRejectJoin(level, event.getEntity())) {
+            event.setCanceled(true);
+            return;
+        }
+
+        if (!MOON_ID.equals(level.dimension().location())
                 || !GULING_SENTINEL_ID.equals(ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType()))
                 || !ModList.get().isLoaded("ad_astra_giselle_addon")) {
             return;
@@ -255,7 +284,7 @@ public final class CommonEvents {
                 .withSuppressedOutput()
                 .withPosition(position)
                 .withRotation(Vec2.ZERO);
-        String command = "place jigsaw minecraft:village/plains/town_centers minecraft:bottom 7 "
+        String command = "place jigsaw minecraft:village/plains/town_centers minecraft:bottom 8 "
                 + (int) Math.floor(position.x) + " "
                 + (int) Math.floor(position.y) + " "
                 + (int) Math.floor(position.z);

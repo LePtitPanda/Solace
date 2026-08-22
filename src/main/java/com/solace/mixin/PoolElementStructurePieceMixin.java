@@ -18,7 +18,7 @@ public abstract class PoolElementStructurePieceMixin {
             method = "<init>(Lnet/minecraft/world/level/levelgen/structure/templatesystem/StructureTemplateManager;Lnet/minecraft/world/level/levelgen/structure/pools/StructurePoolElement;Lnet/minecraft/core/BlockPos;ILnet/minecraft/world/level/block/Rotation;Lnet/minecraft/world/level/levelgen/structure/BoundingBox;)V",
             at = @At("RETURN")
     )
-    private void solace$recordVillageJigsawPiece(
+    private void solace$recordAcceptedVillageJigsawPiece(
             StructureTemplateManager structureTemplateManager,
             StructurePoolElement element,
             BlockPos position,
@@ -27,7 +27,6 @@ public abstract class PoolElementStructurePieceMixin {
             BoundingBox boundingBox,
             CallbackInfo ci
     ) {
-        PoolElementStructurePiece piece = (PoolElementStructurePiece) (Object) this;
-        JigsawVillageBuildingTool.recordPiece(piece.getElement(), position, boundingBox);
+        JigsawVillageBuildingTool.recordAcceptedPiece(element, position, boundingBox);
     }
 }

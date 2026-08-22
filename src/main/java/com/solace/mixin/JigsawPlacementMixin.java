@@ -58,6 +58,6 @@ public abstract class JigsawPlacementMixin {
             VoxelShape free,
             CallbackInfo ci
     ) {
-        JigsawVillageBuildingTool.end();
+        JigsawVillageBuildingTool.end(pieces);
     }
 }

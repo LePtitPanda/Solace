@@ -25,5 +25,10 @@ public class SolaceJeiPlugin implements IModPlugin {
             VanillaTypes.ITEM_STACK,
             Component.translatable("solace.jei.alchemist_cauldron.info")
         );
+        registration.addIngredientInfo(
+            new ItemStack(ItemRegistry.ACANE_ANVIL_BLOCK_ITEM.get()),
+            VanillaTypes.ITEM_STACK,
+            Component.translatable("solace.jei.arcane_anvil.info")
+        );
     }
 }
