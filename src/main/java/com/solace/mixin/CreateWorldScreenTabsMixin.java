@@ -1,7 +1,15 @@
 package com.solace.mixin;
 
+import com.mojang.logging.LogUtils;
 import com.solace.client.SolaceClientState;
+import com.solace.client.gui.WorldCreationThemeRenderer;
 import de.keksuccino.modernworldcreation.ModernWorldCreationGameTab;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.concurrent.CompletableFuture;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Renderable;
@@ -12,15 +20,28 @@ import net.minecraft.client.gui.components.tabs.TabNavigationBar;
 import net.minecraft.client.gui.layouts.GridLayout;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.GenericDirtMessageScreen;
 import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.client.gui.screens.worldselection.WorldCreationContext;
 import net.minecraft.client.gui.screens.worldselection.WorldCreationUiState;
 import net.minecraft.Util;
+import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentContents;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.WorldLoader;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.server.packs.repository.ServerPacksSource;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.levelgen.WorldGenSettings;
+import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraftforge.event.AddPackFindersEvent;
+import net.minecraftforge.fml.ModLoader;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Shadow;
@@ -29,12 +50,12 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-
-import java.util.Arrays;
-import java.util.List;
+import org.slf4j.Logger;
 
 @Mixin(value = CreateWorldScreen.class, priority = 500)
 public abstract class CreateWorldScreenTabsMixin extends Screen {
+    private static final Logger SOLACE_LOGGER = LogUtils.getLogger();
+
     @Shadow
     @Final
     private TabManager tabManager;
@@ -48,6 +69,47 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
 
     protected CreateWorldScreenTabsMixin(Component title) {
         super(title);
+    }
+
+    @Inject(method = "openFresh", at = @At("HEAD"), cancellable = true)
+    private static void solace$prepareWorldCreationWithoutBlocking(Minecraft minecraft, Screen previousScreen,
+                                                                   CallbackInfo ci) {
+        minecraft.forceSetScreen(new GenericDirtMessageScreen(Component.translatable("createWorld.preparing")));
+
+        PackRepository repository = new PackRepository(new ServerPacksSource());
+        ModLoader.get().postEvent(new AddPackFindersEvent(PackType.SERVER_DATA, repository::addPackFinder));
+        WorldLoader.PackConfig packConfig = new WorldLoader.PackConfig(
+                repository, WorldDataConfiguration.DEFAULT, false, true);
+        WorldLoader.InitConfig initConfig = new WorldLoader.InitConfig(
+                packConfig, Commands.CommandSelection.INTEGRATED, 2);
+
+        CompletableFuture<WorldCreationContext> preparation = WorldLoader.load(
+                initConfig,
+                context -> new WorldLoader.DataLoadOutput<>(
+                        new SolaceDataPackReloadCookie(
+                                new WorldGenSettings(
+                                        WorldOptions.defaultWithRandomSeed(),
+                                        WorldPresets.createNormalWorldDimensions(context.datapackWorldgen())),
+                                context.dataConfiguration()),
+                        context.datapackDimensions()),
+                (resourceManager, dataPackResources, registries, cookie) -> {
+                    resourceManager.close();
+                    return new WorldCreationContext(
+                            cookie.worldGenSettings(), registries, dataPackResources, cookie.dataConfiguration());
+                },
+                Util.backgroundExecutor(),
+                minecraft);
+
+        preparation.whenCompleteAsync((context, error) -> {
+            if (error != null) {
+                SOLACE_LOGGER.error("Failed to prepare the world creation screen", error);
+                minecraft.setScreen(previousScreen);
+                return;
+            }
+            minecraft.setScreen(CreateWorldScreenInvoker.solace$create(
+                    minecraft, previousScreen, context, Optional.of(WorldPresets.NORMAL), OptionalLong.empty()));
+        }, minecraft);
+        ci.cancel();
     }
 
     @ModifyArg(
@@ -111,6 +173,19 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
         this.solace$renderModePanel(guiGraphics, modeInfo, x, y, panelWidth, panelHeight);
     }
 
+    @Redirect(
+            method = "render",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/GuiGraphics;blit(Lnet/minecraft/resources/ResourceLocation;IIFFIIII)V"
+            )
+    )
+    private void solace$replaceFooterSeparator(GuiGraphics guiGraphics, ResourceLocation texture,
+                                               int x, int y, float sourceX, float sourceY,
+                                               int width, int height, int textureWidth, int textureHeight) {
+        WorldCreationThemeRenderer.renderFooter((Screen) (Object) this, guiGraphics);
+    }
+
     @Inject(method = {"init", "tick"}, at = @At("RETURN"))
     private void solace$preventEasyDifficulty(CallbackInfo ci) {
         SolaceClientState.setLastCreatedWorldWasHardcore(this.uiState.getGameMode() == WorldCreationUiState.SelectedGameMode.HARDCORE);
@@ -120,34 +195,35 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
     }
 
     private void solace$renderModePanel(GuiGraphics guiGraphics, ModeInfo modeInfo, int x, int y, int width, int height) {
-        int border = 0xFF6B6B6B;
-        int background = 0xCC151515;
+        guiGraphics.fill(x, y, x + width, y + height, 0xE60C0C1C);
+        WorldCreationThemeRenderer.renderBracketPanel(guiGraphics, x, y, width, height,
+                WorldCreationThemeRenderer.GOLD);
+        guiGraphics.fill(x + 66, y + 14, x + 67, y + height - 14,
+                WorldCreationThemeRenderer.GOLD_DIM);
 
-        guiGraphics.fill(x - 1, y - 1, x + width + 1, y + height + 1, 0xFF050505);
-        guiGraphics.fill(x, y, x + width, y + height, border);
-        guiGraphics.fill(x + 2, y + 2, x + width - 2, y + height - 2, background);
-        guiGraphics.fill(x + 2, y + 2, x + 6, y + height - 2, modeInfo.accentColor());
-        guiGraphics.fill(x + 58, y + 14, x + 59, y + height - 14, 0xFF3F3F3F);
+        this.solace$renderPanelIcon(guiGraphics, modeInfo.iconTexture(), x + 17, y + (height - 32) / 2);
 
-        this.solace$renderPanelIcon(guiGraphics, modeInfo.iconTexture(), x + 22, y + (height - 32) / 2);
-
-        int textX = x + 78;
+        int textX = x + 84;
         int textRightPadding = 16;
-        int textWidth = width - 78 - textRightPadding;
-        guiGraphics.drawString(this.font, modeInfo.title(), textX, y + 13, 0xFFFFFFFF, true);
+        int textWidth = width - 84 - textRightPadding;
+        guiGraphics.drawString(this.font, modeInfo.title(), textX, y + 13,
+                WorldCreationThemeRenderer.GOLD, true);
 
         int lineY = y + 33;
         List<FormattedCharSequence> bodyLines = this.font.split(Component.literal(modeInfo.description()), textWidth);
         for (int i = 0; i < Math.min(3, bodyLines.size()); i++) {
-            guiGraphics.drawString(this.font, bodyLines.get(i), textX, lineY + i * 10, 0xFFD8D8D8, false);
+            guiGraphics.drawString(this.font, bodyLines.get(i), textX, lineY + i * 10,
+                    WorldCreationThemeRenderer.MUTED, false);
         }
 
         int noteY = y + 78;
-        guiGraphics.fill(textX, noteY - 5, x + width - 18, noteY - 4, 0xFF3A3A3A);
+        guiGraphics.fill(textX, noteY - 5, x + width - 18, noteY - 4,
+                WorldCreationThemeRenderer.GOLD_DIM);
         List<FormattedCharSequence> noteLines = this.font.split(Component.literal(modeInfo.note()), textWidth);
         int maxNoteLines = Math.min(Math.max(1, (y + height - 8 - noteY) / 10), noteLines.size());
         for (int i = 0; i < maxNoteLines; i++) {
-            guiGraphics.drawString(this.font, noteLines.get(i), textX, noteY + i * 10, 0xFFEFEFEF, false);
+            guiGraphics.drawString(this.font, noteLines.get(i), textX, noteY + i * 10,
+                    WorldCreationThemeRenderer.TEXT, false);
         }
     }
 
@@ -225,5 +301,9 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
         private int width() {
             return this.right - this.left;
         }
+    }
+
+    private record SolaceDataPackReloadCookie(WorldGenSettings worldGenSettings,
+                                               WorldDataConfiguration dataConfiguration) {
     }
 }

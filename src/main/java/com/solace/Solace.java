@@ -2,6 +2,7 @@ package com.solace;
 
 import com.solace.events.CommonEvents;
 import com.solace.config.EnchantingReworkConfig;
+import com.solace.config.DimensionLoadingScreenConfig;
 import com.solace.config.PerformanceConfig;
 import com.solace.config.VillageBuildingSpawnConfig;
 import com.solace.registry.SolaceItems;
@@ -106,6 +107,7 @@ public class Solace {
         public static void onCommonSetup(FMLCommonSetupEvent event) {
             LOGGER.info("[Solace] FMLCommonSetupEvent Fired!");
             EnchantingReworkConfig.init();
+            DimensionLoadingScreenConfig.init();
             PerformanceConfig.init();
             VillageBuildingSpawnConfig.init();
 
