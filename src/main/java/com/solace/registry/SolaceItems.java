@@ -3,6 +3,7 @@ package com.solace.registry;
 import com.solace.Solace;
 import com.solace.item.IdentifiedArtifactItem;
 import com.solace.item.WoodenHammerItem;
+import com.solace.item.LootTableEditorItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
@@ -27,10 +28,16 @@ public final class SolaceItems {
             () -> new WoodenHammerItem(new Item.Properties())
     );
 
+    public static final RegistryObject<Item> LOOT_TABLE_EDITOR = ITEMS.register(
+            "loot_table_editor",
+            () -> new LootTableEditorItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
+    );
+
     @SubscribeEvent
     public static void addCreativeTabItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(WOODEN_HAMMER);
+            event.accept(LOOT_TABLE_EDITOR);
         }
     }
 

@@ -6,6 +6,9 @@ import com.solace.config.DimensionLoadingScreenConfig;
 import com.solace.config.PerformanceConfig;
 import com.solace.config.VillageBuildingSpawnConfig;
 import com.solace.registry.SolaceItems;
+import com.solace.loot.LootEditorConfig;
+import com.solace.network.LootEditorNetwork;
+import com.solace.spawn.OverworldSpawnManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.kyrptonaught.customportalapi.api.CustomPortalBuilder;
 import net.minecraft.resources.ResourceLocation;
@@ -37,7 +40,9 @@ public class Solace {
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");
         SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
+        LootEditorNetwork.register();
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
+        MinecraftForge.EVENT_BUS.register(OverworldSpawnManager.class);
         updateCraftPresenceConfig();
     }
 
@@ -110,6 +115,8 @@ public class Solace {
             DimensionLoadingScreenConfig.init();
             PerformanceConfig.init();
             VillageBuildingSpawnConfig.init();
+            LootEditorConfig.load();
+            OverworldSpawnManager.reload();
 
             event.enqueueWork(() -> {
                 // Register custom portal

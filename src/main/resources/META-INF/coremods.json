@@ -1,4 +1,5 @@
 {
   "ForgeFragmentumFix": "coremods/fragmentum_modlist_fix.js",
+  "MidnightConfigConcurrencyFix": "coremods/midnight_config_concurrency_fix.js",
   "TravelOpticsCataclysmCompat": "coremods/traveloptics_cataclysm_compat.js"
 }

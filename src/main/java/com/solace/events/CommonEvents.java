@@ -7,8 +7,11 @@ import com.solace.compat.IntegratedApiLocatorShutdownSupport;
 import com.solace.compat.InstrumentCockroachBandSupport;
 import com.solace.config.EnchantingReworkConfig;
 import com.solace.config.PerformanceConfig;
+import com.solace.loot.LootEditorConfig;
+import com.solace.loot.LootExtraDetector;
 import com.solace.performance.ServerWorkScheduler;
 import com.solace.performance.VMinusIngredientFilterCache;
+import com.solace.spawn.OverworldSpawnManager;
 import com.solace.world.BalloonIntroManager;
 import com.solace.world.IntroVillageStructureProtection;
 import com.solace.world.JigsawVillageBuildingTool;
@@ -39,6 +42,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -76,11 +80,18 @@ public final class CommonEvents {
     @SubscribeEvent
     public static void onServerTick(TickEvent.ServerTickEvent event) {
         ServerWorkScheduler.onServerTick(event);
+        LootExtraDetector.onServerTick(event);
+    }
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        LootExtraDetector.start(event.getServer(), false, null);
     }
 
     @SubscribeEvent
     public static void onServerStopped(ServerStoppedEvent event) {
         IntroVillageStructureProtection.reset();
+        LootExtraDetector.reset(event.getServer());
         ServerWorkScheduler.reset(event.getServer());
         IntegratedApiLocatorShutdownSupport.shutdownAfterWorldSave();
     }
@@ -96,6 +107,8 @@ public final class CommonEvents {
             @Override
             protected void apply(Void ignored, ResourceManager resourceManager, ProfilerFiller profiler) {
                 EnchantingReworkConfig.reload();
+                LootEditorConfig.load();
+                OverworldSpawnManager.reload();
             }
         });
     }
@@ -208,6 +221,11 @@ public final class CommonEvents {
                         .then(Commands.literal("reload")
                                 .requires(source -> source.hasPermission(4))
                                 .executes(context -> reloadPerformanceConfig(context.getSource()))))
+                .then(Commands.literal("spawns")
+                        .executes(context -> showSpawnStatus(context.getSource()))
+                        .then(Commands.literal("reload")
+                                .requires(source -> source.hasPermission(4))
+                                .executes(context -> reloadSpawnConfig(context.getSource()))))
                 .then(Commands.literal("village_jigsaws")
                         .then(Commands.literal("place_test")
                                 .requires(source -> source.hasPermission(4))
@@ -232,6 +250,17 @@ public final class CommonEvents {
         PerformanceConfig.reload();
         source.sendSuccess(() -> Component.literal("Reloaded Solace performance prototype config."), false);
         return showPerformanceStatus(source);
+    }
+
+    private static int showSpawnStatus(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal(OverworldSpawnManager.describeStatus()), false);
+        return 1;
+    }
+
+    private static int reloadSpawnConfig(CommandSourceStack source) {
+        OverworldSpawnManager.reload();
+        source.sendSuccess(() -> Component.literal("Reloaded Astralis native spawn configuration."), false);
+        return showSpawnStatus(source);
     }
 
     private static int stopIntroBalloon(CommandSourceStack source) {

@@ -10,6 +10,7 @@
   "item.solace.identified_artifact": "Identified Artifact",
   "item.solace.wooden_hammer": "Wooden Hammer",
   "item.solace.wooden_hammer.tooltip": "Acts as both a wooden axe and a wooden pickaxe.",
+  "item.solace.loot_table_editor": "Loot Table Editor",
   "solace.jei.arcane_anvil.info": "The Arcane Anvil now only combines an Infused Book with an Identified Artifact. Both inputs are consumed to create the artifact's corresponding Enchanted Book.",
   "attribute.name.solace.sack_capacity": "Sack Capacity",
   "container.solace.horse_cargo": "Horse Cargo",
