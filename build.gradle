@@ -112,6 +112,7 @@ dependencies {
     compileOnly files('../mods/sophisticatedcore-1.20.1-1.2.119.1369.jar')
     compileOnly files('../mods/curios-forge-5.14.1+1.20.1.jar')
     compileOnly files('../mods/fancymenu_forge_3.9.6_MC_1.20.1.jar')
+    compileOnly files('../mods/Dungeon Now Loading-forge-1.20.1-2.2.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }

@@ -36,6 +36,7 @@
     "NaturalSpawnerContextMixin",
     "ObscureTooltipHintConfigMixin",
     "PalettedContainerResizeGuardMixin",
+    "PreserverDoorCompatibilityMixin",
     "JigsawPlacementMixin",
     "JigsawPlacementPlacerMixin",
     "LithostitchedTemplatesMixin",
