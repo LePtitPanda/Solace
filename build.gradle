@@ -113,6 +113,7 @@ dependencies {
     compileOnly files('../mods/curios-forge-5.14.1+1.20.1.jar')
     compileOnly files('../mods/fancymenu_forge_3.9.6_MC_1.20.1.jar')
     compileOnly files('../mods/Dungeon Now Loading-forge-1.20.1-2.2.jar')
+    compileOnly files('../mods/lootr-forge-1.20-0.7.35.90.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }

@@ -103,7 +103,8 @@ final class OverworldSpawnConfig {
                             parsed.minimumGroup,
                             parsed.maximumGroup
                     );
-                    Choice choice = new Choice(parsedChoice.id, entityType, data);
+                    Choice choice = new Choice(parsedChoice.id, entityType, data,
+                            booleanValue(element.getAsJsonObject(), "native_biome_pool", false));
                     choicesByCategory.computeIfAbsent(entityType.getCategory(), ignored -> new ArrayList<>()).add(choice);
                     if (!parsed.scoreboardTags.isEmpty()) {
                         tagsByMob.computeIfAbsent(parsedChoice.id, ignored -> new LinkedHashSet<>())
@@ -359,7 +360,8 @@ final class OverworldSpawnConfig {
         }
     }
 
-    record Choice(ResourceLocation id, EntityType<?> type, MobSpawnSettings.SpawnerData spawnerData) {
+    record Choice(ResourceLocation id, EntityType<?> type, MobSpawnSettings.SpawnerData spawnerData,
+                  boolean nativeBiomePool) {
     }
 
     record CompiledRule(

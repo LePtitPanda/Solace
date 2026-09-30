@@ -4,16 +4,17 @@ import com.solace.loot.LootEditorEntry;
 import com.solace.loot.LootEditorManager;
 import com.solace.loot.LootEditorOpener;
 import com.solace.loot.LootEditorSnapshot;
-import com.solace.loot.LootStructureIndex;
 import com.solace.loot.LootExtraDetector;
+import com.solace.loot.LootStructureIndex;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.DataSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
@@ -28,15 +29,17 @@ public final class LootEditorMenu extends AbstractContainerMenu {
     public static final int RESET = 3;
     public static final int REBUILD_INDEX = 4;
     public static final int TOGGLE_MODIFIERS = 5;
-    public static final int DECREMENT_BASE = 100;
-    public static final int INCREMENT_BASE = 200;
-    public static final int REMOVE_BASE = 300;
+    public static final int RESET_CHEST = 6;
+    public static final int PREVIOUS_POOL = 7;
+    public static final int NEXT_POOL = 8;
+    public static final int ADD_POOL = 9;
+    public static final int ADD_GUARANTEED_POOL = 10;
+    public static final int REMOVE_POOL = 11;
+    public static final int REMOVE_ENTRY_BASE = 100;
 
     private final LootEditorSnapshot snapshot;
     private final List<LootEditorEntry> entries;
     private final SimpleContainer ghosts = new SimpleContainer(ENTRY_SLOTS + 1);
-    private final List<DataSlot> weights = new ArrayList<>();
-    private final Player player;
 
     public LootEditorMenu(int containerId, Inventory inventory, FriendlyByteBuf buffer) {
         this(containerId, inventory, LootEditorSnapshot.read(buffer));
@@ -46,29 +49,24 @@ public final class LootEditorMenu extends AbstractContainerMenu {
         super(LootEditorRegistry.MENU, containerId);
         this.snapshot = snapshot;
         this.entries = new ArrayList<>(snapshot.entries());
-        this.player = inventory.player;
 
         for (int i = 0; i < ENTRY_SLOTS; i++) {
             if (i < entries.size()) {
                 ghosts.setItem(i, entries.get(i).stack().copy());
             }
             int x = 8 + (i % 9) * 24;
-            int y = 40 + (i / 9) * 24;
+            int y = 72 + (i / 9) * 24;
             addSlot(new GhostSlot(ghosts, i, x, y));
-            DataSlot weight = DataSlot.standalone();
-            weight.set(i < entries.size() ? entries.get(i).weight() : 0);
-            weights.add(weight);
-            addDataSlot(weight);
         }
-        addSlot(new GhostSlot(ghosts, ADD_SLOT, 220, 64));
+        addSlot(new GhostSlot(ghosts, ADD_SLOT, 224, 96));
 
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 9; column++) {
-                addSlot(new Slot(inventory, column + row * 9 + 9, 8 + column * 18, 154 + row * 18));
+                addSlot(new Slot(inventory, column + row * 9 + 9, 8 + column * 18, 246 + row * 18));
             }
         }
         for (int column = 0; column < 9; column++) {
-            addSlot(new Slot(inventory, column, 8 + column * 18, 226));
+            addSlot(new Slot(inventory, column, 8 + column * 18, 318));
         }
     }
 
@@ -78,10 +76,6 @@ public final class LootEditorMenu extends AbstractContainerMenu {
 
     public LootEditorEntry entry(int index) {
         return index >= 0 && index < entries.size() ? entries.get(index) : null;
-    }
-
-    public int weight(int index) {
-        return index >= 0 && index < weights.size() ? weights.get(index).get() : 0;
     }
 
     @Override
@@ -96,16 +90,44 @@ public final class LootEditorMenu extends AbstractContainerMenu {
             return false;
         }
         if (id == PREVIOUS_PAGE && snapshot.page() > 0) {
-            LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page() - 1);
+            reopen(serverPlayer, snapshot.selectedPool(), snapshot.page() - 1);
             return true;
         }
         if (id == NEXT_PAGE && snapshot.page() + 1 < snapshot.pageCount()) {
-            LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page() + 1);
+            reopen(serverPlayer, snapshot.selectedPool(), snapshot.page() + 1);
             return true;
+        }
+        if (id == PREVIOUS_POOL && snapshot.selectedPool() > 0) {
+            reopen(serverPlayer, snapshot.selectedPool() - 1, 0);
+            return true;
+        }
+        if (id == NEXT_POOL && snapshot.selectedPool() + 1 < snapshot.viewCount()) {
+            reopen(serverPlayer, snapshot.selectedPool() + 1, 0);
+            return true;
+        }
+        if (id == ADD_POOL) {
+            int pool = LootEditorManager.addPool(serverPlayer.server, snapshot.source(), ItemStack.EMPTY);
+            reopen(serverPlayer, pool, 0);
+            return true;
+        }
+        if (id == ADD_GUARANTEED_POOL) {
+            if (getCarried().isEmpty()) {
+                serverPlayer.displayClientMessage(Component.literal("Carry an item stack first, then click Guaranteed +."), true);
+                return false;
+            }
+            int pool = LootEditorManager.addPool(serverPlayer.server, snapshot.source(), getCarried().copy());
+            reopen(serverPlayer, pool, 0);
+            return true;
+        }
+        if (id == REMOVE_POOL && snapshot.selectedPool() < snapshot.pools().size()) {
+            if (LootEditorManager.removePool(serverPlayer.server, snapshot.source(), snapshot.selectedPool())) {
+                reopen(serverPlayer, Math.max(0, snapshot.selectedPool() - 1), 0);
+                return true;
+            }
         }
         if (id == RESET) {
             LootEditorManager.reset(serverPlayer.server, snapshot.source());
-            LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), 0);
+            reopen(serverPlayer, 0, 0);
             return true;
         }
         if (id == REBUILD_INDEX) {
@@ -115,55 +137,25 @@ public final class LootEditorMenu extends AbstractContainerMenu {
         }
         if (id == TOGGLE_MODIFIERS) {
             LootEditorManager.toggleModifiers(serverPlayer.server, snapshot.source());
-            LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
+            reopen(serverPlayer, snapshot.selectedPool(), snapshot.page());
             return true;
         }
-
-        int slot = id % 100;
-        LootEditorEntry entry = entry(slot);
-        if (entry == null) {
-            return false;
+        if (id == RESET_CHEST) {
+            return LootEditorOpener.resetChest(serverPlayer, snapshot.pos(), snapshot.source());
         }
-        if (id >= DECREMENT_BASE && id < DECREMENT_BASE + ENTRY_SLOTS) {
-            int step = entry.external() ? (player.isShiftKeyDown() ? 500 : 100) : (player.isShiftKeyDown() ? 10 : 1);
-            int value = Math.max(entry.external() ? 0 : 1, weight(slot) - step);
-            boolean changed = entry.external()
-                    ? LootEditorManager.setExtraChance(serverPlayer.server, snapshot.source(),
-                    new net.minecraft.resources.ResourceLocation(entry.externalItemId()), entry.stack(), value)
-                    : LootEditorManager.setWeight(serverPlayer.server, snapshot.source(), entry.path(), value);
-            if (changed) {
-                weights.get(slot).set(value);
-                if (entry.external()) {
-                    LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
-                } else {
-                    broadcastChanges();
-                }
-                return true;
+        if (id >= REMOVE_ENTRY_BASE && id < REMOVE_ENTRY_BASE + ENTRY_SLOTS) {
+            int slot = id - REMOVE_ENTRY_BASE;
+            LootEditorEntry entry = entry(slot);
+            if (entry == null) {
+                return false;
             }
-        } else if (id >= INCREMENT_BASE && id < INCREMENT_BASE + ENTRY_SLOTS) {
-            int step = entry.external() ? (player.isShiftKeyDown() ? 500 : 100) : (player.isShiftKeyDown() ? 10 : 1);
-            int value = Math.min(entry.external() ? 10_000 : 100_000,
-                    Math.max(0, weight(slot)) + step);
+            ResourceLocation externalId = entry.external() ? ResourceLocation.tryParse(entry.externalItemId()) : null;
             boolean changed = entry.external()
-                    ? LootEditorManager.setExtraChance(serverPlayer.server, snapshot.source(),
-                    new net.minecraft.resources.ResourceLocation(entry.externalItemId()), entry.stack(), value)
-                    : LootEditorManager.setWeight(serverPlayer.server, snapshot.source(), entry.path(), value);
-            if (changed) {
-                weights.get(slot).set(value);
-                if (entry.external()) {
-                    LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
-                } else {
-                    broadcastChanges();
-                }
-                return true;
-            }
-        } else if (id >= REMOVE_BASE && id < REMOVE_BASE + ENTRY_SLOTS) {
-            boolean changed = entry.external()
-                    ? LootEditorManager.setExtraChance(serverPlayer.server, snapshot.source(),
-                    new net.minecraft.resources.ResourceLocation(entry.externalItemId()), entry.stack(), 0)
+                    ? externalId != null && LootEditorManager.setExtraChance(serverPlayer.server, snapshot.source(),
+                    externalId, entry.stack(), 0)
                     : LootEditorManager.removeItem(serverPlayer.server, snapshot.source(), entry.path());
             if (changed) {
-                LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
+                reopen(serverPlayer, snapshot.selectedPool(), snapshot.page());
                 return true;
             }
         }
@@ -174,20 +166,24 @@ public final class LootEditorMenu extends AbstractContainerMenu {
     public void clicked(int slotId, int button, ClickType clickType, Player player) {
         if (slotId >= 0 && slotId <= ADD_SLOT) {
             if (!player.level().isClientSide && player instanceof ServerPlayer serverPlayer && !getCarried().isEmpty()) {
-                boolean changed;
+                boolean changed = false;
                 if (slotId == ADD_SLOT || slotId >= entries.size()) {
-                    changed = LootEditorManager.addItem(serverPlayer.server, snapshot.source(), getCarried().copy());
+                    if (!snapshot.showingExtras()) {
+                        int targetPool = snapshot.pools().isEmpty() ? 0 : snapshot.selectedPool();
+                        changed = LootEditorManager.addItem(serverPlayer.server, snapshot.source(),
+                                targetPool, getCarried().copy());
+                    }
                 } else if (entries.get(slotId).external()) {
                     LootEditorEntry entry = entries.get(slotId);
-                    changed = LootEditorManager.replaceExtra(serverPlayer.server, snapshot.source(),
-                            new net.minecraft.resources.ResourceLocation(entry.externalItemId()), getCarried().copy(),
-                            Math.max(100, weight(slotId)));
+                    ResourceLocation externalId = ResourceLocation.tryParse(entry.externalItemId());
+                    changed = externalId != null && LootEditorManager.replaceExtra(serverPlayer.server, snapshot.source(),
+                            externalId, getCarried().copy(), Math.max(100, entry.chanceBasisPoints()));
                 } else {
                     changed = LootEditorManager.replaceItem(serverPlayer.server, snapshot.source(),
                             entries.get(slotId).path(), getCarried().copy());
                 }
                 if (changed) {
-                    LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
+                    reopen(serverPlayer, snapshot.selectedPool(), snapshot.page());
                 }
             }
             return;
@@ -197,14 +193,19 @@ public final class LootEditorMenu extends AbstractContainerMenu {
 
     @Override
     public ItemStack quickMoveStack(Player player, int slotId) {
-        if (slotId > ADD_SLOT && slotId < slots.size()) {
+        if (slotId > ADD_SLOT && slotId < slots.size() && !snapshot.showingExtras()) {
             ItemStack source = slots.get(slotId).getItem();
             if (!source.isEmpty() && player instanceof ServerPlayer serverPlayer) {
-                LootEditorManager.addItem(serverPlayer.server, snapshot.source(), source.copy());
-                LootEditorOpener.reopen(serverPlayer, snapshot.pos(), snapshot.source(), snapshot.page());
+                int targetPool = snapshot.pools().isEmpty() ? 0 : snapshot.selectedPool();
+                LootEditorManager.addItem(serverPlayer.server, snapshot.source(), targetPool, source.copy());
+                reopen(serverPlayer, snapshot.selectedPool(), snapshot.page());
             }
         }
         return ItemStack.EMPTY;
+    }
+
+    private void reopen(ServerPlayer player, int pool, int page) {
+        LootEditorOpener.reopen(player, snapshot.pos(), snapshot.source(), pool, page);
     }
 
     private static final class GhostSlot extends Slot {

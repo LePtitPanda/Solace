@@ -102,31 +102,39 @@ public final class LootEditorManager {
     }
 
     public static LootEditorSnapshot snapshot(MinecraftServer server, net.minecraft.core.BlockPos pos,
-                                              ResourceLocation source, int requestedPage) {
+                                              ResourceLocation source, int requestedPool, int requestedPage) {
         LootDataManager manager = server.getLootData();
         LootTable effectiveTable = manager.getLootTable(source);
         ResourceLocation effective = effectiveId(source);
         JsonObject json = tableJson(source, effectiveTable);
-        List<LootEditorEntry> direct = collectEntries(json);
-        List<LootEditorEntry> all = new ArrayList<>(direct);
+        PoolView poolView = collectPools(json);
+        List<LootEditorEntry> extras = new ArrayList<>();
         for (LootExtraManager.Extra extra : LootExtraManager.discover(source)) {
-            all.add(new LootEditorEntry("@extra/" + extra.originalItem(), extra.stack(), extra.chanceBasisPoints(),
-                    10_000, true, extra.originalItem().toString()));
+            int count = Math.max(1, extra.stack().getCount());
+            ItemStack shown = extra.stack().copy();
+            shown.setCount(1);
+            extras.add(new LootEditorEntry("@extra/" + extra.originalItem(), shown, -1,
+                    1, 1, extra.chanceBasisPoints(), 0, count, count,
+                    true, 0, true, true, extra.originalItem().toString()));
         }
-        int externalCount = all.size() - direct.size();
-        int pageCount = Math.max(1, (all.size() + PAGE_SIZE - 1) / PAGE_SIZE);
+        int externalCount = extras.size();
+        int viewCount = poolView.pools().size() + (externalCount > 0 ? 1 : 0);
+        int selectedPool = viewCount == 0 ? 0 : Math.max(0, Math.min(requestedPool, viewCount - 1));
+        List<LootEditorEntry> selectedEntries = selectedPool < poolView.entries().size()
+                ? poolView.entries().get(selectedPool) : extras;
+        int pageCount = Math.max(1, (selectedEntries.size() + PAGE_SIZE - 1) / PAGE_SIZE);
         int page = Math.max(0, Math.min(requestedPage, pageCount - 1));
-        int from = Math.min(page * PAGE_SIZE, all.size());
-        int to = Math.min(from + PAGE_SIZE, all.size());
+        int from = Math.min(page * PAGE_SIZE, selectedEntries.size());
+        int to = Math.min(from + PAGE_SIZE, selectedEntries.size());
         List<ResourceLocation> structures = LootStructureIndex.structuresFor(source);
         if (!effective.equals(source)) {
             Set<ResourceLocation> merged = new java.util.LinkedHashSet<>(structures);
             merged.addAll(LootStructureIndex.structuresFor(effective));
             structures = List.copyOf(merged);
         }
-        return new LootEditorSnapshot(pos, source, effective, page, pageCount, all.size(),
-                direct.size(), externalCount,
-                List.copyOf(all.subList(from, to)), structures, LootStructureIndex.isReady(),
+        return new LootEditorSnapshot(pos, source, effective, selectedPool, poolView.pools(),
+                page, pageCount, selectedEntries.size(), poolView.totalEntries(), externalCount,
+                List.copyOf(selectedEntries.subList(from, to)), structures, LootStructureIndex.isReady(),
                 isCustomized(source), suppressesModifiers(source));
     }
 
@@ -201,10 +209,47 @@ public final class LootEditorManager {
         return true;
     }
 
+    public static synchronized boolean setEntrySettings(MinecraftServer server, ResourceLocation source, String path,
+                                                         int weight, int chanceBasisPoints,
+                                                         int countMin, int countMax, boolean editCount) {
+        JsonObject json = ensureOverride(server, source);
+        JsonObject entry = objectAt(json, path);
+        if (entry == null || !isItemEntry(entry)) {
+            return false;
+        }
+
+        int safeWeight = Math.max(1, Math.min(100_000, weight));
+        if (safeWeight == 1) {
+            entry.remove("weight");
+        } else {
+            entry.addProperty("weight", safeWeight);
+        }
+        setRandomChance(entry, Math.max(0, Math.min(10_000, chanceBasisPoints)));
+        if (editCount) {
+            setCount(entry, Math.max(1, Math.min(4096, countMin)),
+                    Math.max(1, Math.min(4096, countMax)));
+        }
+        persist(server, source, json);
+        return true;
+    }
+
     public static synchronized boolean setExtraChance(MinecraftServer server, ResourceLocation source,
                                                        ResourceLocation originalItem, ItemStack shownStack,
                                                        int chanceBasisPoints) {
         LootExtraManager.setRule(source, originalItem, shownStack, chanceBasisPoints);
+        LootEditorConfig.suppressModifiers().addProperty(source.toString(), false);
+        LootEditorConfig.save();
+        LootEditorAliCompat.requestRefresh(server);
+        return true;
+    }
+
+    public static synchronized boolean setExtraSettings(MinecraftServer server, ResourceLocation source,
+                                                         ResourceLocation originalItem, ItemStack shownStack,
+                                                         int chanceBasisPoints, int count) {
+        ItemStack updated = shownStack.copy();
+        updated.setCount(Math.max(1, Math.min(4096, count)));
+        LootExtraManager.setRule(source, originalItem, updated,
+                Math.max(0, Math.min(10_000, chanceBasisPoints)));
         LootEditorConfig.suppressModifiers().addProperty(source.toString(), false);
         LootEditorConfig.save();
         LootEditorAliCompat.requestRefresh(server);
@@ -234,35 +279,30 @@ public final class LootEditorManager {
         if (entry == null || !isItemEntry(entry)) {
             return false;
         }
-        int weight = entry.has("weight") ? entry.get("weight").getAsInt() : 1;
-        JsonObject replacement = itemEntry(stack, weight);
-        entry.entrySet().clear();
-        replacement.entrySet().forEach(value -> entry.add(value.getKey(), value.getValue()));
+        // Replacing an item must not erase its pool membership, conditions, count range,
+        // enchantments, or other advanced functions. Those settings belong to the entry.
+        entry.addProperty("name", BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (stack.hasTag()) {
+            setNbt(entry, stack.getTag().toString());
+        }
         persist(server, source, json);
         return true;
     }
 
-    public static synchronized boolean addItem(MinecraftServer server, ResourceLocation source, ItemStack stack) {
+    public static synchronized boolean addItem(MinecraftServer server, ResourceLocation source,
+                                               int poolIndex, ItemStack stack) {
         if (stack.isEmpty()) {
             return false;
         }
         JsonObject json = ensureOverride(server, source);
-        JsonArray pools;
-        if (!json.has("pools") || !json.get("pools").isJsonArray()) {
-            pools = new JsonArray();
-            json.add("pools", pools);
-        } else {
-            pools = json.getAsJsonArray("pools");
-        }
-        JsonObject pool;
+        JsonArray pools = pools(json);
         if (pools.isEmpty()) {
-            pool = new JsonObject();
-            pool.addProperty("rolls", 1);
-            pool.add("entries", new JsonArray());
-            pools.add(pool);
-        } else {
-            pool = pools.get(0).getAsJsonObject();
+            poolIndex = addPool(json, ItemStack.EMPTY);
         }
+        if (poolIndex < 0 || poolIndex >= pools.size() || !pools.get(poolIndex).isJsonObject()) {
+            return false;
+        }
+        JsonObject pool = pools.get(poolIndex).getAsJsonObject();
         JsonArray entries;
         if (!pool.has("entries") || !pool.get("entries").isJsonArray()) {
             entries = new JsonArray();
@@ -271,6 +311,45 @@ public final class LootEditorManager {
             entries = pool.getAsJsonArray("entries");
         }
         entries.add(itemEntry(stack, 1));
+        persist(server, source, json);
+        return true;
+    }
+
+    public static synchronized int addPool(MinecraftServer server, ResourceLocation source, ItemStack firstItem) {
+        JsonObject json = ensureOverride(server, source);
+        int index = addPool(json, firstItem);
+        persist(server, source, json);
+        return index;
+    }
+
+    public static synchronized boolean removePool(MinecraftServer server, ResourceLocation source, int poolIndex) {
+        JsonObject json = ensureOverride(server, source);
+        JsonArray pools = pools(json);
+        if (poolIndex < 0 || poolIndex >= pools.size()) {
+            return false;
+        }
+        pools.remove(poolIndex);
+        persist(server, source, json);
+        return true;
+    }
+
+    public static synchronized boolean setPoolSettings(MinecraftServer server, ResourceLocation source, int poolIndex,
+                                                        double rollsMin, double rollsMax,
+                                                        double bonusMin, double bonusMax) {
+        JsonObject json = ensureOverride(server, source);
+        JsonArray pools = pools(json);
+        if (poolIndex < 0 || poolIndex >= pools.size() || !pools.get(poolIndex).isJsonObject()) {
+            return false;
+        }
+        JsonObject pool = pools.get(poolIndex).getAsJsonObject();
+        NumberRange rolls = numberRange(pool.get("rolls"), 1.0D);
+        NumberRange bonus = numberRange(pool.get("bonus_rolls"), 0.0D);
+        if (rolls.editable()) {
+            pool.add("rolls", numberProvider(rollsMin, rollsMax));
+        }
+        if (bonus.editable()) {
+            pool.add("bonus_rolls", numberProvider(bonusMin, bonusMax));
+        }
         persist(server, source, json);
         return true;
     }
@@ -350,8 +429,10 @@ public final class LootEditorManager {
         return source;
     }
 
-    private static List<LootEditorEntry> collectEntries(JsonObject table) {
-        List<LootEditorEntry> entries = new ArrayList<>();
+    private static PoolView collectPools(JsonObject table) {
+        List<LootEditorPool> poolInfo = new ArrayList<>();
+        List<List<LootEditorEntry>> entriesByPool = new ArrayList<>();
+        int totalEntries = 0;
         JsonArray pools = table.has("pools") && table.get("pools").isJsonArray()
                 ? table.getAsJsonArray("pools") : new JsonArray();
         for (int poolIndex = 0; poolIndex < pools.size(); poolIndex++) {
@@ -361,13 +442,29 @@ public final class LootEditorManager {
             JsonObject pool = pools.get(poolIndex).getAsJsonObject();
             JsonArray poolEntries = pool.has("entries") && pool.get("entries").isJsonArray()
                     ? pool.getAsJsonArray("entries") : new JsonArray();
-            int totalWeight = directWeight(poolEntries);
-            collectEntries(poolEntries, "/pools/" + poolIndex + "/entries", Math.max(1, totalWeight), entries);
+            int poolWeight = simplePoolWeight(poolEntries);
+            List<LootEditorEntry> entries = new ArrayList<>();
+            collectEntries(poolEntries, "/pools/" + poolIndex + "/entries", poolIndex,
+                    poolWeight, true, entries);
+            NumberRange rolls = numberRange(pool.get("rolls"), 1.0D);
+            NumberRange bonus = numberRange(pool.get("bonus_rolls"), 0.0D);
+            String name = pool.has("name") && pool.get("name").isJsonPrimitive()
+                    ? pool.get("name").getAsString() : "Pool " + (poolIndex + 1);
+            int conditionCount = pool.has("conditions") && pool.get("conditions").isJsonArray()
+                    ? pool.getAsJsonArray("conditions").size() : 0;
+            int otherEntries = Math.max(0, poolEntries.size() - countDirectItems(poolEntries));
+            poolInfo.add(new LootEditorPool(poolIndex, name,
+                    rolls.min(), rolls.max(), rolls.editable(),
+                    bonus.min(), bonus.max(), bonus.editable(),
+                    entries.size(), otherEntries, conditionCount));
+            entriesByPool.add(List.copyOf(entries));
+            totalEntries += entries.size();
         }
-        return entries;
+        return new PoolView(List.copyOf(poolInfo), List.copyOf(entriesByPool), totalEntries);
     }
 
-    private static void collectEntries(JsonArray array, String path, int poolWeight, List<LootEditorEntry> output) {
+    private static void collectEntries(JsonArray array, String path, int poolIndex, int poolWeight,
+                                       boolean direct, List<LootEditorEntry> output) {
         for (int i = 0; i < array.size(); i++) {
             if (!array.get(i).isJsonObject()) {
                 continue;
@@ -377,32 +474,49 @@ public final class LootEditorManager {
             if (isItemEntry(object)) {
                 ItemStack stack = previewStack(object);
                 if (!stack.isEmpty()) {
-                    output.add(new LootEditorEntry(childPath, stack,
-                            Math.max(1, object.has("weight") ? object.get("weight").getAsInt() : 1), poolWeight,
-                            false, ""));
+                    EntrySettings settings = entrySettings(object);
+                    stack.setCount(1);
+                    output.add(new LootEditorEntry(childPath, stack, poolIndex,
+                            Math.max(1, object.has("weight") ? object.get("weight").getAsInt() : 1),
+                            direct ? poolWeight : 0, settings.chanceBasisPoints(), settings.otherConditions(),
+                            settings.count().minInt(), settings.count().maxInt(), settings.count().editable(),
+                            settings.otherFunctions(), direct, false, ""));
                 }
             }
             if (object.has("children") && object.get("children").isJsonArray()) {
-                collectEntries(object.getAsJsonArray("children"), childPath + "/children", poolWeight, output);
+                collectEntries(object.getAsJsonArray("children"), childPath + "/children", poolIndex,
+                        0, false, output);
             }
         }
     }
 
-    private static int directWeight(JsonArray array) {
+    private static int simplePoolWeight(JsonArray array) {
         int sum = 0;
         for (JsonElement element : array) {
             if (!element.isJsonObject()) {
-                continue;
+                return 0;
             }
             JsonObject object = element.getAsJsonObject();
-            if (isItemEntry(object)) {
-                sum += Math.max(1, object.has("weight") ? object.get("weight").getAsInt() : 1);
-            }
             if (object.has("children") && object.get("children").isJsonArray()) {
-                sum += directWeight(object.getAsJsonArray("children"));
+                return 0;
+            }
+            if (object.has("quality") && object.get("quality").isJsonPrimitive()
+                    && object.get("quality").getAsInt() != 0) {
+                return 0;
+            }
+            sum += Math.max(1, object.has("weight") ? object.get("weight").getAsInt() : 1);
+        }
+        return Math.max(1, sum);
+    }
+
+    private static int countDirectItems(JsonArray array) {
+        int count = 0;
+        for (JsonElement element : array) {
+            if (element.isJsonObject() && isItemEntry(element.getAsJsonObject())) {
+                count++;
             }
         }
-        return sum;
+        return count;
     }
 
     private static boolean isItemEntry(JsonObject entry) {
@@ -442,6 +556,10 @@ public final class LootEditorManager {
                 }
             }
         }
+        EntrySettings settings = entrySettings(entry);
+        if (settings.count().editable() && settings.count().minInt() == settings.count().maxInt()) {
+            stack.setCount(Math.min(stack.getMaxStackSize(), settings.count().minInt()));
+        }
         return stack;
     }
 
@@ -470,6 +588,223 @@ public final class LootEditorManager {
             entry.add("functions", functions);
         }
         return entry;
+    }
+
+    private static EntrySettings entrySettings(JsonObject entry) {
+        int chance = 10_000;
+        int otherConditions = 0;
+        boolean foundChance = false;
+        if (entry.has("conditions") && entry.get("conditions").isJsonArray()) {
+            for (JsonElement value : entry.getAsJsonArray("conditions")) {
+                if (!value.isJsonObject()) {
+                    otherConditions++;
+                    continue;
+                }
+                JsonObject condition = value.getAsJsonObject();
+                String type = type(condition, "condition");
+                if (!foundChance && (type.equals("random_chance") || type.equals("minecraft:random_chance"))
+                        && condition.has("chance") && condition.get("chance").isJsonPrimitive()) {
+                    chance = Math.max(0, Math.min(10_000,
+                            (int) Math.round(condition.get("chance").getAsDouble() * 10_000.0D)));
+                    foundChance = true;
+                } else {
+                    otherConditions++;
+                }
+            }
+        }
+
+        NumberRange count = new NumberRange(1.0D, 1.0D, true);
+        int otherFunctions = 0;
+        boolean foundCount = false;
+        if (entry.has("functions") && entry.get("functions").isJsonArray()) {
+            for (JsonElement value : entry.getAsJsonArray("functions")) {
+                if (!value.isJsonObject()) {
+                    otherFunctions++;
+                    continue;
+                }
+                JsonObject function = value.getAsJsonObject();
+                String functionType = type(function, "function");
+                if (!foundCount && (functionType.equals("set_count") || functionType.equals("minecraft:set_count"))
+                        && function.has("count")) {
+                    count = numberRange(function.get("count"), 1.0D);
+                    foundCount = true;
+                } else {
+                    otherFunctions++;
+                }
+            }
+        }
+        return new EntrySettings(chance, otherConditions, count, otherFunctions);
+    }
+
+    private static void setRandomChance(JsonObject entry, int chanceBasisPoints) {
+        JsonArray conditions = entry.has("conditions") && entry.get("conditions").isJsonArray()
+                ? entry.getAsJsonArray("conditions") : new JsonArray();
+        int existing = -1;
+        for (int i = 0; i < conditions.size(); i++) {
+            if (!conditions.get(i).isJsonObject()) {
+                continue;
+            }
+            String conditionType = type(conditions.get(i).getAsJsonObject(), "condition");
+            if (conditionType.equals("random_chance") || conditionType.equals("minecraft:random_chance")) {
+                existing = i;
+                break;
+            }
+        }
+        if (chanceBasisPoints >= 10_000) {
+            if (existing >= 0) {
+                conditions.remove(existing);
+            }
+        } else {
+            JsonObject condition = existing >= 0 ? conditions.get(existing).getAsJsonObject() : new JsonObject();
+            condition.addProperty("condition", "minecraft:random_chance");
+            condition.addProperty("chance", chanceBasisPoints / 10_000.0D);
+            if (existing < 0) {
+                conditions.add(condition);
+            }
+        }
+        if (conditions.isEmpty()) {
+            entry.remove("conditions");
+        } else {
+            entry.add("conditions", conditions);
+        }
+    }
+
+    private static void setCount(JsonObject entry, int requestedMin, int requestedMax) {
+        int min = Math.min(requestedMin, requestedMax);
+        int max = Math.max(requestedMin, requestedMax);
+        JsonArray functions = entry.has("functions") && entry.get("functions").isJsonArray()
+                ? entry.getAsJsonArray("functions") : new JsonArray();
+        JsonObject countFunction = null;
+        for (JsonElement value : functions) {
+            if (!value.isJsonObject()) {
+                continue;
+            }
+            JsonObject function = value.getAsJsonObject();
+            String functionType = type(function, "function");
+            if (functionType.equals("set_count") || functionType.equals("minecraft:set_count")) {
+                if (countFunction != null || !numberRange(function.get("count"), 1.0D).editable()) {
+                    return;
+                }
+                countFunction = function;
+            }
+        }
+        if (countFunction == null) {
+            if (min == 1 && max == 1) {
+                return;
+            }
+            countFunction = new JsonObject();
+            countFunction.addProperty("function", "minecraft:set_count");
+            functions.add(countFunction);
+        }
+        countFunction.add("count", numberProvider(min, max));
+        entry.add("functions", functions);
+    }
+
+    private static void setNbt(JsonObject entry, String tag) {
+        JsonArray functions = entry.has("functions") && entry.get("functions").isJsonArray()
+                ? entry.getAsJsonArray("functions") : new JsonArray();
+        JsonObject nbt = null;
+        for (JsonElement value : functions) {
+            if (value.isJsonObject()) {
+                String functionType = type(value.getAsJsonObject(), "function");
+                if (functionType.equals("set_nbt") || functionType.equals("minecraft:set_nbt")) {
+                    nbt = value.getAsJsonObject();
+                    break;
+                }
+            }
+        }
+        if (nbt == null) {
+            nbt = new JsonObject();
+            nbt.addProperty("function", "minecraft:set_nbt");
+            functions.add(nbt);
+        }
+        nbt.addProperty("tag", tag);
+        entry.add("functions", functions);
+    }
+
+    private static String type(JsonObject object, String key) {
+        return object.has(key) && object.get(key).isJsonPrimitive() ? object.get(key).getAsString() : "";
+    }
+
+    private static NumberRange numberRange(JsonElement element, double fallback) {
+        if (element == null) {
+            return new NumberRange(fallback, fallback, true);
+        }
+        try {
+            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isNumber()) {
+                double value = element.getAsDouble();
+                return new NumberRange(value, value, true);
+            }
+            if (element.isJsonObject()) {
+                JsonObject object = element.getAsJsonObject();
+                String providerType = type(object, "type");
+                if ((providerType.equals("uniform") || providerType.equals("minecraft:uniform"))
+                        && object.has("min") && object.get("min").isJsonPrimitive()
+                        && object.has("max") && object.get("max").isJsonPrimitive()) {
+                    return new NumberRange(object.get("min").getAsDouble(), object.get("max").getAsDouble(), true);
+                }
+                if ((providerType.equals("constant") || providerType.equals("minecraft:constant"))
+                        && object.has("value") && object.get("value").isJsonPrimitive()) {
+                    double value = object.get("value").getAsDouble();
+                    return new NumberRange(value, value, true);
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Preserve providers we cannot safely represent in the simple editor.
+        }
+        return new NumberRange(fallback, fallback, false);
+    }
+
+    private static JsonElement numberProvider(double requestedMin, double requestedMax) {
+        double min = Math.max(0.0D, Math.min(4096.0D, Math.min(requestedMin, requestedMax)));
+        double max = Math.max(min, Math.min(4096.0D, Math.max(requestedMin, requestedMax)));
+        if (Math.abs(min - max) < 0.000001D) {
+            return new com.google.gson.JsonPrimitive(min);
+        }
+        JsonObject uniform = new JsonObject();
+        uniform.addProperty("type", "minecraft:uniform");
+        uniform.addProperty("min", min);
+        uniform.addProperty("max", max);
+        return uniform;
+    }
+
+    private static JsonArray pools(JsonObject table) {
+        if (table.has("pools") && table.get("pools").isJsonArray()) {
+            return table.getAsJsonArray("pools");
+        }
+        JsonArray pools = new JsonArray();
+        table.add("pools", pools);
+        return pools;
+    }
+
+    private static int addPool(JsonObject table, ItemStack firstItem) {
+        JsonArray pools = pools(table);
+        JsonObject pool = new JsonObject();
+        pool.addProperty("name", uniquePoolName(pools));
+        pool.addProperty("rolls", 1.0D);
+        pool.addProperty("bonus_rolls", 0.0D);
+        JsonArray entries = new JsonArray();
+        if (firstItem != null && !firstItem.isEmpty()) {
+            entries.add(itemEntry(firstItem, 1));
+        }
+        pool.add("entries", entries);
+        pools.add(pool);
+        return pools.size() - 1;
+    }
+
+    private static String uniquePoolName(JsonArray pools) {
+        Set<String> names = new HashSet<>();
+        for (JsonElement value : pools) {
+            if (value.isJsonObject() && value.getAsJsonObject().has("name")) {
+                names.add(value.getAsJsonObject().get("name").getAsString());
+            }
+        }
+        for (int index = 1; ; index++) {
+            String candidate = "solace_pool_" + index;
+            if (!names.contains(candidate)) {
+                return candidate;
+            }
+        }
     }
 
     private static JsonObject objectAt(JsonObject root, String path) {
@@ -506,6 +841,23 @@ public final class LootEditorManager {
             return Integer.parseInt(value);
         } catch (NumberFormatException ignored) {
             return -1;
+        }
+    }
+
+    private record PoolView(List<LootEditorPool> pools, List<List<LootEditorEntry>> entries, int totalEntries) {
+    }
+
+    private record EntrySettings(int chanceBasisPoints, int otherConditions,
+                                 NumberRange count, int otherFunctions) {
+    }
+
+    private record NumberRange(double min, double max, boolean editable) {
+        private int minInt() {
+            return Math.max(1, (int) Math.floor(min));
+        }
+
+        private int maxInt() {
+            return Math.max(minInt(), (int) Math.floor(max));
         }
     }
 

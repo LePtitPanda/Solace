@@ -50,6 +50,8 @@ import java.util.WeakHashMap;
 public final class OverworldSpawnManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final ResourceLocation HAMSTER = id("spawn", "hamster");
+    private static final TagKey<EntityType<?>> ICY_BREED_HORSES = TagKey.create(Registries.ENTITY_TYPE,
+            id("icys-better-horses", "breed_horses"));
     private static final ResourceLocation FLUTTER = id("alexsmobs", "flutter");
     private static final ResourceLocation GRAZER = id("caverns_and_chasms", "grazer");
     private static final TagKey<Block> FLUTTER_SPAWNS = TagKey.create(Registries.BLOCK, id("alexsmobs", "flutter_spawns"));
@@ -187,7 +189,11 @@ public final class OverworldSpawnManager {
                 if (!passesSpecialPlacement(level, pos, choice.id())) {
                     continue;
                 }
-                event.addSpawnerData(choice.spawnerData());
+                if (choice.nativeBiomePool()) {
+                    spawnEntries(level, pos, category, choice).forEach(event::addSpawnerData);
+                } else {
+                    event.addSpawnerData(choice.spawnerData());
+                }
             }
         }
     }
@@ -336,7 +342,9 @@ public final class OverworldSpawnManager {
 
         List<OverworldSpawnConfig.CompiledRule> result = new ArrayList<>();
         for (OverworldSpawnConfig.CompiledRule rule : staticMatches) {
-            if (matchesDynamic(rule, level, pos)) {
+            if (rule.choices().stream().anyMatch(choice -> !choice.nativeBiomePool()
+                    || !spawnEntries(level, pos, category, choice).isEmpty())
+                    && matchesDynamic(rule, level, pos)) {
                 result.add(rule);
             }
         }
@@ -426,7 +434,9 @@ public final class OverworldSpawnManager {
             if (currentCount >= maximumFor(current, rule, entityId)) {
                 continue;
             }
-            if (contains(rule, type) && passesSpecialPlacement(level, pos, entityId)) {
+            if (rule.choices().stream().anyMatch(choice -> choice.type() == type
+                    && (!choice.nativeBiomePool() || !spawnEntries(level, pos, type.getCategory(), choice).isEmpty()))
+                    && passesSpecialPlacement(level, pos, entityId)) {
                 return true;
             }
         }
@@ -476,6 +486,19 @@ public final class OverworldSpawnManager {
 
     private static boolean contains(OverworldSpawnConfig.CompiledRule rule, EntityType<?> type) {
         return rule.choices().stream().anyMatch(choice -> choice.type() == type);
+    }
+
+    private static List<MobSpawnSettings.SpawnerData> spawnEntries(ServerLevel level, BlockPos pos,
+            MobCategory category, OverworldSpawnConfig.Choice choice) {
+        if (!choice.nativeBiomePool()) return List.of(choice.spawnerData());
+        // Read the biome source, not the mutable event list: native entries are removed before re-adding.
+        return level.getBiome(pos).value().getMobSettings().getMobs(category).unwrap().stream()
+                .filter(entry -> entry.type == choice.type()).toList();
+    }
+
+    private static EntityType<?> populationType(EntityType<?> type) {
+        // Icy's replaces a naturally spawned vanilla horse with its breed entity after finalization.
+        return type.is(ICY_BREED_HORSES) ? EntityType.HORSE : type;
     }
 
     private static boolean passesSpecialPlacement(ServerLevel level, BlockPos pos, ResourceLocation entityId) {
@@ -591,7 +614,7 @@ public final class OverworldSpawnManager {
                 snapshot.counts.clear();
                 snapshot.habitats.clear();
                 for (Entity entity : level.getAllEntities()) {
-                    snapshot.counts.merge(entity.getType(), 1, Integer::sum);
+                    snapshot.counts.merge(populationType(entity.getType()), 1, Integer::sum);
                     if (entity instanceof Mob mob && !mob.isPersistenceRequired() && !mob.requiresCustomPersistence()
                             && (mob.getType().getCategory() == MobCategory.MONSTER || mob.getType().getCategory() == MobCategory.CREATURE)
                             && !isProtected(currentConfig(), level.getBiome(mob.blockPosition()))) {
@@ -608,7 +631,7 @@ public final class OverworldSpawnManager {
         synchronized (ENTITY_COUNTS) {
             CountSnapshot snapshot = ENTITY_COUNTS.get(level);
             if (snapshot != null) {
-                snapshot.counts.merge(mob.getType(), 1, Integer::sum);
+                snapshot.counts.merge(populationType(mob.getType()), 1, Integer::sum);
                 if (mob.getType().getCategory() == MobCategory.MONSTER || mob.getType().getCategory() == MobCategory.CREATURE) {
                     snapshot.habitats.merge(new HabitatKey(habitat(level, mob.blockPosition()), mob.getType().getCategory()), 1, Integer::sum);
                 }

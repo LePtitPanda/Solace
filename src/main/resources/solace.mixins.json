@@ -66,8 +66,6 @@
     "EntityTypeCategoryMixin",
     "ItemCombinerMenuAccessor",
     "RollBenchScreenHandlerMixin",
-    "AbstractHorseInventoryAccessor",
-    "HorseInventoryScreenMixin",
     "HorseArmorProtectionMixin",
     "BackpackItemContextAccessor",
     "BackpackOpenMessageAccessor",
