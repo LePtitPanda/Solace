@@ -53,11 +53,11 @@ public abstract class AlchemistCauldronTileMixin extends BlockEntity implements 
     @Override
     public int solace$getElixirumColor() {
         if (this.solace$elixirumMixer != null) {
-            dev.obscuria.fragmentum.util.color.RGB rgb = this.solace$elixirumMixer.color();
+            dev.obscuria.fragmentum.api.common.color.RGB rgb = this.solace$elixirumMixer.color();
             if (rgb != null) {
-                int r = (int) (rgb.red() * 255.0f);
-                int g = (int) (rgb.green() * 255.0f);
-                int b = (int) (rgb.blue() * 255.0f);
+                int r = (int) (rgb.getRed() * 255.0f);
+                int g = (int) (rgb.getGreen() * 255.0f);
+                int b = (int) (rgb.getBlue() * 255.0f);
                 return (255 << 24) | (r << 16) | (g << 8) | b;
             }
         }
@@ -202,7 +202,7 @@ public abstract class AlchemistCauldronTileMixin extends BlockEntity implements 
                             this.level.playSound(null, this.worldPosition, net.minecraft.sounds.SoundEvents.BREWING_STAND_BREW, net.minecraft.sounds.SoundSource.BLOCKS, 1.0f, 1.0f);
                             
                             if (this.level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
-                                dev.obscuria.fragmentum.util.color.RGB rgbColor = this.solace$elixirumMixer.getContents().color();
+                                dev.obscuria.fragmentum.api.common.color.RGB rgbColor = this.solace$elixirumMixer.getContents().color();
                                 dev.obscuria.elixirum.common.world.particle.SplashParticleOptions particleOptions = new dev.obscuria.elixirum.common.world.particle.SplashParticleOptions(rgbColor, 1.0f);
                                 net.minecraft.world.phys.Vec3 center = net.minecraft.world.phys.Vec3.atCenterOf(this.worldPosition);
                                 serverLevel.sendParticles(particleOptions, center.x, center.y + 0.4, center.z, 32, 0.15, 0.0, 0.15, 0.0);
@@ -223,7 +223,7 @@ public abstract class AlchemistCauldronTileMixin extends BlockEntity implements 
         ItemStack itemStack = player.getItemInHand(hand);
         if (itemStack.is(net.minecraft.world.item.Items.GLASS_BOTTLE) && this.solace$elixirumMixer.isComplete() && this.solace$hasWater()) {
             if (!level.isClientSide()) {
-                ItemStack elixir = dev.obscuria.elixirum.common.registry.ElixirumItems.ELIXIR.instantiate();
+                ItemStack elixir = dev.obscuria.elixirum.common.registry.ElixirumItems.ELIXIR.get().getDefaultInstance();
                 dev.obscuria.elixirum.api.ArsElixirumAPI.setElixirContents(elixir, this.solace$elixirumMixer.getContents());
                 
                 if (level instanceof net.minecraft.server.level.ServerLevel serverLevel) {
@@ -237,7 +237,7 @@ public abstract class AlchemistCauldronTileMixin extends BlockEntity implements 
                         dev.obscuria.elixirum.helpers.StyleHelper.setChromaIfNotDefault(elixir, config.getChroma());
                     });
                     if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
-                        dev.obscuria.fragmentum.network.FragmentumNetworking.sendTo(serverPlayer, new dev.obscuria.elixirum.common.network.ClientboundElixirBrewedPayload(recipe));
+                        dev.obscuria.fragmentum.api.network.FragmentumNetworking.INSTANCE.sendTo(serverPlayer, new dev.obscuria.elixirum.common.network.ClientboundElixirBrewedPayload(recipe));
                     }
                 }
                 

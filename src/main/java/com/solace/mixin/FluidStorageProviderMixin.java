@@ -34,7 +34,7 @@ public class FluidStorageProviderMixin {
                                 CompoundTag fluidViewTag = viewsList.getCompound(0);
                                 
                                 // Create dummy elixir item to get correct hover name
-                                net.minecraft.world.item.ItemStack dummyElixir = dev.obscuria.elixirum.common.registry.ElixirumItems.ELIXIR.instantiate();
+                                net.minecraft.world.item.ItemStack dummyElixir = dev.obscuria.elixirum.common.registry.ElixirumItems.ELIXIR.get().getDefaultInstance();
                                 dev.obscuria.elixirum.api.ArsElixirumAPI.setElixirContents(dummyElixir, mixer.getContents());
                                 Component elixirName = dummyElixir.getHoverName();
                                 

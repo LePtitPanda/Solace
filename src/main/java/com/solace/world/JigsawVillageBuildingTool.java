@@ -634,7 +634,7 @@ public final class JigsawVillageBuildingTool {
                 int maximum = VillageBuildingSpawnConfig.maximumCount(customId);
                 int count = spawnedCounts.getOrDefault(customId, 0);
                 if (count < minimum) {
-                    LOGGER.warn("[Solace] Plains village placed {} below minimum {} for controlled building {}", count, minimum, customId);
+                    LOGGER.debug("[Solace] Plains village placed {} below minimum {} for controlled building {}", count, minimum, customId);
                 } else if (count > maximum) {
                     LOGGER.warn("[Solace] Plains village placed {} above maximum {} for controlled building {}", count, maximum, customId);
                 }

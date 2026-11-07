@@ -119,7 +119,7 @@ public final class InstrumentCockroachBandSupport {
         if (melody != null) {
             item.play(stack, melody, level, entity);
         } else {
-            item.play(stack);
+            item.play(stack, level);
         }
     }
 

@@ -1,0 +1,12 @@
+// Explicit temporary build only. The normal build never includes src/audit.
+gradle.projectsEvaluated {
+    def project = rootProject
+    project.sourceSets.main.java.srcDir('src/audit/java')
+    project.sourceSets.main.resources.srcDir('src/audit/resources')
+    def extras = project.files('../local/solace-audit-2026-10-13/MixinExtras-0.5.0.jar')
+    project.dependencies.add('compileOnly', extras)
+    project.dependencies.add('annotationProcessor', extras)
+    project.tasks.named('jar').configure {
+        manifest.attributes('MixinConfigs': 'solace.mixins.json,solace-audit.mixins.json')
+    }
+}

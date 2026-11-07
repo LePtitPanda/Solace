@@ -1,0 +1,89 @@
+package com.solace.mixin;
+
+import com.solace.compat.create6.DDCreate6SignatureExtension;
+import com.solace.compat.radiance.RadianceCompatibilityExtension;
+import com.solace.compat.performance.ClientPerformancePatches;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.objectweb.asm.tree.ClassNode;
+import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
+import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
+import org.spongepowered.asm.mixin.MixinEnvironment;
+import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
+import org.spongepowered.asm.mixin.transformer.ext.Extensions;
+
+import java.util.List;
+import java.util.Set;
+
+/** Bootstrap compatibility fixes that must run before another mod's mixin. */
+public final class SolaceMixinPlugin implements IMixinConfigPlugin {
+    private static final Logger LOGGER = LogManager.getLogger("Solace/Create6Compat");
+    @Override
+    public void preApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) {
+    }
+
+    @Override
+    public void onLoad(String mixinPackage) {
+        EmiGlobalMixinGuard.apply();
+        Object transformer = MixinEnvironment.getCurrentEnvironment().getActiveTransformer();
+        if (transformer instanceof IMixinTransformer mixinTransformer
+                && mixinTransformer.getExtensions() instanceof Extensions extensions) {
+            extensions.add(new DDCreate6SignatureExtension());
+            extensions.add(new RadianceCompatibilityExtension());
+            LOGGER.info("Registered DD Create 6 compatibility before target mixin application");
+        } else {
+            throw new IllegalStateException("Solace could not register the DD Create 6 compatibility extension");
+        }
+    }
+    @Override public String getRefMapperConfig() { return null; }
+    @Override
+    public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
+            // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.
+            return !hasClass("dev/kostromdan/mods/crash_assistant/common/mixin/CrashReportCategoryMixin.class");
+        }
+        if (mixinClassName.endsWith(".TfmgGoggleOverlayGuardMixin")) {
+            return hasClass("com/drmangotea/tfmg/mixin/GoggleOverlayRendererMixin.class");
+        }
+        if (mixinClassName.endsWith(".FzzyConditionCacheMixin")) {
+            return ClientPerformancePatches.fzzyConditionCache();
+        }
+        if (mixinClassName.endsWith(".DynamicFpsLoadingMixin")) {
+            return ClientPerformancePatches.dynamicFpsLoading();
+        }
+        if (mixinClassName.endsWith(".BannerPatternLodMixin")) {
+            return ClientPerformancePatches.bannerPatternLod();
+        }
+        if (mixinClassName.endsWith(".ReactiveMusicIdleMixin")) {
+            return ClientPerformancePatches.musicIdleWait();
+        }
+        if (mixinClassName.endsWith(".CatnipLightCacheMixin")) {
+            return ClientPerformancePatches.lightCacheMissPositions();
+        }
+        if (mixinClassName.endsWith(".BossesRiseBannerMixin")
+                || mixinClassName.endsWith(".BannerIndexChunkMixin")) {
+            return ClientPerformancePatches.bannerIndex();
+        }
+        if (mixinClassName.endsWith(".GlidersUpdraftMixin")) {
+            return ClientPerformancePatches.gliderBlockGate();
+        }
+        if (mixinClassName.endsWith(".SheepVariantReadMixin")
+                || mixinClassName.endsWith(".ShearedWoolVariantMixin")) {
+            return ClientPerformancePatches.sheepVariantRead();
+        }
+        if (mixinClassName.endsWith(".RadianceConnectorResourceMixin")) {
+            return RadianceCompatibilityExtension.needsConnectorHook();
+        }
+        return true;
+    }
+    private static boolean hasClass(String resource) {
+        try (java.io.InputStream in = org.spongepowered.asm.service.MixinService.getService().getResourceAsStream(resource)) {
+            return in != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    @Override public void acceptTargets(Set<String> myTargets, Set<String> otherTargets) { }
+    @Override public List<String> getMixins() { return null; }
+    @Override public void postApply(String targetClassName, ClassNode targetClass, String mixinClassName, IMixinInfo mixinInfo) { }
+}

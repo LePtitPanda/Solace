@@ -39,6 +39,7 @@ public class Solace {
 
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");
+        com.solace.performance.LogNoiseFilter.install();
         SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
         LootEditorNetwork.register();
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
