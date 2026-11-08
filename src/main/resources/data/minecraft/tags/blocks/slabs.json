@@ -1,0 +1,41 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "solace:sandy_soil_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:pink_sand_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:pink_sandstone_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:red_moss_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:white_kaolin_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:white_chalk_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:travertine_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:chert_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:algal_sand_terrain_slab",
+      "required": false
+    }
+  ]
+}

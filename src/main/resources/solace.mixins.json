@@ -64,7 +64,6 @@
     "WebSpiderClientRotationMixin",
     "WebSpiderShootGoalMixin",
     "AbstractContainerMenuAccessor",
-    "AtoningTableBlockMixin",
     "EnchantmentTableBlockMixin",
     "EnchantmentMixin",
     "EnchantmentSlotMixin",
@@ -82,6 +81,7 @@
   ],
   "client": [
     "TfmgGoggleOverlayGuardMixin",
+    "ResourcePackRecoveryMixin",
     "FzzyConditionCacheMixin",
     "BannerPatternLodMixin",
     "DynamicFpsLoadingMixin",
@@ -135,7 +135,6 @@
     "FluidStorageProviderMixin",
     "FluidViewMixin",
     "ClientProxyMixin",
-    "RelicsCurioModelMixin",
     "RollBenchScreenMixin"
   ],
   "server": [],

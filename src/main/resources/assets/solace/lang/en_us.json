@@ -14,5 +14,14 @@
   "solace.jei.arcane_anvil.info": "The Arcane Anvil now only combines an Infused Book with an Identified Artifact. Both inputs are consumed to create the artifact's corresponding Enchanted Book.",
   "item.modifiers.horse": "When on Horse:",
   "solace.horse_armor.knockback_resistance": "+0.4 Knockback Resistance",
-  "solace.horse_armor.slowness_infliction": "+4 Slowness Infliction"
+  "solace.horse_armor.slowness_infliction": "+4 Slowness Infliction",
+  "block.solace.sandy_soil_terrain_slab": "Sandy Soil Slab",
+  "block.solace.pink_sand_terrain_slab": "Pink Sand Slab",
+  "block.solace.pink_sandstone_terrain_slab": "Pink Sandstone Terrain Slab",
+  "block.solace.red_moss_terrain_slab": "Red Moss Slab",
+  "block.solace.white_kaolin_terrain_slab": "White Kaolin Terrain Slab",
+  "block.solace.white_chalk_terrain_slab": "White Chalk Terrain Slab",
+  "block.solace.travertine_terrain_slab": "Travertine Terrain Slab",
+  "block.solace.chert_terrain_slab": "Chert Terrain Slab",
+  "block.solace.algal_sand_terrain_slab": "Algal Sand Slab"
 }

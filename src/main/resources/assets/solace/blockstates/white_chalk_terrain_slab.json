@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/white_chalk_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/white_chalk"
+    },
+    "type=top": {
+      "model": "solace:block/white_chalk_terrain_slab_top"
+    }
+  }
+}

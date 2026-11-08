@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/travertine_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/travertine"
+    },
+    "type=top": {
+      "model": "solace:block/travertine_terrain_slab_top"
+    }
+  }
+}

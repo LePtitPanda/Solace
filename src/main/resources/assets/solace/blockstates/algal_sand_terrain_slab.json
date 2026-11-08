@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/algal_sand_terrain_slab"
+    },
+    "type=double": {
+      "model": "spawn:block/algal_sand"
+    },
+    "type=top": {
+      "model": "solace:block/algal_sand_terrain_slab_top"
+    }
+  }
+}

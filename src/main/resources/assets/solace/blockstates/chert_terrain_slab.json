@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/chert_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/chert"
+    },
+    "type=top": {
+      "model": "solace:block/chert_terrain_slab_top"
+    }
+  }
+}

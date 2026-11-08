@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/white_kaolin_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/white_kaolin"
+    },
+    "type=top": {
+      "model": "solace:block/white_kaolin_terrain_slab_top"
+    }
+  }
+}

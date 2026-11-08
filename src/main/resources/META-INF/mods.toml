@@ -34,3 +34,27 @@ The portal is activated with Flint and Steel and has a brown portal effect.'''
     versionRange="[1.20.1,1.21)"
     ordering="NONE"
     side="BOTH"
+
+# Optional: register terrain slabs for this mod's ground blocks after it
+[[dependencies.solace]]
+    modId="terrain_slabs"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Optional: register terrain slabs for this mod's ground blocks after it
+[[dependencies.solace]]
+    modId="natures_spirit"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"
+
+# Optional: register terrain slabs for this mod's ground blocks after it
+[[dependencies.solace]]
+    modId="spawn"
+    mandatory=false
+    versionRange="*"
+    ordering="AFTER"
+    side="BOTH"

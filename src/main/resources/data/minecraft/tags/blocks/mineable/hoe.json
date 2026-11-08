@@ -1,0 +1,9 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "solace:red_moss_terrain_slab",
+      "required": false
+    }
+  ]
+}

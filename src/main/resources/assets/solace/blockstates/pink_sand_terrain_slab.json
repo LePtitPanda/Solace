@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/pink_sand_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/pink_sand"
+    },
+    "type=top": {
+      "model": "solace:block/pink_sand_terrain_slab_top"
+    }
+  }
+}

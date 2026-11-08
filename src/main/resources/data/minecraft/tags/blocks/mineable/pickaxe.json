@@ -1,0 +1,25 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "solace:pink_sandstone_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:white_kaolin_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:white_chalk_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:travertine_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:chert_terrain_slab",
+      "required": false
+    }
+  ]
+}

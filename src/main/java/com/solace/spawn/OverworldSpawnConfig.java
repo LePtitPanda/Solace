@@ -63,6 +63,8 @@ final class OverworldSpawnConfig {
                     mobCaps.put(new ResourceLocation(entry.getKey()), Math.max(1, entry.getValue().getAsInt())));
             double surfaceMultiplier = decimal(root, "surface_land_spawn_multiplier", 1.0D);
             double caveMultiplier = decimal(root, "cave_spawn_multiplier", 1.0D);
+            double surfaceNightMonsterMultiplier = Math.max(0.0D, Math.min(1.0D,
+                    decimal(root, "surface_night_monster_multiplier", 1.0D)));
 
             EnumMap<MobCategory, List<CompiledRule>> byCategory = new EnumMap<>(MobCategory.class);
             Map<ResourceLocation, Set<String>> tagsByMob = new HashMap<>();
@@ -125,6 +127,7 @@ final class OverworldSpawnConfig {
                     true,
                     surfaceMultiplier,
                     caveMultiplier,
+                    surfaceNightMonsterMultiplier,
                     Map.copyOf(categoryCaps),
                     Map.copyOf(habitatCaps),
                     Map.copyOf(mobCaps),
@@ -342,6 +345,7 @@ final class OverworldSpawnConfig {
             boolean enabled,
             double surfaceMultiplier,
             double caveMultiplier,
+            double surfaceNightMonsterMultiplier,
             Map<MobCategory, Integer> categoryCaps,
             Map<String, Map<MobCategory, Integer>> habitatCaps,
             Map<ResourceLocation, Integer> mobCaps,
@@ -356,7 +360,7 @@ final class OverworldSpawnConfig {
             int miscEntityTypes
     ) {
         static RuntimeConfig disabled() {
-            return new RuntimeConfig(false, 1.0D, 1.0D, Map.of(), Map.of(), Map.of(), Set.of(), Set.of(), Set.of(), List.of(), Map.of(), Map.of(), 0, 0, 0);
+            return new RuntimeConfig(false, 1.0D, 1.0D, 1.0D, Map.of(), Map.of(), Map.of(), Set.of(), Set.of(), Set.of(), List.of(), Map.of(), Map.of(), 0, 0, 0);
         }
     }
 

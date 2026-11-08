@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/red_moss_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/red_moss_block"
+    },
+    "type=top": {
+      "model": "solace:block/red_moss_terrain_slab_top"
+    }
+  }
+}

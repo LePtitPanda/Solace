@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/slab",
+  "textures": {
+    "top": "spawn:block/algal_sand_top",
+    "bottom": "minecraft:block/sand",
+    "side": "spawn:block/algal_sand"
+  }
+}

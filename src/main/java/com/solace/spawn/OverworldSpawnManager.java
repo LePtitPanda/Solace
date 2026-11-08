@@ -173,6 +173,9 @@ public final class OverworldSpawnManager {
 
         List<OverworldSpawnConfig.CompiledRule> matches = matchingRules(current, level, pos, category);
         double multiplier = spawnMultiplier(current, matches);
+        if (isSurfaceNightMonster(current, level, pos, category)) {
+            multiplier *= current.surfaceNightMonsterMultiplier();
+        }
         if (multiplier < 1.0D && !passesRateGate(level, pos, category, multiplier)) {
             clear(event);
             return;
@@ -454,6 +457,14 @@ public final class OverworldSpawnManager {
         return NaturalSurfaceSpawnSupport.hasNaturalSkyAccess(level, pos) ? "surface" : "cave";
     }
 
+    private static boolean isSurfaceNightMonster(OverworldSpawnConfig.RuntimeConfig current,
+                                                 ServerLevel level, BlockPos pos, MobCategory category) {
+        return category == MobCategory.MONSTER
+                && current.surfaceNightMonsterMultiplier() < 1.0D
+                && level.isNight()
+                && "surface".equals(habitat(level, pos));
+    }
+
     private static boolean hasOpenEnvironment(ServerLevel level, BlockPos pos) {
         // Below open ocean water is not a cave; foliage is also allowed above surface players.
         return level.canSeeSkyFromBelowWater(pos) || NaturalSurfaceSpawnSupport.hasNaturalSkyAccess(level, pos);
@@ -480,6 +491,10 @@ public final class OverworldSpawnManager {
         String habitat = habitat(level, pos);
         Integer cap = current.habitatCaps().getOrDefault(habitat, Map.of()).get(category);
         if (cap == null) return false;
+        if (category == MobCategory.MONSTER && "surface".equals(habitat) && level.isNight()) {
+            // Fewer attempts alone only slow the refill; scale the surface population too.
+            cap = (int) Math.round(cap * current.surfaceNightMonsterMultiplier());
+        }
         entityCounts(level);
         return ENTITY_COUNTS.get(level).habitats.getOrDefault(new HabitatKey(habitat, category), 0) >= cap;
     }

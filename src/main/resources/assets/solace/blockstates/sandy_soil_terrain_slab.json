@@ -1,0 +1,13 @@
+{
+  "variants": {
+    "type=bottom": {
+      "model": "solace:block/sandy_soil_terrain_slab"
+    },
+    "type=double": {
+      "model": "natures_spirit:block/sandy_soil"
+    },
+    "type=top": {
+      "model": "solace:block/sandy_soil_terrain_slab_top"
+    }
+  }
+}

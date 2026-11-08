@@ -1,0 +1,17 @@
+{
+  "replace": false,
+  "values": [
+    {
+      "id": "solace:sandy_soil_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:pink_sand_terrain_slab",
+      "required": false
+    },
+    {
+      "id": "solace:algal_sand_terrain_slab",
+      "required": false
+    }
+  ]
+}

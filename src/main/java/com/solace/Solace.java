@@ -41,6 +41,7 @@ public class Solace {
         LOGGER.info("[Solace] Mod Constructor Called");
         com.solace.performance.LogNoiseFilter.install();
         SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
+        com.solace.compat.terrainslabs.TerrainSlabsCompat.register(FMLJavaModLoadingContext.get().getModEventBus());
         LootEditorNetwork.register();
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
         MinecraftForge.EVENT_BUS.register(OverworldSpawnManager.class);
