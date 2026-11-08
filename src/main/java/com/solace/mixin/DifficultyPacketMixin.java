@@ -12,15 +12,28 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(targets = "com.misanthropy.linggango.difficulty_enhancement.LinggangoEvents$DifficultyPacket", remap = false)
 public abstract class DifficultyPacketMixin {
+    private static final String SOLACE$KEEP_INVENTORY_DIFFICULTY = "cozy";
+
     @Mutable
     @Shadow
     @Final
     private String diffId;
 
+    @Mutable
+    @Shadow
+    @Final
+    private boolean keepInventory;
+
     @Inject(method = "handleServerSide", at = @At("HEAD"), remap = false)
-    private static void solace$forceExtremeOnHardcore(LinggangoEvents.DifficultyPacket packet, ServerPlayer player, CallbackInfo ci) {
+    private static void solace$sanitizeDifficultyChoice(LinggangoEvents.DifficultyPacket packet, ServerPlayer player, CallbackInfo ci) {
+        DifficultyPacketMixin self = (DifficultyPacketMixin) (Object) packet;
         if (player != null && player.serverLevel().getLevelData().isHardcore()) {
-            ((DifficultyPacketMixin) (Object) packet).diffId = "extreme";
+            self.diffId = "extreme";
+        }
+        // Keep Inventory is a Cozy-only perk; the packet applies the gamerule straight
+        // from the client's flag, so enforce it here as well as in the selection UI.
+        if (!SOLACE$KEEP_INVENTORY_DIFFICULTY.equals(self.diffId)) {
+            self.keepInventory = false;
         }
     }
 }

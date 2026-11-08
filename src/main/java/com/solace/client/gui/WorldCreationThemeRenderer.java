@@ -57,6 +57,9 @@ public final class WorldCreationThemeRenderer {
     }
 
     public static boolean isFrontEndScreen(Screen screen) {
+        if (screen instanceof SolaceThemedScreen) {
+            return true;
+        }
         if (screen == null || Minecraft.getInstance().level != null || screen instanceof TitleScreen
                 || screen instanceof GenericDirtMessageScreen) {
             return false;
@@ -77,6 +80,12 @@ public final class WorldCreationThemeRenderer {
                 && screen.getClass().getName().equals("org.embeddedt.embeddium.gui.EmbeddiumVideoOptionsScreen");
     }
 
+    /** Keybind Atlas draws its own frame; the themed header, title and footer lines overlap it. */
+    public static boolean isKeybindAtlasScreen(Screen screen) {
+        return screen != null
+                && screen.getClass().getName().equals("com.example.keybindatlas.render.KeyboardScreen");
+    }
+
     public static boolean isOculusShaderPackScreen(Screen screen) {
         return screen != null
                 && screen.getClass().getName().equals("net.irisshaders.iris.gui.screen.ShaderPackScreen");
@@ -88,7 +97,8 @@ public final class WorldCreationThemeRenderer {
     }
 
     public static void renderFrontEndChrome(Screen screen, GuiGraphics graphics) {
-        if (!isFrontEndScreen(screen) || screen instanceof CreateWorldScreen || isEmbeddiumVideoScreen(screen)) {
+        if (!isFrontEndScreen(screen) || screen instanceof CreateWorldScreen || isEmbeddiumVideoScreen(screen)
+                || isKeybindAtlasScreen(screen)) {
             return;
         }
         renderMenuHeader(screen, graphics);
@@ -96,7 +106,8 @@ public final class WorldCreationThemeRenderer {
     }
 
     public static void renderMenuHeader(Screen screen, GuiGraphics graphics) {
-        if (screen instanceof CreateWorldScreen || screen instanceof TitleScreen || isEmbeddiumVideoScreen(screen)) {
+        if (screen instanceof CreateWorldScreen || screen instanceof TitleScreen || isEmbeddiumVideoScreen(screen)
+                || isKeybindAtlasScreen(screen)) {
             return;
         }
 
@@ -120,6 +131,7 @@ public final class WorldCreationThemeRenderer {
         boolean duplicateHeader = isFrontEndScreen(screen)
                 && !(screen instanceof CreateWorldScreen)
                 && !isEmbeddiumVideoScreen(screen)
+                && !isKeybindAtlasScreen(screen)
                 && y < MENU_CONTENT_TOP
                 && text.getString().equals(screen.getTitle().getString());
         if (duplicateHeader) {
@@ -141,7 +153,8 @@ public final class WorldCreationThemeRenderer {
     }
 
     public static void prepareFrontEndLayout(Screen screen) {
-        if (!isFrontEndScreen(screen) || screen instanceof CreateWorldScreen || isEmbeddiumVideoScreen(screen)) {
+        if (!isFrontEndScreen(screen) || screen instanceof CreateWorldScreen || isEmbeddiumVideoScreen(screen)
+                || isKeybindAtlasScreen(screen)) {
             return;
         }
 
