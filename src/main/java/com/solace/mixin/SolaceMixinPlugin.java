@@ -8,6 +8,7 @@ import com.solace.compat.performance.ClientPerformancePatches;
 import com.solace.compat.performance.CommonPerformancePatches;
 import net.minecraftforge.fml.loading.FMLLoader;
 import net.minecraftforge.fml.loading.FMLPaths;
+import com.solace.config.PerformanceConfig;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.tree.ClassNode;
@@ -60,6 +61,12 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
                     && hasClass("net/raphimc/immediatelyfastapi/ImmediatelyFastApi.class")
                     && hasClass("com/lowdragmc/lowdraglib/client/renderer/IItemRendererProvider.class")
                     && ClientPerformancePatches.immediatelyFastHudBatching();
+        }
+        if (mixinClassName.endsWith(".CreateMountedStorageLookupMixin")) {
+            return hasClass("com/simibubi/create/api/contraption/storage/item/MountedItemStorageWrapper.class")
+                    && net.minecraftforge.fml.loading.FMLLoader.getLoadingModList().getMods().stream()
+                    .anyMatch(mod -> mod.getModId().equals("create") && mod.getVersion().toString().equals("6.0.8"))
+                    && PerformanceConfig.isCreateMountedStorageLookupEnabled();
         }
         if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
             // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.

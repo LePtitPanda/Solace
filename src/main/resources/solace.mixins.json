@@ -11,6 +11,7 @@
     "chunkguards.RemoveBlockGoalChunkGuardMixin",
     "chunkguards.DynamicGameEventChunkGuardMixin",
     "chunkguards.MapItemChunkGuardMixin",
+    "CreateMountedStorageLookupMixin",
     "CrashReportPreloadMixin",
     "SystemReportGraphicsMixin",
     "CrashReportCategoryMixin",
