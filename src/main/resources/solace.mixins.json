@@ -80,6 +80,7 @@
     "SophisticatedBackpackItemMixin"
   ],
   "client": [
+    "ImmediatelyFastHudBatchingMixin",
     "JustTrialSpawnersModelWrapMixin",
     "SubtleEffectsBiomeLookupMixin",
     "TfmgGoggleOverlayGuardMixin",

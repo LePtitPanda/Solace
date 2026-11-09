@@ -69,6 +69,10 @@ public final class ClientPerformancePatches {
         return enabled("ambientBiomeCells", SETTINGS.ambientBiomeCells);
     }
 
+    public static boolean immediatelyFastHudBatching() {
+        return enabled("immediatelyFastHudBatching", SETTINGS.immediatelyFastHudBatching);
+    }
+
     private static boolean enabled(String name, boolean setting) {
         return SETTINGS.enabled && setting
                 && !hasMod("radiance")
@@ -115,6 +119,7 @@ public final class ClientPerformancePatches {
         boolean mergedDrawCommands = true;
         boolean trialSpawnerModelWrap = true;
         boolean ambientBiomeCells = true;
+        boolean immediatelyFastHudBatching = true;
         double bannerLodDistance = 32.0D;
     }
 }
