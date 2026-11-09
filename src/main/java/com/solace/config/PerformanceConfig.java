@@ -16,7 +16,7 @@ import java.nio.file.Path;
 
 /**
  * Small, deliberately conservative configuration surface for Solace's
- * integrated-server performance experiments.
+ * integrated-server performance experiments and version-gated Create backports.
  */
 public final class PerformanceConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -46,6 +46,16 @@ public final class PerformanceConfig {
 
     public static boolean isSingleplayerOnly() {
         return load().singleplayerOnly;
+    }
+
+    /**
+     * Startup-only common-side patch. Unlike server scheduling experiments, this
+     * world-independent inventory lookup also applies to dedicated servers.
+     * Changing it requires a restart; singleplayerOnly does not apply.
+     */
+    public static boolean isCreateMountedStorageLookupEnabled() {
+        ConfigData config = load();
+        return config.enabled && config.createMountedStorageLookup;
     }
 
     public static int healthyPoiQueriesPerTick() {
@@ -132,6 +142,8 @@ public final class PerformanceConfig {
     private static final class ConfigData {
         public boolean enabled = true;
         public boolean singleplayerOnly = true;
+
+        public boolean createMountedStorageLookup = true;
 
         public int healthyPoiQueriesPerTick = 2;
         public int pressuredPoiQueriesPerTick = 1;

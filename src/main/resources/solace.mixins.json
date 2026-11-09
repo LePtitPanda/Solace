@@ -6,6 +6,7 @@
   "refmap": "solace.refmap.json",
   "plugin": "com.solace.mixin.SolaceMixinPlugin",
   "mixins": [
+    "CreateMountedStorageLookupMixin",
     "CrashReportPreloadMixin",
     "SystemReportGraphicsMixin",
     "CrashReportCategoryMixin",
