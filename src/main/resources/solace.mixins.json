@@ -39,6 +39,7 @@
     "MobCategorySpawnCapMixin",
     "MoltenFluidEntityMixin",
     "NaturalSpawnerContextMixin",
+    "NoiseChunkIdentityWrapMixin",
     "ObscureTooltipHintConfigMixin",
     "PalettedContainerResizeGuardMixin",
     "PreserverDoorCompatibilityMixin",

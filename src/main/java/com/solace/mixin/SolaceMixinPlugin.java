@@ -3,6 +3,7 @@ package com.solace.mixin;
 import com.solace.compat.create6.DDCreate6SignatureExtension;
 import com.solace.compat.radiance.RadianceCompatibilityExtension;
 import com.solace.compat.performance.ClientPerformancePatches;
+import com.solace.compat.performance.CommonPerformancePatches;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.tree.ClassNode;
@@ -38,6 +39,9 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
     @Override public String getRefMapperConfig() { return null; }
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.endsWith(".NoiseChunkIdentityWrapMixin")) {
+            return CommonPerformancePatches.noiseChunkIdentityWrap();
+        }
         if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
             // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.
             return !hasClass("dev/kostromdan/mods/crash_assistant/common/mixin/CrashReportCategoryMixin.class");

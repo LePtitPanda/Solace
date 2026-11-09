@@ -133,6 +133,9 @@ public final class PerformanceConfig {
         public boolean enabled = true;
         public boolean singleplayerOnly = true;
 
+        // Common-side mixin switch, read once at startup; independent of singleplayerOnly.
+        public boolean noiseChunkIdentityWrap = true;
+
         public int healthyPoiQueriesPerTick = 2;
         public int pressuredPoiQueriesPerTick = 1;
         public double poiPressureThresholdMillis = 35.0D;
