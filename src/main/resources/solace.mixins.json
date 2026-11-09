@@ -6,6 +6,11 @@
   "refmap": "solace.refmap.json",
   "plugin": "com.solace.mixin.SolaceMixinPlugin",
   "mixins": [
+    "chunkguards.GroundPathNavigationChunkGuardMixin",
+    "chunkguards.SleepInBedChunkGuardMixin",
+    "chunkguards.RemoveBlockGoalChunkGuardMixin",
+    "chunkguards.DynamicGameEventChunkGuardMixin",
+    "chunkguards.MapItemChunkGuardMixin",
     "CrashReportPreloadMixin",
     "SystemReportGraphicsMixin",
     "CrashReportCategoryMixin",
