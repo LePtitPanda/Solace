@@ -1,9 +1,13 @@
 package com.solace.mixin;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import com.solace.compat.create6.DDCreate6SignatureExtension;
 import com.solace.compat.radiance.RadianceCompatibilityExtension;
 import com.solace.compat.performance.ClientPerformancePatches;
 import com.solace.compat.performance.CommonPerformancePatches;
+import net.minecraftforge.fml.loading.FMLLoader;
+import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.objectweb.asm.tree.ClassNode;
@@ -13,6 +17,10 @@ import org.spongepowered.asm.mixin.MixinEnvironment;
 import org.spongepowered.asm.mixin.transformer.IMixinTransformer;
 import org.spongepowered.asm.mixin.transformer.ext.Extensions;
 
+import java.io.Reader;
+import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
@@ -26,6 +34,7 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
     @Override
     public void onLoad(String mixinPackage) {
         EmiGlobalMixinGuard.apply();
+        reenableImmediatelyFastHudBatching();
         Object transformer = MixinEnvironment.getCurrentEnvironment().getActiveTransformer();
         if (transformer instanceof IMixinTransformer mixinTransformer
                 && mixinTransformer.getExtensions() instanceof Extensions extensions) {
@@ -45,6 +54,12 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.contains(".chunkguards.")) {
             // ServerCore supplies these exact guards; defer to it if installed later.
             return !hasClass("me/wesley1808/servercore/mixin/optimizations/sync_loads/MapItemMixin.class");
+        }
+        if (mixinClassName.endsWith(".ImmediatelyFastHudBatchingMixin")) {
+            return hasClass("net/raphimc/immediatelyfast/ImmediatelyFast.class")
+                    && hasClass("net/raphimc/immediatelyfastapi/ImmediatelyFastApi.class")
+                    && hasClass("com/lowdragmc/lowdraglib/client/renderer/IItemRendererProvider.class")
+                    && ClientPerformancePatches.immediatelyFastHudBatching();
         }
         if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
             // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.
@@ -113,6 +128,54 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         }
         return true;
     }
+
+    private static void reenableImmediatelyFastHudBatching() {
+        try {
+            if (!hasClass("net/raphimc/immediatelyfast/ImmediatelyFast.class")
+                    || !ClientPerformancePatches.immediatelyFastHudBatching()) {
+                return;
+            }
+            // Mixin 0.8.5 selects every config (plugin onLoad) before preparing any mixins.
+            // IF consults config.hud_batching in shouldApplyMixin, then runtimeConfig while rendering.
+            Class<?> immediatelyFast = Class.forName("net.raphimc.immediatelyfast.ImmediatelyFast");
+            immediatelyFast.getMethod("earlyInit").invoke(null);
+
+            Path path = FMLPaths.CONFIGDIR.get().resolve("immediatelyfast.json");
+            if (!Files.isRegularFile(path)) return;
+            try (Reader input = Files.newBufferedReader(path)) {
+                JsonElement json = JsonParser.parseReader(input);
+                JsonElement hudBatching = json.getAsJsonObject().get("hud_batching");
+                if (hudBatching == null || !hudBatching.isJsonPrimitive()
+                        || !hudBatching.getAsJsonPrimitive().isBoolean() || !hudBatching.getAsBoolean()) {
+                    return;
+                }
+            }
+
+            if (FMLLoader.getLoadingModList().getMods().stream()
+                    .anyMatch(mod -> mod.getModId().equals("draconicevolution"))) {
+                LOGGER.info("[Solace] Keeping ImmediatelyFast HUD batching unchanged for Draconic Evolution");
+                return;
+            }
+            Object config = immediatelyFast.getField("config").get(null);
+            if (config.getClass().getField("debug_only_and_not_recommended_disable_mod_conflict_handling")
+                    .getBoolean(config)) {
+                LOGGER.info("[Solace] Keeping ImmediatelyFast HUD batching unchanged with debug conflict handling disabled");
+                return;
+            }
+            Object runtimeConfig = immediatelyFast.getField("runtimeConfig").get(null);
+            Field configHudBatching = config.getClass().getField("hud_batching");
+            Field runtimeHudBatching = runtimeConfig.getClass().getField("hud_batching");
+            // Resolve and validate both fields before changing either configuration.
+            configHudBatching.getBoolean(config);
+            runtimeHudBatching.getBoolean(runtimeConfig);
+            configHudBatching.setBoolean(config, true);
+            runtimeHudBatching.setBoolean(runtimeConfig, true);
+            LOGGER.info("[Solace] Re-enabled ImmediatelyFast HUD batching (MBD2 conflict fixed upstream in f8d2732)");
+        } catch (Exception | LinkageError exception) {
+            LOGGER.warn("[Solace] Could not re-enable ImmediatelyFast HUD batching", exception);
+        }
+    }
+
     private static boolean hasClass(String resource) {
         try (java.io.InputStream in = org.spongepowered.asm.service.MixinService.getService().getResourceAsStream(resource)) {
             return in != null;

@@ -84,6 +84,10 @@ public final class ClientPerformancePatches {
         return Math.max(100, Math.min(3000, SETTINGS.xaeroMapChunksPerSecond));
     }
 
+    public static boolean immediatelyFastHudBatching() {
+        return enabled("immediatelyFastHudBatching", SETTINGS.immediatelyFastHudBatching);
+    }
+
     private static boolean enabled(String name, boolean setting) {
         return SETTINGS.enabled && setting
                 && !hasMod("radiance")
@@ -133,6 +137,7 @@ public final class ClientPerformancePatches {
         boolean xaeroMapWriteBudget = true;
         double xaeroMapWritePercent = 3.0D;
         int xaeroMapChunksPerSecond = 500;
+        boolean immediatelyFastHudBatching = true;
         double bannerLodDistance = 32.0D;
     }
 }
