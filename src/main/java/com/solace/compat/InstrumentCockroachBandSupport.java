@@ -1,6 +1,7 @@
 package com.solace.compat;
 
 import com.github.alexthe666.alexsmobs.entity.EntityCockroach;
+import com.solace.config.PerformanceConfig;
 import immersive_melodies.item.InstrumentItem;
 import immersive_melodies.resources.ServerMelodyManager;
 import immersive_melodies.util.EntityEquiper;
@@ -26,6 +27,10 @@ import java.util.UUID;
 public final class InstrumentCockroachBandSupport {
     private static final String IMMERSIVE_MELODIES = "immersive_melodies";
     private static final String ALEXS_MOBS = "alexsmobs";
+    // This class is first used by gameplay events, after Forge has fixed the loaded mod list.
+    private static final boolean CACHE_MOD_PRESENCE = PerformanceConfig.isInstrumentModPresenceCacheEnabled();
+    private static final boolean IMMERSIVE_MELODIES_LOADED = ModList.get().isLoaded(IMMERSIVE_MELODIES);
+    private static final boolean ALEXS_MOBS_LOADED = ModList.get().isLoaded(ALEXS_MOBS);
     private static final ResourceLocation COCKROACH_ID = new ResourceLocation(ALEXS_MOBS, "cockroach");
 
     private static final String BAND_SPAWNED = "SolaceInstrumentCockroachBandSpawnedV2";
@@ -248,10 +253,10 @@ public final class InstrumentCockroachBandSupport {
     }
 
     private static boolean isImmersiveMelodiesLoaded() {
-        return ModList.get().isLoaded(IMMERSIVE_MELODIES);
+        return CACHE_MOD_PRESENCE ? IMMERSIVE_MELODIES_LOADED : ModList.get().isLoaded(IMMERSIVE_MELODIES);
     }
 
     private static boolean isAlexsMobsLoaded() {
-        return ModList.get().isLoaded(ALEXS_MOBS);
+        return CACHE_MOD_PRESENCE ? ALEXS_MOBS_LOADED : ModList.get().isLoaded(ALEXS_MOBS);
     }
 }

@@ -68,6 +68,13 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
                     .anyMatch(mod -> mod.getModId().equals("create") && mod.getVersion().toString().equals("6.0.8"))
                     && PerformanceConfig.isCreateMountedStorageLookupEnabled();
         }
+        if (mixinClassName.endsWith(".EarthWaterChunkScanMixin")) {
+            return hasClass("potatowolfie/earth_and_water/EarthWater.class")
+                    && PerformanceConfig.isEarthWaterSectionScanEnabled();
+        }
+        if (mixinClassName.endsWith(".FluidGameRulesMixin")) {
+            return PerformanceConfig.isFluidGameRuleCacheEnabled();
+        }
         if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
             // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.
             return !hasClass("dev/kostromdan/mods/crash_assistant/common/mixin/CrashReportCategoryMixin.class");

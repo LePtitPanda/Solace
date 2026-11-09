@@ -96,6 +96,23 @@ public final class PerformanceConfig {
         return config.enabled && config.villageDiagnostics;
     }
 
+    // Exact common patches also apply to dedicated servers, independently of singleplayerOnly.
+    // Read these switches once at startup, outside the patched hot paths.
+    public static boolean isEarthWaterSectionScanEnabled() {
+        ConfigData config = load();
+        return config.enabled && config.earthWaterSectionScan;
+    }
+
+    public static boolean isFluidGameRuleCacheEnabled() {
+        ConfigData config = load();
+        return config.enabled && config.fluidGameRuleCache;
+    }
+
+    public static boolean isInstrumentModPresenceCacheEnabled() {
+        ConfigData config = load();
+        return config.enabled && config.instrumentModPresenceCache;
+    }
+
     private static synchronized ConfigData load() {
         if (data != null) {
             return data;
@@ -151,6 +168,9 @@ public final class PerformanceConfig {
         // Common-side mixin switch, read once at startup; independent of singleplayerOnly.
         public boolean noiseChunkIdentityWrap = true;
         public boolean createMountedStorageLookup = true;
+        public boolean earthWaterSectionScan = true;
+        public boolean fluidGameRuleCache = true;
+        public boolean instrumentModPresenceCache = true;
 
         public int healthyPoiQueriesPerTick = 2;
         public int pressuredPoiQueriesPerTick = 1;
