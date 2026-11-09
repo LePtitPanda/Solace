@@ -49,8 +49,8 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
     @Override public String getRefMapperConfig() { return null; }
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.endsWith(".NoiseChunkIdentityWrapMixin")) {
-            return CommonPerformancePatches.noiseChunkIdentityWrap();
+        if (mixinClassName.endsWith(".NoiseChunkHashMemoMixin")) {
+            return CommonPerformancePatches.noiseChunkHashMemo();
         }
         if (mixinClassName.contains(".chunkguards.")) {
             // ServerCore supplies these exact guards; defer to it if installed later.

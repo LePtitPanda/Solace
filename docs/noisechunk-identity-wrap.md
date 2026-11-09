@@ -1,116 +1,207 @@
-# NoiseChunk identity wrapping (Minecraft 1.20.1)
+# NoiseChunk equality-preserving hash memo (Minecraft 1.20.1)
 
-## Verified code and mappings
+## Replacement and configuration
 
-Inspected ForgeGradle's `forge-1.20.1-47.4.15_mapped_official_1.20.1-sources.jar`
-under `~/.gradle/caches/forge_gradle/minecraft_user_repo/net/minecraftforge/forge/`,
-and cross-checked the mapped class with Java 17 `javap -p -c`.
-Source references below are to `net/minecraft/world/level/levelgen/` inside that JAR.
-The SRG names were checked in ForgeGradle's
-`de/oceanlabs/mcp/mcp_config/1.20.1-20230612.114412/srg_to_official_1.20.1.tsrg`.
+`NoiseChunkHashMemoMixin` replaces the former identity-map mixin. The old map
+changed vanilla sharing and caused millions of duplicate cache wrappers in play.
+It has been removed, together with the `noiseChunkIdentityWrap` setting and JVM
+property. Old JSON files containing that field remain readable. Gson ignores the
+obsolete field and the existing config writer removes it on its next normal save.
 
-| Mojmap | SRG | Vanilla use |
+The new startup-only `noiseChunkHashMemo` setting defaults to **true** in both
+`PerformanceConfig.ConfigData` and the early `CommonPerformancePatches` reader.
+It is independent of `singleplayerOnly`. Either of these JVM properties disables
+it, as do `noiseChunkHashMemo=false` or the common `enabled=false` JSON setting.
+
+* `-Dsolace.commonPerformance.noiseChunkHashMemo=false`
+* `-Dsolace.commonPerformance=false`
+
+Restart after changing the setting. An old `noiseChunkIdentityWrap=false` does
+not disable the replacement. Missing files and omitted new fields use the new
+true default. The early reader does not load game classes or write configuration.
+Unreadable or malformed configuration disables common performance patches.
+
+## Verified 1.20.1 code and injection point
+
+Re-extracted the actual class files from ForgeGradle's cached
+`forge-1.20.1-47.4.15_mapped_official_1.20.1.jar` and decompiled them with
+Vineflower 1.10.1. Cross-checked the cached sources and Java 17 `javap` output.
+Inspection artifacts stay under `build/noise-hash/inspect`.
+
+| Mojmap | SRG | Behavior |
 | --- | --- | --- |
-| `NoiseChunk.wrapped` | `f_209161_` | Private final `Map<DensityFunction, DensityFunction>`, initialized with `HashMap` (NoiseChunk.java:34). |
-| `NoiseChunk.wrap` | `m_209213_` | Only map reader/writer: `computeIfAbsent(function, this::wrapNew)` (326-328). |
-| `NoiseChunk.wrapNew` | `m_209233_` | Builds marker wrappers, substitutes chunk-owned functions, unwraps holders, otherwise returns its argument (330-373). |
-| `NoiseRouter.mapAll` | `m_224412_` | First constructor traversal that calls `wrap` (NoiseChunk.java:119-120). |
+| `NoiseChunk.wrapped` | `f_209161_` | Private final equality-keyed map, initially a `HashMap`. |
+| `NoiseChunk.wrap` | `m_209213_` | `computeIfAbsent(function, this::wrapNew)`. |
+| `NoiseChunk.wrapNew` | `m_209233_` | Creates marker wrappers, substitutes chunk functions, unwraps holders, or returns the input. |
+| `NoiseRouter.mapAll` | `m_224412_` | First traversal using `this::wrap` in the constructor. |
 
-The map is never iterated; it is memoization, not a registry of lifecycle participants.
-The constructor also maps the final density graph, and `cachedClimateSampler` maps
-climate functions later. Replacing the map at constructor return would miss the
-expensive construction work and discard already established sharing.
+The injection remains immediately before that first `NoiseRouter.mapAll`, after
+all field initializers and before the first `wrap`. It requires exactly one site.
+This preserves compatibility with the previously inspected ModernFix 5.27.91
+priority-100 allocation mixin, which initializes a fastutil map and changes wrap
+to get / wrapNew / put. Both access paths work with the replacement. No methods
+are overwritten. The built refmap maps `mapAll` to `m_224412_`, and the reobfuscated
+mixin shadows `f_209161_`.
 
-## Why separate equal functions preserve vanilla values
+`wrapped` has no iteration consumers. Later final-density and climate traversals
+also use the same map. All marker registration, interpolation updates, blending,
+and cache lifetime behavior still belongs to `wrapNew` and the owning NoiseChunk.
 
-`DensityFunctions.HolderHolder.mapAll` recursively maps the held value and builds
-a new direct holder (DensityFunctions.java:549-560). `MarkerOrMarked.mapAll`
-recursively maps its child **before** passing a new marker to the visitor
-(705-717). Thus distinct structurally equal records really can reach `wrap`.
-Identity keys intentionally stop coalescing those records; this is a change in
-sharing, not in the density arithmetic.
+## Map semantics and cost
 
-For vanilla's deterministic functions and correctly placed cache markers:
+`DensityFunctionHashMemo.newWrappingMap()` creates a chunk-local
+`Object2ObjectOpenCustomHashMap`. Its strategy uses the function's original
+`hashCode()`, memoized by object identity, and compares keys with
+`a == b || (a != null && a.equals(b))`.
 
-* Non-marker functions keep the same computation. `wrapNew` either returns the
-  argument, unwraps `HolderHolder`, or returns the same per-chunk blend/beardifier
-  substitute. Identity keys do not affect those singleton substitutions.
-* `FlatCache` samples the same quart-coordinate grid at construction; `Cache2D`
-  caches the same X/Z-only function (NoiseChunk.java:443-477, 566-608). Duplicating
-  either cache changes work/storage, not a returned sample.
-* `CacheOnce` stores values by the owning chunk's point/array counters and falls
-  back to its child for other contexts (515-564). Counters only identify sampling
-  epochs; their numeric value does not enter density arithmetic. Separate caches
-  can miss independently and recompute the same point/array.
-* `CacheAllInCell` registers itself in `cellCaches` (479-513), and every entry is
-  filled at `selectCellYZ` (251-266). Postorder mapping keeps child caches before
-  parents, including duplicates. The same cell coordinates and array indexing
-  are used for each copy.
-* `NoiseInterpolator` registers itself in `interpolators` (622-659). `fillSlice`,
-  `selectCellYZ`, `updateForY/X/Z`, and `swapSlices` update **every** registered
-  instance (187-204, 251-287, 298-300). Equal copies therefore get identical
-  corner samples and the same interpolation operations and fractions (661-713).
+For stable, contract-compliant keys, the memoized integer always equals the
+original hash. Equal-but-distinct keys therefore enter the same equivalence class
+and reuse the first wrapper, including across collisions and table rehashes.
+Inductively, the same postorder visitor calls return the same canonical child
+wrappers, so the next parent keys retain the same equality relationships. The
+map makes the same number of `wrapNew` calls as vanilla for the same traversal.
 
-No random source is consumed by these wrappers, and adding copies does not alter
-the order of arithmetic within a sample. The same object still reuses its entry.
-Additional wrappers can increase allocation/sampling work; the benefit is removal
-of recursive record hashing/equality on every lookup, insert, and rehash.
-This reasoning does not promise equivalence for custom stateful density functions,
-broken equality implementations, or markers used outside their vanilla contracts
-(for example a Y-dependent function inside Cache2D).
+A cached identity hit avoids both structural hashing and equality. Distinct equal
+keys still need their structural equality comparison to establish sharing. Cold
+hashes still run the original recursive `hashCode`, including child hash calls.
+The optimization does not intercept recursive calls within a record hash. There
+is no equality-pair cache or per-chunk identity front map.
 
-## Installed-mod compatibility inspection
+`RandomState` retains its router, but `mapAll` rebuilds many of the keys that
+actually reach `NoiseChunk.wrap`. `MarkerOrMarked` maps its child and creates a
+new Marker. `HolderHolder` creates a new direct holder around its mapped child.
+Arithmetic and spline traversals also reconstruct nodes. Once child caches have
+been substituted, parents can contain chunk-specific wrappers. Consequently,
+cross-chunk identity reuse mainly helps retained leaves and other unchanged
+nodes. The memo also avoids repeat hashing during ModernFix get/put, subsequent
+lookups, and rehashes within a chunk. CPU improvement must be measured in play.
 
-Read only the installed JARs, including C2ME's nested module JARs, mixin configs,
-refmaps, class references, and decompiled relevant classes:
+## Hash stability
 
-* **ModernFix 5.27.91+mc1.20.1:**
-  `common.mixin.perf.worldgen_allocation.NoiseChunkMixin` (priority 100) initializes
-  `f_209161_` with `Object2ObjectOpenHashMap` and overwrites `m_209213_` with
-  `Map.get`, `wrapNew`, `Map.put`. This explains the supplied JFR's fastutil path;
-  it is not vanilla's original `HashMap.computeIfAbsent`. Its related
-  `MaterialRuleListMixin` and `optimize_surface_rules.SurfaceSystemMixin` do not
-  replace the wrap map.
-* **C2ME fabric 0.2.0+alpha.11.20.26.9:** scanned all bundled module JARs for
-  NoiseChunk / intermediary `class_6568` references and noise/density mixins.
-  Checked worldgen threading's `MixinNoiseChunkGenerator` executor redirects,
-  worldgen threading-fix generator mixin, vanilla aquifer generator/sampler
-  mixins, and allocs' `MixinChainedBlockSource` (MaterialRuleList). None replaces
-  `NoiseChunk.wrap`, `wrapNew`, or `wrapped`.
-* **Radium 0.12.4+git.26c9d8e:** checked `lithium.mixins.json`, refmap/class
-  references, and `gen.cached_generator_settings.NoiseChunkGeneratorMixin`.
-  That mixin caches the generator's sea level; no wrap/map patch was found.
-* **FerriteCore 6.0.1 Forge:** scanned mixin configs/refmaps and class references;
-  no NoiseChunk target or wrap/map patch was found.
+The inspected vanilla key graph has stable equality and hashes during wrapping
+and sampling. Java records alone only guarantee final component references.
+The relevant component implementations were also checked.
 
-Solace injects immediately before the constructor's `NoiseRouter.mapAll` call,
-after field initialization and before the first wrap. This supersedes ModernFix's
-initializer without competing with its overwrite or redirecting its get/put.
-Vanilla's computeIfAbsent works with the same identity map. There is one required
-injection site; unexpected constructor changes fail instead of silently leaving
-the optimization inactive. No global map or extra cross-thread sharing is added.
+* Marker, arithmetic, range, clamp, gradient, noise, and holder records retain
+  their components. Their generated hashes are structural. `visitNoise` creates
+  replacement NoiseHolder records rather than mutating them.
+* `Holder.Direct` hashes its final value. `Holder.Reference` uses object identity,
+  so registry binding does not change its hash.
+* `BlendedNoise`, `NormalNoise`, EndIslandDensityFunction, Beardifier, and the
+  chunk cache/interpolator classes inherit identity equality and hashing.
+  Mutable sample arrays, iterator positions, and interpolation counters do not
+  participate in hashes. `BlendedNoise.withNewRandom` creates a new instance.
+* Vanilla spline multipoints have fixed component references and value lists.
+  Array components use array identity in record equality/hashing. Vanilla does
+  not mutate spline value lists while evaluating a router.
 
-## Switch and validation
+There are mutable density-function *objects*, including cache wrappers. The
+relevant property is stability of hash/equality, which their mutable sampling
+state preserves. This inspection does not establish compatibility with every
+possible third-party implementation that mutates hash/equality between maps.
 
-`noiseChunkIdentityWrap` defaults to true in `solace-performance.json` and is read
-once by `CommonPerformancePatches` through `SolaceMixinPlugin.shouldApplyMixin`.
-The common `enabled` switch also applies; `singleplayerOnly` applies to the existing
-server scheduler, not this startup mixin. Restart after changing the key. JVM
-overrides `-Dsolace.commonPerformance=false` or
-`-Dsolace.commonPerformance.noiseChunkIdentityWrap=false` disable it. The early
-reader follows the existing client switch pattern, avoids loading Minecraft
-classes, never writes configuration, and disables the patch on a read/parse error.
-`PerformanceConfig.ConfigData` includes the key so its existing writer preserves it.
+## Streams Reflowing sampler inspection
 
-Validation: the requested online Java 17 Gradle build passed. Checked the packaged
-SRG shadow field and refmap's `NoiseRouter.mapAll` remapping. An isolated Java 17
-check using Minecraft's fastutil 8.5.9 inserted 16,384 distinct identity keys,
-including structurally equal pairs, forced rehashes, and checked repeated hits for
-both vanilla computeIfAbsent and ModernFix get/put: zero key hashCode/equals calls.
-Isolated gate checks (with FMLPaths pointed at worktree fixtures) passed for a
-missing file, omitted key, explicit key/global disables, both JVM overrides,
-malformed JSON, and enabling common behavior with `singleplayerOnly: true`.
+Inspected a fresh download of the manifest-listed CurseForge file 9486907,
+`StreamsReflowing-1.20.1-forge-2.17.1.jar`, inside this worktree. Its SHA-1 matched
+the instance manifest, `d3c9775f7b53d4c51cf14d1154f30ab9aeb30a86`.
+The instance mods/config directories were not modified.
 
-Minecraft was not launched. Actual Connector/Mixin application in the full pack,
-seed/chunk output comparisons, memory/duplicate-cache growth, and the measured JFR
-gain remain unverified. No instance mods/config files were changed.
+The snapshot sampler decoder constructs its own generator, frozen registry view,
+and RandomState, then retains that state in the sampler object. Repeated height
+queries pass that same RandomState to `NoiseBasedChunkGenerator.getBaseHeight`.
+Vanilla `iterateNoiseColumn` creates `new NoiseChunk(1, randomState, ...)`, so this
+mixin covers that path as well as normal chunks. Another batch path uses
+`NoiseChunk.forChunk` with the level's RandomState. Direct evaluators also read
+router density functions and may avoid NoiseChunk construction altogether.
+
+The snapshot router is separate from the live world's router, so identity reuse
+is scoped to objects actually shared by each sampler/state. It cannot assume
+shared object identities across those independently decoded routers. Inspected
+Streams SimpleFunction cache wrappers contain mutable sampling caches but have
+no equals/hashCode overrides, preserving stable object-identity hashing.
+No Streams implementation is copied into Solace.
+
+## Concurrency and memory bound
+
+The global memo is Minecraft's existing Guava `Cache`, with `weakKeys()` and
+`maximumSize(65_536)`. Guava weak keys use identity comparisons. Values contain
+only boxed integers. No cached value, loader, callback, or strategy closes over
+a density function, NoiseChunk, world, or router.
+
+Cache lookups, insertions, eviction, and reference-queue maintenance are
+thread-safe. Hash computation happens outside cache locks. Concurrent cold
+misses may recompute the same stable hash and safely publish the same integer.
+Each worker/sampler still owns its ordinary unsynchronized wrapping map, matching
+NoiseChunk's existing confinement requirements. This does not make a single
+NoiseChunk safe for simultaneous mutation.
+
+Weak keys permit chunk-specific trees and retired routers to be collected.
+The size policy bounds entries even when all keys are live, with normal Guava
+maintenance/concurrent-operation transients. Stale weak-reference metadata and
+integers can remain until cache maintenance runs, within that size policy.
+Eviction only causes another original hash computation on the next lookup.
+The limit is a fixed engineering choice, independent of chunk count. It adds
+bounded cache bookkeeping and does not promise a particular hit rate.
+
+## Offline verification
+
+Run `JAVA_HOME="C:/Program Files/Java/jdk-17" ./gradlew build --console=plain -q`
+(or set `$env:JAVA_HOME` first in PowerShell). `check` runs the standalone
+`verifyNoiseHashMemo` task. It can also be run separately.
+
+The verifier uses the real mapped DensityFunction, DensityFunctions factories,
+and mapAll implementations. It sets Bootstrap's guard flag in the isolated test
+JVM to permit static codec initialization without invoking Forge bootstrap.
+It does not decode registry/world data or start a Minecraft client or server.
+
+Passed under Java 17 with Minecraft's fastutil and Guava dependencies.
+
+* Both vanilla computeIfAbsent and ModernFix get/put produce 4,096 wrappers from
+  8,192 equal-but-distinct nested density trees, matching HashMap through rehashes.
+* Repeated real mapAll traversals produce the same 128 test marker wrappers and
+  map sizes as HashMap. The verifier substitutes lightweight test wrappers at
+  marker visits, exercising canonical-child sharing without allocating chunks.
+* Deliberate equal-hash unequal keys stay distinct. Repeated identity hits on a
+  nested record tree make zero hashCode/equals calls to its instrumented leaf.
+* Eight workers use independent maps and one shared global memo, preserving all
+  identity and equal-tree associations.
+* With 80,000 strongly reachable keys, cache maintenance keeps at most 65,536
+  entries. Evicting a retained key's hash preserves its existing wrapper
+  association. A discarded temporary record tree is collected while the memo lives.
+
+Separate isolated startup-gate checks passed for missing files, omitted keys,
+obsolete false keys, explicit new/global disables, singleplayerOnly, malformed
+JSON, and both JVM overrides. ConfigData serialization preserves the new true
+default and omits the obsolete field. Their fixtures remain under build.
+
+The full requested build passed. Existing unrelated deprecation warnings remain.
+Full-pack Mixin application, actual world output, and CPU/heap improvement remain
+in-game validation items.
+
+## In-game comparison
+
+Compare the new switch off and on in separate restarted sessions. Use the same
+pack, seed, dimension, exploration route, render/simulation distances, sampler
+workload, and comparable loaded-chunk counts. Include both stream preparation
+and ordinary exploration. Allow old preparation work to finish before comparing
+retained state.
+
+1. After a forced full GC, compare live NoiseChunk counts and FlatCache,
+   Cache2D, Marker, CacheOnce, CacheAllInCell, NoiseInterpolator, and double[]
+   counts/bytes. Normalize wrapper counts by live NoiseChunks. Different sample
+   and regular chunk sizes can change that ratio, so also compare workloads.
+   Counts should track the equality-map baseline, without the identity-map
+   explosion of roughly 2,800 FlatCaches per NoiseChunk.
+2. Inspect retained paths if NoiseChunks or arrays remain unexpectedly high.
+   The static memo should reach function keys only through weak references.
+   Compare total live heap and bounded Guava memo overhead across long runs and
+   world unload/reload as well as the initial exploration period.
+3. Record equivalent sampler-thread and C2ME-worker JFR profiles after warmup.
+   Compare absolute CPU time, throughput, allocation/GC rate, record hashing,
+   record equality, and Guava cache work. Structural equality between distinct
+   keys remains. A change in sampling phase can distort percentage-only results.
+4. Confirm the startup mixin applies with ModernFix/C2ME and compare deterministic
+   chunk/height outputs between the two settings. The offline tests exercise map
+   semantics and real traversal, with the full pack's runtime integration left to
+   this comparison.

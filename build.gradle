@@ -186,4 +186,24 @@ publishing {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
 }
+
+// Standalone library checks. This never runs a Minecraft client, server, or GameTest process.
+def compileNoiseHashChecks = tasks.register('compileNoiseHashChecks', JavaCompile) {
+    dependsOn tasks.named('classes')
+    source = fileTree('tools/noise-hash') { include '*.java' }
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('noise-hash/checks')
+    options.compilerArgs += ['-proc:none']
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('verifyNoiseHashMemo', JavaExec) {
+    dependsOn compileNoiseHashChecks
+    classpath = files(compileNoiseHashChecks.flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    workingDir = layout.buildDirectory.dir('noise-hash').get().asFile
+    mainClass = 'VerifyNoiseHashMemo'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyNoiseHashMemo') }
 // sync tick

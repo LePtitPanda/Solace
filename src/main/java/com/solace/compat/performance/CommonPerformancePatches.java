@@ -14,10 +14,10 @@ public final class CommonPerformancePatches {
 
     private CommonPerformancePatches() { }
 
-    public static boolean noiseChunkIdentityWrap() {
-        return SETTINGS.enabled && SETTINGS.noiseChunkIdentityWrap
+    public static boolean noiseChunkHashMemo() {
+        return SETTINGS.enabled && SETTINGS.noiseChunkHashMemo
                 && Boolean.parseBoolean(System.getProperty("solace.commonPerformance", "true"))
-                && Boolean.parseBoolean(System.getProperty("solace.commonPerformance.noiseChunkIdentityWrap", "true"));
+                && Boolean.parseBoolean(System.getProperty("solace.commonPerformance.noiseChunkHashMemo", "true"));
     }
 
     private static Settings readSettings() {
@@ -38,6 +38,6 @@ public final class CommonPerformancePatches {
 
     private static final class Settings {
         boolean enabled = true;
-        boolean noiseChunkIdentityWrap = false;
+        boolean noiseChunkHashMemo = true;
     }
 }
