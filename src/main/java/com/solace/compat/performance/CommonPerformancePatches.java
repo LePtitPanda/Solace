@@ -38,6 +38,6 @@ public final class CommonPerformancePatches {
 
     private static final class Settings {
         boolean enabled = true;
-        boolean noiseChunkHashMemo = true;
+        boolean noiseChunkHashMemo = false;
     }
 }

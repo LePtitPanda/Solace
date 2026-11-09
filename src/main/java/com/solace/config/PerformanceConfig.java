@@ -166,7 +166,7 @@ public final class PerformanceConfig {
         public boolean singleplayerOnly = true;
 
         // Common-side mixin switch, read once at startup; independent of singleplayerOnly.
-        public boolean noiseChunkHashMemo = true;
+        public boolean noiseChunkHashMemo = false;
         public boolean createMountedStorageLookup = true;
         public boolean earthWaterSectionScan = true;
         public boolean fluidGameRuleCache = true;
