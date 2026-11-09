@@ -45,6 +45,9 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".TfmgGoggleOverlayGuardMixin")) {
             return hasClass("com/drmangotea/tfmg/mixin/GoggleOverlayRendererMixin.class");
         }
+        if (mixinClassName.endsWith(".XaeroMapWriteBudgetMixin")) {
+            return hasClass("xaero/map/MapWriter.class") && ClientPerformancePatches.xaeroMapWriteBudget();
+        }
         if (mixinClassName.endsWith(".SubtleEffectsBiomeLookupMixin")) {
             return hasClass("einstein/subtle_effects/ticking/BiomeEffectsManager.class")
                     && ClientPerformancePatches.ambientBiomeCells();

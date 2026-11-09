@@ -69,6 +69,21 @@ public final class ClientPerformancePatches {
         return enabled("ambientBiomeCells", SETTINGS.ambientBiomeCells);
     }
 
+    public static boolean xaeroMapWriteBudget() {
+        return enabled("xaeroMapWriteBudget", SETTINGS.xaeroMapWriteBudget);
+    }
+
+    /** Render-thread time Xaero's World Map may spend writing tiles, in ns per elapsed ms. */
+    public static long xaeroMapWriteNanosPerMilli() {
+        double percent = Math.max(0.5D, Math.min(20.0D, SETTINGS.xaeroMapWritePercent));
+        return Math.round(percent * 10_000.0D);
+    }
+
+    /** Chunks Xaero's World Map may re-write per second while updating mapped terrain. */
+    public static int xaeroMapChunksPerSecond() {
+        return Math.max(100, Math.min(3000, SETTINGS.xaeroMapChunksPerSecond));
+    }
+
     private static boolean enabled(String name, boolean setting) {
         return SETTINGS.enabled && setting
                 && !hasMod("radiance")
@@ -115,6 +130,9 @@ public final class ClientPerformancePatches {
         boolean mergedDrawCommands = true;
         boolean trialSpawnerModelWrap = true;
         boolean ambientBiomeCells = true;
+        boolean xaeroMapWriteBudget = true;
+        double xaeroMapWritePercent = 3.0D;
+        int xaeroMapChunksPerSecond = 500;
         double bannerLodDistance = 32.0D;
     }
 }

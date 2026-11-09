@@ -82,6 +82,7 @@
   "client": [
     "JustTrialSpawnersModelWrapMixin",
     "SubtleEffectsBiomeLookupMixin",
+    "XaeroMapWriteBudgetMixin",
     "TfmgGoggleOverlayGuardMixin",
     "ResourcePackRecoveryMixin",
     "FzzyConditionCacheMixin",
