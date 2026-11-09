@@ -20,6 +20,12 @@ public final class CommonPerformancePatches {
                 && Boolean.parseBoolean(System.getProperty("solace.commonPerformance.noiseChunkHashMemo", "true"));
     }
 
+    public static boolean featureCycleResolver() {
+        return SETTINGS.enabled && SETTINGS.featureCycleResolver
+                && Boolean.parseBoolean(System.getProperty("solace.commonPerformance", "true"))
+                && Boolean.parseBoolean(System.getProperty("solace.commonPerformance.featureCycleResolver", "true"));
+    }
+
     private static Settings readSettings() {
         Path path = FMLPaths.CONFIGDIR.get().resolve("solace-performance.json");
         if (Files.isRegularFile(path)) {
@@ -39,5 +45,6 @@ public final class CommonPerformancePatches {
     private static final class Settings {
         boolean enabled = true;
         boolean noiseChunkHashMemo = false;
+        boolean featureCycleResolver = true;
     }
 }

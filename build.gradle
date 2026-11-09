@@ -65,6 +65,7 @@ sourceSets.main.resources {
 }
 
 repositories {
+    mavenCentral()
     maven {
         url "https://cursemaven.com"
     }
@@ -124,6 +125,10 @@ dependencies {
     compileOnly files('../mods/ImmediatelyFast-Forge-1.5.5+1.20.4.jar')
 
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    compileOnly(annotationProcessor('io.github.llamalad7:mixinextras-common:0.4.1'))
+    implementation(jarJar('io.github.llamalad7:mixinextras-forge:0.4.1')) {
+        jarJar.ranged(it, '[0.4.1,)')
+    }
 }
 
 mixin {
@@ -153,6 +158,7 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    archiveClassifier = 'slim'
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,
@@ -168,6 +174,15 @@ tasks.named('jar', Jar).configure {
 
     finalizedBy 'reobfJar'
 }
+
+// The distributable contains the method-wrapper runtime as a Forge Jar-in-Jar library.
+tasks.named('jarJar').configure {
+    archiveClassifier = ''
+    manifest.from(tasks.named('jar').get().manifest)
+    finalizedBy 'reobfJarJar'
+}
+reobf { jarJar {} }
+tasks.named('build').configure { dependsOn tasks.named('jarJar') }
 
 publishing {
     publications {
@@ -206,4 +221,54 @@ tasks.register('verifyNoiseHashMemo', JavaExec) {
 }
 
 tasks.named('check').configure { dependsOn tasks.named('verifyNoiseHashMemo') }
+
+def compileFeatureCycleChecks = tasks.register('compileFeatureCycleChecks', JavaCompile) {
+    dependsOn tasks.named('classes')
+    source = fileTree('tools/feature-cycle') { include '*.java' }
+    classpath = sourceSets.main.runtimeClasspath
+    destinationDirectory = layout.buildDirectory.dir('feature-cycle/checks')
+    options.compilerArgs += ['-proc:none']
+    javaCompiler = javaToolchains.compilerFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.register('verifyFeatureCycleResolver', JavaExec) {
+    dependsOn compileFeatureCycleChecks
+    classpath = files(compileFeatureCycleChecks.flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    workingDir = layout.buildDirectory.dir('feature-cycle').get().asFile
+    mainClass = 'VerifyFeatureCycleResolver'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+
+tasks.named('check').configure { dependsOn tasks.named('verifyFeatureCycleResolver') }
+
+[
+        Default: [json: '{}', enabled: true],
+        Disabled: [json: '{"featureCycleResolver":false}', enabled: false],
+        GlobalDisabled: [json: '{"enabled":false}', enabled: false],
+        Dedicated: [json: '{"singleplayerOnly":true,"featureCycleResolver":true}', enabled: true],
+        PropertyDisabled: [json: '{}', enabled: false, property: 'solace.commonPerformance.featureCycleResolver'],
+        CommonDisabled: [json: '{}', enabled: false, property: 'solace.commonPerformance']
+].each { name, fixture ->
+    def gate = tasks.register("verifyFeatureCycleGate${name}", JavaExec) {
+        dependsOn compileFeatureCycleChecks
+        classpath = files(compileFeatureCycleChecks.flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+        workingDir = layout.buildDirectory.dir("feature-cycle/gate-${name}").get().asFile
+        doFirst { workingDir.mkdirs() }
+        mainClass = 'VerifyFeatureCycleResolver'
+        args '--config', fixture.json.bytes.encodeBase64().toString(), fixture.enabled.toString()
+        if (fixture.property) systemProperty fixture.property, 'false'
+        javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+    }
+    tasks.named('check').configure { dependsOn gate }
+}
+
+tasks.register('verifyFeatureCycleArtifact', JavaExec) {
+    dependsOn compileFeatureCycleChecks, tasks.named('reobfJarJar')
+    classpath = files(compileFeatureCycleChecks.flatMap { it.destinationDirectory }) + sourceSets.main.runtimeClasspath
+    workingDir = layout.buildDirectory.dir('feature-cycle').get().asFile
+    mainClass = 'VerifyFeatureCycleArtifact'
+    args tasks.named('jarJar').get().archiveFile.get().asFile.absolutePath
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(17) }
+}
+tasks.named('check').configure { dependsOn tasks.named('verifyFeatureCycleArtifact') }
 // sync tick
