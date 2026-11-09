@@ -80,6 +80,8 @@
     "SophisticatedBackpackItemMixin"
   ],
   "client": [
+    "JustTrialSpawnersModelWrapMixin",
+    "SubtleEffectsBiomeLookupMixin",
     "TfmgGoggleOverlayGuardMixin",
     "ResourcePackRecoveryMixin",
     "FzzyConditionCacheMixin",
@@ -87,6 +89,9 @@
     "EmbeddiumVisibleSpriteCacheMixin",
     "EmbeddiumGraphStatsMixin",
     "EmbeddiumMergedDrawsMixin",
+    "EmbeddiumSchedulerStatsMixin",
+    "EmbeddiumSortStatsMixin",
+    "EmbeddiumChunkBuilderAccessor",
     "DynamicFpsLoadingMixin",
     "ReactiveMusicIdleMixin",
     "CatnipLightCacheMixin",

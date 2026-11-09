@@ -61,6 +61,14 @@ public final class ClientPerformancePatches {
         return enabled("mergedDrawCommands", SETTINGS.mergedDrawCommands) && version("embeddium", "0.3.32-beta.9999+mc1.20.1");
     }
 
+    public static boolean trialSpawnerModelWrap() {
+        return enabled("trialSpawnerModelWrap", SETTINGS.trialSpawnerModelWrap);
+    }
+
+    public static boolean ambientBiomeCells() {
+        return enabled("ambientBiomeCells", SETTINGS.ambientBiomeCells);
+    }
+
     private static boolean enabled(String name, boolean setting) {
         return SETTINGS.enabled && setting
                 && !hasMod("radiance")
@@ -105,6 +113,8 @@ public final class ClientPerformancePatches {
         boolean bannerPatternLod = true;
         boolean visibleSpriteCache = true;
         boolean mergedDrawCommands = true;
+        boolean trialSpawnerModelWrap = true;
+        boolean ambientBiomeCells = true;
         double bannerLodDistance = 32.0D;
     }
 }

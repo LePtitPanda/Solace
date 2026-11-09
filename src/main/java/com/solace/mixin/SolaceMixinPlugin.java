@@ -45,6 +45,14 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".TfmgGoggleOverlayGuardMixin")) {
             return hasClass("com/drmangotea/tfmg/mixin/GoggleOverlayRendererMixin.class");
         }
+        if (mixinClassName.endsWith(".SubtleEffectsBiomeLookupMixin")) {
+            return hasClass("einstein/subtle_effects/ticking/BiomeEffectsManager.class")
+                    && ClientPerformancePatches.ambientBiomeCells();
+        }
+        if (mixinClassName.endsWith(".JustTrialSpawnersModelWrapMixin")) {
+            return hasClass("com/breakinblocks/justtrialspawners/client/model/AppearanceModel.class")
+                    && ClientPerformancePatches.trialSpawnerModelWrap();
+        }
         if (mixinClassName.endsWith(".FzzyConditionCacheMixin")) {
             return ClientPerformancePatches.fzzyConditionCache();
         }
@@ -57,6 +65,13 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".EmbeddiumVisibleSpriteCacheMixin")) {
             // Stats mode keeps the mixin applied with the cache off, to time Embeddium's original loop.
             return ClientPerformancePatches.visibleSpriteCache() || Boolean.getBoolean("solace.spriteTickStats");
+        }
+        if (mixinClassName.endsWith(".EmbeddiumSchedulerStatsMixin")
+                || mixinClassName.endsWith(".EmbeddiumSortStatsMixin")) {
+            return Boolean.getBoolean("solace.schedulerStats");
+        }
+        if (mixinClassName.endsWith(".EmbeddiumChunkBuilderAccessor")) {
+            return Boolean.getBoolean("solace.schedulerStats");
         }
         if (mixinClassName.endsWith(".EmbeddiumMergedDrawsMixin")) {
             // Stats mode keeps the mixin applied with merging off, to count Embeddium's original commands.
