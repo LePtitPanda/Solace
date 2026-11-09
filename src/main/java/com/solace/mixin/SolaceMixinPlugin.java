@@ -51,6 +51,17 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".DynamicFpsLoadingMixin")) {
             return ClientPerformancePatches.dynamicFpsLoading();
         }
+        if (mixinClassName.endsWith(".EmbeddiumGraphStatsMixin")) {
+            return Boolean.getBoolean("solace.graphStats");
+        }
+        if (mixinClassName.endsWith(".EmbeddiumVisibleSpriteCacheMixin")) {
+            // Stats mode keeps the mixin applied with the cache off, to time Embeddium's original loop.
+            return ClientPerformancePatches.visibleSpriteCache() || Boolean.getBoolean("solace.spriteTickStats");
+        }
+        if (mixinClassName.endsWith(".EmbeddiumMergedDrawsMixin")) {
+            // Stats mode keeps the mixin applied with merging off, to count Embeddium's original commands.
+            return ClientPerformancePatches.mergedDrawCommands() || Boolean.getBoolean("solace.drawStats");
+        }
         if (mixinClassName.endsWith(".BannerPatternLodMixin")) {
             return ClientPerformancePatches.bannerPatternLod();
         }

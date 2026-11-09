@@ -53,6 +53,14 @@ public final class ClientPerformancePatches {
         return enabled("musicIdleWait", SETTINGS.musicIdleWait) && version("reactivemusic", "1.3.5");
     }
 
+    public static boolean visibleSpriteCache() {
+        return enabled("visibleSpriteCache", SETTINGS.visibleSpriteCache) && version("embeddium", "0.3.32-beta.9999+mc1.20.1");
+    }
+
+    public static boolean mergedDrawCommands() {
+        return enabled("mergedDrawCommands", SETTINGS.mergedDrawCommands) && version("embeddium", "0.3.32-beta.9999+mc1.20.1");
+    }
+
     private static boolean enabled(String name, boolean setting) {
         return SETTINGS.enabled && setting
                 && !hasMod("radiance")
@@ -95,6 +103,8 @@ public final class ClientPerformancePatches {
         boolean fzzyConditionCache = true;
         boolean dynamicFpsLoading = true;
         boolean bannerPatternLod = true;
+        boolean visibleSpriteCache = true;
+        boolean mergedDrawCommands = true;
         double bannerLodDistance = 32.0D;
     }
 }
