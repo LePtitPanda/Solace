@@ -42,6 +42,10 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".NoiseChunkIdentityWrapMixin")) {
             return CommonPerformancePatches.noiseChunkIdentityWrap();
         }
+        if (mixinClassName.contains(".chunkguards.")) {
+            // ServerCore supplies these exact guards; defer to it if installed later.
+            return !hasClass("me/wesley1808/servercore/mixin/optimizations/sync_loads/MapItemMixin.class");
+        }
         if (mixinClassName.endsWith(".CrashReportCategoryMixin")) {
             // Crash Assistant 1.11+ redirects the same String.equals call with an equivalent null-safe check.
             return !hasClass("dev/kostromdan/mods/crash_assistant/common/mixin/CrashReportCategoryMixin.class");

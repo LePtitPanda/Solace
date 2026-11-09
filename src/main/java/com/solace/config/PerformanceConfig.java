@@ -68,6 +68,11 @@ public final class PerformanceConfig {
         return load().skipUnloadedPoiCandidates;
     }
 
+    /** Loaded-only lookups for retryable AI, map updates and game-event listeners. */
+    public static boolean isChunkLoadGuardsEnabled(MinecraftServer server) {
+        return isEnabledFor(server) && load().chunkLoadGuards;
+    }
+
     public static boolean isPauseSaveCoalescingEnabled(MinecraftServer server) {
         return isEnabledFor(server) && load().pauseSaveCoalescing;
     }
@@ -141,6 +146,8 @@ public final class PerformanceConfig {
         public double poiPressureThresholdMillis = 35.0D;
         public int maxPoiSearchRadius = 64;
         public boolean skipUnloadedPoiCandidates = true;
+
+        public boolean chunkLoadGuards = true;
 
         public boolean pauseSaveCoalescing = false;
         public int pauseSaveIntervalSeconds = 90;
