@@ -23,6 +23,8 @@
     "ChoiceMixin",
     "CompositeMaterialArmorTierMixin",
     "DifficultyPacketMixin",
+    "EarthWaterChunkScanMixin",
+    "FluidGameRulesMixin",
     "InControlAttributeMapMixin",
     "InControlPositionCheckMixin",
     "IntegratedApiAsyncLocatorMixin",
