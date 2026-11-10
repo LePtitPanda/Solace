@@ -27,6 +27,29 @@ public abstract class DifficultySelectionScreenMixin {
     @Final
     private Component randomMessage;
 
+    @Shadow
+    private String selectedDifficultyId;
+
+    @Shadow
+    private float keepInventoryAnim;
+
+    @Shadow
+    private Integer keepInventoryAnchorIndex;
+
+    @Shadow
+    private boolean keepInventoryEnabled;
+
+    // The mod slides the Keep Inv row in for every selected difficulty (allowKeepInventory only
+    // sets its default), so collapse it each frame unless Cozy is selected.
+    @Inject(method = "updateAnimations", at = @At("TAIL"), remap = false)
+    private void solace$keepInventoryCozyOnly(float partialTick, CallbackInfo ci) {
+        if (!"cozy".equals(this.selectedDifficultyId)) {
+            this.keepInventoryAnim = 0.0F;
+            this.keepInventoryAnchorIndex = null;
+            this.keepInventoryEnabled = false;
+        }
+    }
+
     @Invoker("selectDifficulty")
     protected abstract void solace$selectDifficulty(LinggangoEvents.DifficultyDef difficulty);
 

@@ -49,7 +49,12 @@ import java.util.WeakHashMap;
 
 public final class OverworldSpawnManager {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final ResourceLocation HAMSTER = id("spawn", "hamster");
+    // Never allowed in the overworld; the aqua mages come from TravelOptics' own biome modifier/structures too.
+    private static final Set<ResourceLocation> BLOCKED_MOBS = ids(
+            "spawn:hamster",
+            "traveloptics:aqua_grandmaster",
+            "traveloptics:aquamancer"
+    );
     private static final TagKey<EntityType<?>> ICY_BREED_HORSES = TagKey.create(Registries.ENTITY_TYPE,
             id("icys-better-horses", "breed_horses"));
     private static final ResourceLocation FLUTTER = id("alexsmobs", "flutter");
@@ -304,7 +309,7 @@ public final class OverworldSpawnManager {
             return;
         }
         ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(event.getEntity().getType());
-        if (HAMSTER.equals(entityId)) {
+        if (BLOCKED_MOBS.contains(entityId)) {
             event.setCanceled(true);
         }
     }
