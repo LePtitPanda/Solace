@@ -42,5 +42,6 @@
       "type": "solace:item",
       "item": "minecraft:shield"
     }
-  ]
+  ],
+  "auto_claim": true
 }

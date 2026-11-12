@@ -149,6 +149,27 @@
           "to": "thanks"
         },
         {
+          "text": "Here is your bread.",
+          "visible_when": {
+            "type": "solace:quest_state",
+            "quest": "astralis:wardens/errand",
+            "state": "active"
+          },
+          "enabled_when": {
+            "type": "solace:has_item",
+            "item": "minecraft:bread",
+            "count": 3
+          },
+          "disabled_text": "Here is your bread. (you need 3)",
+          "actions": [
+            {
+              "type": "solace:deliver",
+              "npc": "astralis:cleric"
+            }
+          ],
+          "to": "@close"
+        },
+        {
           "text": "Goodbye.",
           "to": "@close"
         }

@@ -230,7 +230,7 @@ public final class QuestEngine {
         return false;
     }
 
-    /** Hands items over to an NPC for "solace:deliver" objectives bound to it. */
+    /** The "solace:deliver" action: hands items over for the deliver objectives bound to this NPC. */
     public static void deliver(ServerPlayer player, Dialogue.NpcBinding binding) {
         ServerCtx ctx = ctx(player);
         QuestLogic.Events events = events(player);
@@ -380,6 +380,12 @@ public final class QuestEngine {
                 Dialogue dialogue = content.dialogues.get(effect.target());
                 if (dialogue != null) {
                     DialogueManager.open(player, dialogue, DialogueManager.npc(player), null, null);
+                }
+            }
+            case "solace:deliver" -> {
+                Dialogue.NpcBinding binding = content.npcs.get(effect.target());
+                if (binding != null) {
+                    deliver(player, binding);
                 }
             }
             case "solace:close" -> DialogueManager.close(player);

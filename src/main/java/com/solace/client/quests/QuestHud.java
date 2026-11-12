@@ -24,7 +24,7 @@ import java.util.List;
 
 /** The on-screen quest tracker, its built-in compass, and in-world marker beams. */
 public final class QuestHud {
-    private static final int WIDTH = 150;
+    static final int WIDTH = 150;
 
     private QuestHud() {
     }
@@ -33,12 +33,12 @@ public final class QuestHud {
         Minecraft minecraft = Minecraft.getInstance();
         QuestClientConfig config = QuestClientConfig.get();
         if (!config.hud || minecraft.options.hideGui || minecraft.player == null
-                || minecraft.screen instanceof DialogueScreen || minecraft.screen instanceof QuestBookScreen) {
+                || minecraft.screen != null) {
             return;
         }
         Font font = minecraft.font;
-        int x = config.hudSide.equals("left") ? 6 : screenWidth - WIDTH - 6;
-        int y = (int) (screenHeight * Mth.clamp(config.hudTop, 0.0, 0.9));
+        int x = x(config, screenWidth);
+        int y = y(config, screenHeight);
         String dimension = minecraft.player.level().dimension().location().toString();
         for (QuestView quest : ClientQuests.QUESTS.values()) {
             if (!quest.tracked() || quest.status() != QuestView.ACTIVE) {
@@ -82,6 +82,14 @@ public final class QuestHud {
             }
             y += height + 4;
         }
+    }
+
+    static int x(QuestClientConfig config, int screenWidth) {
+        return 6 + (int) (Mth.clamp(config.hudX, 0.0, 1.0) * (screenWidth - WIDTH - 12));
+    }
+
+    static int y(QuestClientConfig config, int screenHeight) {
+        return 6 + (int) (Mth.clamp(config.hudY, 0.0, 1.0) * (screenHeight - 52));
     }
 
     /** Markers of a quest carry its id as a prefix ("quest#..."). */

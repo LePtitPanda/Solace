@@ -416,6 +416,7 @@ public final class QuestParser {
                 target = in.ref("dialogue", "dialogues", true);
             }
             case "solace:add_marker", "solace:remove_marker" -> target = in.ref("marker", "markers", true);
+            case "solace:deliver" -> target = in.ref("npc", "npcs", true);
             case "solace:close" -> {
             }
             case "solace:custom" -> {

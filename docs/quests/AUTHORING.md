@@ -132,7 +132,7 @@ it may use `solace:entity` to inspect the entity).
 | `solace:interact_block` | `block` | the player right-clicks a matching block |
 | `solace:interact_entity` | `entity`, `name` | the player right-clicks a matching entity |
 | `solace:item` | `item` (id or `#tag`), `consume` (default false) | the player holds `count` of the item (checked once a second). With `consume` the items are taken. Once complete it stays complete. |
-| `solace:deliver` | `item`, `npc` (NPC binding id) | the player right-clicks that NPC while carrying `count` of the item; the items are taken |
+| `solace:deliver` | `item`, `npc` (NPC binding id) | a dialogue choice runs the `solace:deliver` action (`npc`: the same binding id) while the player carries `count` of the item; the items are taken. Nothing is taken by the right-click itself. |
 | `solace:craft` | `item` | the player crafts it (counts the stack size) |
 | `solace:smelt` | `item` | the player takes it out of a furnace |
 | `solace:use_item` | `item` | the player uses it (eats, drinks, right-clicks) |
@@ -385,5 +385,5 @@ check <quest> <objective>                (players) tick a checkmark objective
   `config/solace-quests-client.json`, e.g. `"minecraft:book"`.
 - **HUD tracker**: up to 5 tracked quests. Toggle key is unbound by default. Position and other
   options are in `config/solace-quests-client.json`:
-  `hud`, `hudSide` (`left`/`right`), `hudTop` (0–0.9), `toasts`, `compass`, `xaeroWaypoints`,
+  `hud`, `hudX`, `hudY` (0–1, set by dragging in Mods → Solace → Config), `toasts`, `compass`, `xaeroWaypoints`,
   `beams`, `bookItem`.

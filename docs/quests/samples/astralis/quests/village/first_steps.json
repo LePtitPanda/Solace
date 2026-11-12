@@ -83,5 +83,6 @@
       "faction": "astralis:wardens",
       "amount": 20
     }
-  ]
+  ],
+  "auto_claim": true
 }

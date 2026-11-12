@@ -39,6 +39,15 @@ public final class QuestClientEvents {
             event.register(TOGGLE_HUD);
         }
 
+        /** The "Config" button of the mod list (and Configured) opens the tracker position screen. */
+        @SubscribeEvent
+        public static void onClientSetup(net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent event) {
+            net.minecraftforge.fml.ModLoadingContext.get().registerExtensionPoint(
+                    net.minecraftforge.client.ConfigScreenHandler.ConfigScreenFactory.class,
+                    () -> new net.minecraftforge.client.ConfigScreenHandler.ConfigScreenFactory(
+                            (minecraft, parent) -> new QuestHudConfigScreen(parent)));
+        }
+
         @SubscribeEvent
         public static void onOverlays(RegisterGuiOverlaysEvent event) {
             event.registerAboveAll("quest_tracker", QuestHud::render);

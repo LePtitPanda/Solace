@@ -64,7 +64,6 @@ public final class DialogueManager {
             ctx.data().positions.put("npc:" + binding.id(), target.level().dimension().location() + " "
                     + target.getBlockX() + " " + target.getBlockY() + " " + target.getBlockZ());
             ctx.changed();
-            QuestEngine.deliver(player, binding);
             for (Dialogue.Bound bound : binding.dialogues()) {
                 Dialogue dialogue = ctx.content().dialogues.get(bound.dialogue());
                 if (dialogue != null && (bound.when() == null || bound.when().test(ctx))) {

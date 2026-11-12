@@ -139,6 +139,7 @@ const effectCommon: Field[] = [f('text', 'Shown as', 'text', { advanced: true })
 
 export const EFFECTS: Record<string, Field[]> = {
   'solace:item': [f('item', 'Item', 'reg', { reg: 'items', required: true }), f('count', 'Count', 'number'), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:deliver': [f('npc', 'Hand in the deliver objectives of NPC', 'ref', { ref: 'npcs', required: true })],
   'solace:take_item': [
     f('item', 'Item', 'reg', { reg: 'items', required: true }),
     f('count', 'Count', 'number'),
