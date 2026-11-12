@@ -1,0 +1,46 @@
+{
+  "chapter": "astralis:wardens",
+  "title": "A Warden's Errand",
+  "description": "Marrow is hungry, and the wardens want to see you make yourself useful.",
+  "icon": {
+    "item": "minecraft:bread"
+  },
+  "position": {
+    "x": 0,
+    "y": 0
+  },
+  "objectives": [
+    {
+      "id": "bread",
+      "type": "solace:deliver",
+      "item": "minecraft:bread",
+      "count": 3,
+      "npc": "astralis:cleric",
+      "text": "Bring Marrow bread"
+    },
+    {
+      "id": "bell",
+      "type": "solace:interact_block",
+      "block": "minecraft:bell",
+      "text": "Ring a village bell"
+    },
+    {
+      "id": "sworn",
+      "type": "solace:checkmark",
+      "text": "Swear to keep the roads safe"
+    }
+  ],
+  "rewards": [
+    {
+      "id": "standing",
+      "type": "solace:reputation",
+      "faction": "astralis:wardens",
+      "amount": 40
+    },
+    {
+      "id": "shield",
+      "type": "solace:item",
+      "item": "minecraft:shield"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "title": "The Wardens",
+  "description": "Earn a place among those who keep the roads safe.",
+  "icon": {
+    "item": "minecraft:shield"
+  },
+  "order": 20,
+  "unlock": {
+    "type": "solace:quest_state",
+    "quest": "astralis:village/first_steps",
+    "state": "completed"
+  },
+  "hidden_until_unlocked": true
+}

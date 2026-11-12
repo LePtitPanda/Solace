@@ -1,0 +1,11 @@
+{
+  "target": "position",
+  "dimension": "minecraft:overworld",
+  "pos": [
+    0,
+    80,
+    0
+  ],
+  "label": "World origin",
+  "color": "gold"
+}

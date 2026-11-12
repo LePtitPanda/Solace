@@ -3,7 +3,17 @@ package com.solace.quests.state;
 import com.solace.quests.condition.Ctx;
 import com.solace.quests.content.QuestContent;
 import com.solace.quests.content.Target;
+import com.solace.quests.api.QuestApi;
+import com.solace.quests.network.QuestSync;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.storage.loot.LootContext;
@@ -76,8 +86,47 @@ public final class ServerCtx extends Ctx {
     }
 
     @Override
+    public int reputation(ResourceLocation faction) {
+        return Factions.get(this, faction);
+    }
+
+    @Override
+    public boolean inBiome(Target biome) {
+        Holder<Biome> here = player.level().getBiome(player.blockPosition());
+        return biome.tag() ? here.is(TagKey.create(Registries.BIOME, biome.id())) : here.is(biome.id());
+    }
+
+    @Override
+    public boolean inStructure(Target structure) {
+        ServerLevel level = player.serverLevel();
+        BlockPos pos = player.blockPosition();
+        if (!level.isLoaded(pos)) {
+            return false;
+        }
+        if (structure.tag()) {
+            return level.structureManager()
+                    .getStructureWithPieceAt(pos, TagKey.create(Registries.STRUCTURE, structure.id())).isValid();
+        }
+        Structure exact = level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(structure.id());
+        return exact != null && level.structureManager().getStructureWithPieceAt(pos, exact).isValid();
+    }
+
+    @Override
+    public boolean hasAdvancement(ResourceLocation id) {
+        Advancement advancement = player.server.getAdvancements().getAdvancement(id);
+        return advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone();
+    }
+
+    @Override
+    public boolean custom(String handler, String json) {
+        QuestApi.ConditionHandler registered = QuestApi.CONDITIONS.get(handler);
+        return registered != null && registered.test(player, json);
+    }
+
+    @Override
     public void changed() {
         data.index = null;
         store.setDirty();
+        QuestSync.dirty(player);
     }
 }

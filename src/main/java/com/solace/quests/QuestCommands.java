@@ -9,7 +9,12 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import com.mojang.brigadier.tree.LiteralCommandNode;
+import com.solace.quests.content.Dialogue;
+import com.solace.quests.content.Faction;
 import com.solace.quests.content.Problem;
+import com.solace.quests.dialogue.DialogueManager;
+import com.solace.quests.editor.EditorServer;
+import com.solace.quests.state.Factions;
 import com.solace.quests.content.Quest;
 import com.solace.quests.content.QuestContent;
 import com.solace.quests.content.QuestContentLoader;
@@ -39,6 +44,10 @@ public final class QuestCommands {
             new SimpleCommandExceptionType(Component.literal("Unknown quest"));
     private static final SuggestionProvider<CommandSourceStack> QUESTS = (context, builder) ->
             SharedSuggestionProvider.suggestResource(QuestContent.current.quests.keySet(), builder);
+    private static final SuggestionProvider<CommandSourceStack> DIALOGUES = (context, builder) ->
+            SharedSuggestionProvider.suggestResource(QuestContent.current.dialogues.keySet(), builder);
+    private static final SuggestionProvider<CommandSourceStack> FACTIONS = (context, builder) ->
+            SharedSuggestionProvider.suggestResource(QuestContent.current.factions.keySet(), builder);
     private static final Predicate<CommandSourceStack> OP = source -> source.hasPermission(2);
 
     private QuestCommands() {
@@ -99,6 +108,26 @@ public final class QuestCommands {
                         .then(literal("add").then(varArgs(true))))
                 .then(literal("debug").requires(OP).then(argument("player", EntityArgument.player())
                         .executes(context -> debug(context.getSource(), EntityArgument.getPlayer(context, "player")))))
+                .then(literal("dialogue").requires(OP).then(literal("open")
+                        .then(argument("player", EntityArgument.player())
+                                .then(argument("dialogue", ResourceLocationArgument.id()).suggests(DIALOGUES)
+                                        .executes(context -> dialogue(context, null))
+                                        .then(argument("node", StringArgumentType.word())
+                                                .executes(context -> dialogue(context,
+                                                        StringArgumentType.getString(context, "node"))))))))
+                .then(literal("rep").requires(OP)
+                        .then(literal("get").then(argument("player", EntityArgument.player())
+                                .then(argument("faction", ResourceLocationArgument.id()).suggests(FACTIONS)
+                                        .executes(context -> rep(context, 0)))))
+                        .then(literal("set").then(argument("player", EntityArgument.player())
+                                .then(argument("faction", ResourceLocationArgument.id()).suggests(FACTIONS)
+                                        .then(argument("value", IntegerArgumentType.integer())
+                                                .executes(context -> rep(context, 1))))))
+                        .then(literal("add").then(argument("player", EntityArgument.player())
+                                .then(argument("faction", ResourceLocationArgument.id()).suggests(FACTIONS)
+                                        .then(argument("value", IntegerArgumentType.integer())
+                                                .executes(context -> rep(context, 2)))))))
+                .then(literal("editor").requires(OP).executes(context -> EditorServer.open(context.getSource())))
                 .then(literal("claim").then(argument("quest", ResourceLocationArgument.id()).suggests(QUESTS)
                         .executes(context -> {
                             int count = QuestEngine.claim(context.getSource().getPlayerOrException(), quest(context),
@@ -108,17 +137,39 @@ public final class QuestCommands {
                 .then(literal("check").then(argument("quest", ResourceLocationArgument.id()).suggests(QUESTS)
                         .then(argument("objective", StringArgumentType.word()).executes(context -> {
                             // The player-facing "tick this off" intent; only checkmark objectives accept it.
-                            ServerPlayer player = context.getSource().getPlayerOrException();
-                            Quest target = quest(context);
-                            String objectiveId = StringArgumentType.getString(context, "objective");
-                            boolean checkmark = target.phases().stream().flatMap(phase -> phase.objectives().stream())
-                                    .anyMatch(o -> o.id().equals(objectiveId) && o.type().equals("solace:checkmark"));
-                            boolean done = checkmark && QuestLogic.setProgress(QuestEngine.ctx(player), target,
-                                    objectiveId, 1, QuestEngine.events(player));
+                            boolean done = QuestEngine.check(context.getSource().getPlayerOrException(),
+                                    quest(context), StringArgumentType.getString(context, "objective"));
                             return reply(context, done, "Checked", "That is not a checkmark objective you can tick now");
                         }))));
         LiteralCommandNode<CommandSourceStack> node = dispatcher.register(root);
         dispatcher.register(literal("sq").redirect(node));
+    }
+
+    private static int dialogue(CommandContext<CommandSourceStack> context, String node) throws CommandSyntaxException {
+        ServerPlayer player = EntityArgument.getPlayer(context, "player");
+        Dialogue dialogue = QuestContent.current.dialogues.get(ResourceLocationArgument.getId(context, "dialogue"));
+        return reply(context, dialogue != null && DialogueManager.open(player, dialogue, null, node, null),
+                "Dialogue opened", "Unknown dialogue or node, or no start entry matches");
+    }
+
+    private static int rep(CommandContext<CommandSourceStack> context, int mode) throws CommandSyntaxException {
+        ServerCtx ctx = QuestEngine.ctx(EntityArgument.getPlayer(context, "player"));
+        Faction faction = ctx.content().factions.get(ResourceLocationArgument.getId(context, "faction"));
+        if (faction == null) {
+            return reply(context, false, "", "Unknown faction");
+        }
+        if (mode == 1 && faction.gossip()) {
+            return reply(context, false, "", "This faction mirrors villager gossip: use \"rep add\" near villagers");
+        }
+        if (mode == 1) {
+            Factions.set(ctx, faction, IntegerArgumentType.getInteger(context, "value"));
+        } else if (mode == 2) {
+            Factions.add(ctx, faction, IntegerArgumentType.getInteger(context, "value"), true);
+        }
+        QuestLogic.evaluate(ctx, QuestEngine.events(ctx.player));
+        int value = Factions.get(ctx, faction.id());
+        return reply(context, true, faction.id() + " = " + value + " ("
+                + faction.ranks().get(faction.rankIndex(value)).id() + ")", "");
     }
 
     private static com.mojang.brigadier.builder.ArgumentBuilder<CommandSourceStack, ?> flagArgs(boolean value) {
@@ -187,7 +238,9 @@ public final class QuestCommands {
             line(source, problem.toString(), problem.error() ? ChatFormatting.RED : ChatFormatting.YELLOW);
         }
         long errors = content.errorCount();
-        line(source, content.chapters.size() + " chapters, " + content.quests.size() + " quests, " + errors
+        line(source, content.chapters.size() + " chapters, " + content.quests.size() + " quests, "
+                + content.dialogues.size() + " dialogues, " + content.npcs.size() + " npcs, " + content.factions.size()
+                + " factions, " + errors
                 + " errors, " + (content.problems.size() - errors) + " warnings",
                 errors > 0 ? ChatFormatting.RED : ChatFormatting.GREEN);
         return (int) errors;
@@ -200,6 +253,8 @@ public final class QuestCommands {
             line(source, "Quest save is from a newer Solace: progress is not being saved!", ChatFormatting.RED);
         }
         line(source, "flags: " + data.flags + "  variables: " + data.variables + "  unlocked: " + data.unlocked,
+                ChatFormatting.GRAY);
+        line(source, "reputation: " + data.reputation + "  tracked: " + data.tracked + "  markers: " + data.markers,
                 ChatFormatting.GRAY);
         data.quests.forEach((id, state) -> {
             boolean orphaned = !ctx.content().quests.containsKey(id);

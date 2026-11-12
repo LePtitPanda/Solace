@@ -109,6 +109,31 @@ class QuestCoreTest {
         }
 
         @Override
+        public int reputation(ResourceLocation faction) {
+            return data.reputation.getOrDefault(faction, 0);
+        }
+
+        @Override
+        public boolean inBiome(Target biome) {
+            return false;
+        }
+
+        @Override
+        public boolean inStructure(Target structure) {
+            return false;
+        }
+
+        @Override
+        public boolean hasAdvancement(ResourceLocation advancement) {
+            return false;
+        }
+
+        @Override
+        public boolean custom(String handler, String data) {
+            return false;
+        }
+
+        @Override
         public void changed() {
         }
     }
@@ -287,7 +312,11 @@ class QuestCoreTest {
         QuestContent content = QuestContent.build(
                 QuestContentLoader.read(ResourceManager.Empty.INSTANCE, samples), QuestContent.EMPTY, null);
         assertEquals(List.of(), content.problems);
-        assertEquals(4, content.quests.size());
+        assertEquals(6, content.quests.size());
+        assertEquals(1, content.dialogues.size());
+        assertEquals(1, content.bindings.size());
+        assertEquals(3, content.factions.size());
+        assertEquals(1, content.markers.size());
 
         QuestContent broken = QuestContent.build(
                 QuestContentLoader.read(ResourceManager.Empty.INSTANCE, samples.resolve("broken")), content, null);
@@ -295,5 +324,94 @@ class QuestCoreTest {
         assertTrue(paths.containsAll(List.of("$.title", "$.titel", "$.objectives[0].count", "$.objectives[1].type")),
                 paths.toString());
         assertTrue(broken.quests.isEmpty());
+    }
+
+    @Test
+    void dialogueRejectsUnknownNodesAndReferences() {
+        String dialogue = """
+                {"start":"a","nodes":{
+                  "a":{"text":"Hi","choices":[{"text":"Go","to":"nowhere"}]},
+                  "b":{"text":[{"when":{"type":"solace:flag","flag":"x"},"text":"X"},{"text":"Y"}],"to":"@close"}}}""";
+        QuestContent content = QuestContent.build(files("dialogues", "talk", dialogue), QuestContent.EMPTY, null);
+        Problem problem = content.problems.stream().filter(Problem::error).findFirst().orElseThrow();
+        assertEquals("$.nodes.a.choices[0].to", problem.path());
+        assertTrue(content.dialogues.isEmpty());
+
+        QuestContent fixed = QuestContent.build(files("dialogues", "talk", dialogue.replace("nowhere", "b"),
+                "npcs", "guide", "{\"entity\":\"minecraft:villager\",\"dialogue\":\"t:missing\"}"),
+                QuestContent.EMPTY, null);
+        assertEquals(2, fixed.dialogues.get(id("talk")).nodes().get("b").text().size());
+        assertTrue(fixed.npcs.isEmpty(), "binding to an unknown dialogue is dropped");
+    }
+
+    @Test
+    void factionRanksAndReputationConditions() {
+        String faction = """
+                {"name":"Wardens","ranks":[{"id":"friendly","name":"Friendly","at":50},
+                  {"id":"neutral","name":"Neutral","at":0},{"id":"hated","name":"Hated","at":-100}]}""";
+        String quest = """
+                {"chapter":"t:village","title":"Trusted","objectives":[
+                  {"id":"rank","type":"solace:faction_rank","faction":"t:wardens","rank":"friendly"}]}""";
+        QuestContent content = QuestContent.build(files("chapters", "village", CHAPTER, "factions", "wardens",
+                faction, "quests", "trusted", quest), QuestContent.EMPTY, null);
+        assertEquals(List.of(), content.problems);
+        Faction wardens = content.factions.get(id("wardens"));
+        assertEquals("hated", wardens.ranks().get(0).id(), "ranks are sorted by threshold");
+        assertEquals(1, wardens.rankIndex(49));
+        assertEquals(2, wardens.rankIndex(50));
+
+        Fake ctx = new Fake(content);
+        Quest trusted = content.quests.get(id("trusted"));
+        QuestLogic.start(ctx, trusted, false, QUIET);
+        ctx.data.reputation.put(id("wardens"), 49);
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(View.ACTIVE, QuestLogic.view(ctx, trusted));
+        ctx.data.reputation.put(id("wardens"), 80);
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(View.COMPLETED, QuestLogic.view(ctx, trusted), "rank objective completes by itself");
+    }
+
+    @Test
+    void timeLimitFailsAndResetAllowsRetry() {
+        String timed = """
+                {"chapter":"t:village","title":"Timed","time_limit_seconds":10,"on_fail":"reset",
+                 "objectives":[{"id":"tick","type":"solace:checkmark"}]}""";
+        Fake ctx = new Fake(QuestContent.build(files("chapters", "village", CHAPTER, "quests", "timed", timed),
+                QuestContent.EMPTY, null));
+        Quest quest = ctx.content.quests.get(id("timed"));
+        QuestLogic.start(ctx, quest, false, QUIET);
+        ctx.time = 199;
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(View.ACTIVE, QuestLogic.view(ctx, quest));
+        ctx.time = 200;
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(PlayerQuestData.Status.FAILED, ctx.data.quests.get(id("timed")).status);
+        assertEquals(View.AVAILABLE, QuestLogic.view(ctx, quest), "on_fail reset lets the player try again");
+        assertTrue(ctx.data.tracked.isEmpty(), "a finished quest leaves the tracker");
+    }
+
+    @Test
+    void transitionAndPhaseActionsAreReported() {
+        String quest = """
+                {"chapter":"t:village","title":"Acts","phases":[
+                  {"id":"one","objectives":[{"id":"tick","type":"solace:checkmark"}],
+                   "transitions":[{"to":"two","when":{"type":"solace:objectives_complete"},
+                     "actions":[{"type":"solace:set_flag","flag":"left_one"}]}]},
+                  {"id":"two","on_enter":[{"type":"solace:give_item","item":"minecraft:apple"}],
+                   "objectives":[{"id":"never","type":"solace:checkmark"}]}]}""";
+        Fake ctx = new Fake(QuestContent.build(files("chapters", "village", CHAPTER, "quests", "acts", quest),
+                QuestContent.EMPTY, null));
+        assertEquals(List.of(), ctx.content.problems);
+        List<String> ran = new ArrayList<>();
+        QuestLogic.Events events = new QuestLogic.Events() {
+            @Override
+            public void actions(Quest q, List<Quest.Reward> actions) {
+                actions.forEach(action -> ran.add(action.type()));
+            }
+        };
+        Quest acts = ctx.content.quests.get(id("acts"));
+        QuestLogic.start(ctx, acts, false, events);
+        QuestLogic.setProgress(ctx, acts, "tick", 1, events);
+        assertEquals(List.of("solace:flag", "solace:item"), ran, "aliases are normalised; transition runs before on_enter");
     }
 }

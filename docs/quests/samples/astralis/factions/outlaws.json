@@ -1,0 +1,27 @@
+{
+  "name": "Outlaws",
+  "color": "#B45F5F",
+  "icon": {
+    "item": "minecraft:crossbow"
+  },
+  "default": 0,
+  "min": -200,
+  "max": 200,
+  "ranks": [
+    {
+      "id": "hunted",
+      "name": "Hunted",
+      "at": -200
+    },
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "at": -20
+    },
+    {
+      "id": "accomplice",
+      "name": "Accomplice",
+      "at": 60
+    }
+  ]
+}

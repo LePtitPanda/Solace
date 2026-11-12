@@ -1,0 +1,163 @@
+{
+  "start": [
+    {
+      "node": "report",
+      "when": {
+        "type": "solace:phase",
+        "quest": "astralis:village/first_steps",
+        "phase": "report"
+      }
+    },
+    {
+      "node": "busy",
+      "when": {
+        "type": "solace:quest_state",
+        "quest": "astralis:village/first_steps",
+        "state": "active"
+      }
+    },
+    {
+      "node": "after",
+      "when": {
+        "type": "solace:quest_state",
+        "quest": "astralis:village/first_steps",
+        "state": "completed"
+      }
+    },
+    {
+      "node": "greet"
+    }
+  ],
+  "nodes": {
+    "greet": {
+      "speaker": "Marrow",
+      "text": "Hm? Oh. A new face. The readings said nothing about a new face.",
+      "choices": [
+        {
+          "text": "Can I help with anything?",
+          "to": "offer"
+        },
+        {
+          "text": "What readings?",
+          "to": "readings"
+        },
+        {
+          "text": "Just passing through.",
+          "to": "@close"
+        }
+      ]
+    },
+    "readings": {
+      "speaker": "Marrow",
+      "text": "The air hums when the dead walk. Most people cannot hear it. I wish I could not.",
+      "to": "greet"
+    },
+    "offer": {
+      "speaker": "Marrow",
+      "text": [
+        {
+          "when": {
+            "type": "solace:faction_rank",
+            "faction": "astralis:wardens",
+            "op": ">=",
+            "rank": "friendly"
+          },
+          "text": "For a friend of the wardens? Gladly. The dead are restless by the old mill."
+        },
+        {
+          "text": "If you must. The dead are restless near the village. Thin them out."
+        }
+      ],
+      "choices": [
+        {
+          "text": "I will deal with them.",
+          "actions": [
+            {
+              "type": "solace:start_quest",
+              "quest": "astralis:village/first_steps"
+            }
+          ],
+          "to": "@close"
+        },
+        {
+          "text": "Not today.",
+          "to": "@close",
+          "cooldown_seconds": 30
+        }
+      ]
+    },
+    "busy": {
+      "speaker": "Marrow",
+      "text": "Three, I said. Come back when it is done.",
+      "auto_advance_seconds": 4,
+      "to": "@close"
+    },
+    "report": {
+      "speaker": "Marrow",
+      "text": "Quiet again? Good. Good.",
+      "to": "report_done"
+    },
+    "report_done": {
+      "speaker": "Marrow",
+      "text": "Take this candle. You have earned a place at the fire.",
+      "actions": [
+        {
+          "type": "solace:give_item",
+          "item": "minecraft:candle",
+          "count": 2
+        }
+      ],
+      "to": "@close"
+    },
+    "after": {
+      "speaker": "Marrow",
+      "text": "The wardens were asking about you. That is usually a good sign.",
+      "choices": [
+        {
+          "text": "Give me something to do. (3 bread)",
+          "visible_when": {
+            "type": "solace:quest_state",
+            "quest": "astralis:wardens/errand",
+            "state": "available"
+          },
+          "actions": [
+            {
+              "type": "solace:start_quest",
+              "quest": "astralis:wardens/errand"
+            }
+          ],
+          "to": "@close"
+        },
+        {
+          "text": "I brought you a diamond.",
+          "enabled_when": {
+            "type": "solace:has_item",
+            "item": "minecraft:diamond"
+          },
+          "disabled_text": "I brought you a diamond. (you have none)",
+          "actions": [
+            {
+              "type": "solace:take_item",
+              "item": "minecraft:diamond"
+            },
+            {
+              "type": "solace:reputation",
+              "faction": "astralis:wardens",
+              "amount": 30
+            }
+          ],
+          "to": "thanks"
+        },
+        {
+          "text": "Goodbye.",
+          "to": "@close"
+        }
+      ]
+    },
+    "thanks": {
+      "speaker": "Marrow",
+      "text": "Generous. The wardens will hear of it.",
+      "to": "@close"
+    }
+  }
+}

@@ -53,8 +53,10 @@ public final class QuestContentLoader extends SimplePreparableReloadListener<Map
     private static QuestContent apply(Map<Key, Raw> files) {
         QuestContent content = QuestContent.build(files, QuestContent.current, QuestContentLoader::exists);
         QuestContent.current = content;
-        LOGGER.info("[Solace Quests] Loaded {} chapters, {} quests ({} errors, {} warnings)", content.chapters.size(),
-                content.quests.size(), content.errorCount(), content.problems.size() - content.errorCount());
+        LOGGER.info("[Solace Quests] Loaded {} chapters, {} quests, {} dialogues, {} npcs, {} factions, {} markers "
+                        + "({} errors, {} warnings)", content.chapters.size(), content.quests.size(),
+                content.dialogues.size(), content.npcs.size(), content.factions.size(), content.markers.size(),
+                content.errorCount(), content.problems.size() - content.errorCount());
         content.problems.forEach(problem -> {
             if (problem.error()) {
                 LOGGER.error("[Solace Quests] {}", problem);
@@ -65,7 +67,7 @@ public final class QuestContentLoader extends SimplePreparableReloadListener<Map
         return content;
     }
 
-    private static boolean exists(String registry, ResourceLocation id) {
+    public static boolean exists(String registry, ResourceLocation id) {
         return switch (registry) {
             case "item" -> ForgeRegistries.ITEMS.containsKey(id);
             case "block" -> ForgeRegistries.BLOCKS.containsKey(id);
@@ -74,7 +76,7 @@ public final class QuestContentLoader extends SimplePreparableReloadListener<Map
         };
     }
 
-    private static Path looseRoot() {
+    public static Path looseRoot() {
         return FMLPaths.CONFIGDIR.get().resolve("solace").resolve("quests");
     }
 

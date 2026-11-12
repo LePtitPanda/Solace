@@ -1,11 +1,17 @@
 package com.solace.quests.state;
 
 import com.mojang.logging.LogUtils;
+import com.solace.quests.api.QuestApi;
+import com.solace.quests.api.QuestEvent;
+import com.solace.quests.content.Dialogue;
+import com.solace.quests.content.Faction;
 import com.solace.quests.content.Quest;
 import com.solace.quests.content.Quest.Objective;
 import com.solace.quests.content.Quest.Phase;
 import com.solace.quests.content.Quest.Reward;
 import com.solace.quests.content.QuestContent;
+import com.solace.quests.dialogue.DialogueManager;
+import com.solace.quests.network.QuestNetwork;
 import com.solace.quests.state.PlayerQuestData.Active;
 import com.solace.quests.state.PlayerQuestData.QuestState;
 import com.solace.quests.state.PlayerQuestData.Status;
@@ -14,6 +20,7 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -21,6 +28,7 @@ import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.items.ItemHandlerHelper;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
@@ -31,9 +39,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 
-/** Server-side entry point: turns game events into {@link QuestLogic} calls and hands out rewards. */
+/** Server-side entry point: turns game events into {@link QuestLogic} calls and runs effects. */
 public final class QuestEngine {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static int effectDepth;
 
     private QuestEngine() {
     }
@@ -42,41 +51,47 @@ public final class QuestEngine {
         return new ServerCtx(player);
     }
 
-    /** Player feedback. Chat lines for now; toasts and the HUD replace them with the quest book. */
     public static QuestLogic.Events events(ServerPlayer player) {
         return new QuestLogic.Events() {
             @Override
             public void started(Quest quest) {
-                say(player, "Quest started: ", quest.title(), ChatFormatting.GOLD);
+                QuestNetwork.toast(player, "started", Component.literal("Quest started"), quest.title(), quest.icon());
                 story(player, quest.phases().get(0));
+                post(QuestEvent.Type.QUEST_STARTED, player, quest.id(), "", 0);
             }
 
             @Override
             public void phase(Quest quest, Phase phase) {
+                QuestNetwork.toast(player, "phase", Component.literal("Quest updated"), quest.title(), quest.icon());
                 story(player, phase);
+                post(QuestEvent.Type.PHASE_CHANGED, player, quest.id(), phase.id(), 0);
             }
 
             @Override
             public void completed(Quest quest) {
-                say(player, "Quest completed: ", quest.title(), ChatFormatting.GREEN);
+                QuestNetwork.toast(player, "completed", Component.literal("Quest completed"), quest.title(),
+                        quest.icon());
                 if (quest.autoClaim()) {
                     claim(player, quest, null);
-                } else if (!quest.rewards().isEmpty()) {
-                    player.sendSystemMessage(Component.literal("Rewards ready: /sq claim " + quest.id())
-                            .withStyle(ChatFormatting.GRAY));
                 }
+                post(QuestEvent.Type.QUEST_COMPLETED, player, quest.id(), "", 0);
             }
 
             @Override
             public void failed(Quest quest) {
-                say(player, "Quest failed: ", quest.title(), ChatFormatting.RED);
+                QuestNetwork.toast(player, "failed", Component.literal("Quest failed"), quest.title(), quest.icon());
+                post(QuestEvent.Type.QUEST_FAILED, player, quest.id(), "", 0);
+            }
+
+            @Override
+            public void actions(Quest quest, List<Reward> actions) {
+                run(ctx(player), actions);
             }
         };
     }
 
-    private static void say(ServerPlayer player, String prefix, Component title, ChatFormatting color) {
-        player.sendSystemMessage(Component.literal(prefix).withStyle(color)
-                .append(title.copy().withStyle(ChatFormatting.WHITE)));
+    public static void post(QuestEvent.Type type, ServerPlayer player, ResourceLocation id, String detail, int value) {
+        MinecraftForge.EVENT_BUS.post(new QuestEvent(type, player, id, detail, value));
     }
 
     private static void story(ServerPlayer player, Phase phase) {
@@ -105,25 +120,43 @@ public final class QuestEngine {
         return data.index;
     }
 
+    public static List<Active> active(ServerCtx ctx, String type) {
+        return List.copyOf(index(ctx).getOrDefault(type, List.of()));
+    }
+
     /**
      * A game event that may progress objectives of {@code type}. Cost: one set lookup when no
      * loaded quest uses the type, otherwise only this player's active objectives of that type.
+     * {@code entity} is what the objective's "when" may inspect with a solace:entity condition.
      */
-    public static void objective(ServerPlayer player, String type, Predicate<Objective> match, int amount) {
+    public static void objective(ServerPlayer player, String type, Predicate<Objective> match, int amount,
+                                 Entity entity) {
         if (!QuestContent.current.objectiveTypes.contains(type)) {
             return;
         }
         ServerCtx ctx = ctx(player);
-        List<Active> active = index(ctx).get(type);
-        if (active == null) {
-            return;
-        }
+        ctx.entity = entity;
         QuestLogic.Events events = events(player);
-        for (Active entry : List.copyOf(active)) {
+        for (Active entry : active(ctx, type)) {
             Objective objective = entry.objective();
             if (match.test(objective) && whenPasses(ctx, entry)) {
-                QuestLogic.addProgress(ctx, entry.quest(), objective.id(), amount, events);
+                progress(ctx, entry, amount, false, events);
             }
+        }
+    }
+
+    private static void progress(ServerCtx ctx, Active entry, int value, boolean set, QuestLogic.Events events) {
+        QuestState state = ctx.data().quests.get(entry.quest().id());
+        String id = entry.objective().id();
+        int before = state == null ? 0 : state.progress.getOrDefault(id, 0);
+        if (set) {
+            QuestLogic.setProgress(ctx, entry.quest(), id, value, events);
+        } else {
+            QuestLogic.addProgress(ctx, entry.quest(), id, value, events);
+        }
+        int after = state == null ? 0 : state.progress.getOrDefault(id, 0);
+        if (after != before) {
+            post(QuestEvent.Type.OBJECTIVE_PROGRESSED, ctx.player, entry.quest().id(), id, after);
         }
     }
 
@@ -141,11 +174,15 @@ public final class QuestEngine {
     public static void tick(ServerPlayer player) {
         QuestContent content = QuestContent.current;
         ServerCtx ctx = ctx(player);
-        if (ctx.data().quests.isEmpty() && content.autoStart.isEmpty()) {
+        // Every 5th visit (5 s): mirror vanilla gossip into "villager gossip" factions.
+        if (!content.factions.isEmpty() && (player.tickCount / 20) % 5 == 0) {
+            Factions.refreshGossip(ctx);
+        }
+        if (ctx.data().quests.isEmpty() && content.autoStart.isEmpty() && ctx.data().markers.isEmpty()) {
             return;
         }
         QuestLogic.Events events = events(player);
-        for (Active entry : List.copyOf(index(ctx).getOrDefault("solace:item", List.of()))) {
+        for (Active entry : active(ctx, "solace:item")) {
             Objective objective = entry.objective();
             QuestState state = ctx.data().quests.get(entry.quest().id());
             // Latched: once complete, dropping the items does not undo it.
@@ -158,66 +195,121 @@ public final class QuestEngine {
                 player.getInventory().clearOrCountMatchingItems(objective.target()::matches, objective.count(),
                         player.inventoryMenu.getCraftSlots());
             }
-            QuestLogic.setProgress(ctx, entry.quest(), objective.id(), have, events);
+            progress(ctx, entry, have, true, events);
         }
-        for (Active entry : List.copyOf(index(ctx).getOrDefault("solace:reach_location", List.of()))) {
+        for (Active entry : active(ctx, "solace:reach_location")) {
             Objective objective = entry.objective();
-            if (objective.dimension().toString().equals(ctx.dimension())
+            if (objective.ref().toString().equals(ctx.dimension())
                     && player.distanceToSqr(objective.x() + 0.5, objective.y() + 0.5, objective.z() + 0.5)
                     <= (double) objective.radius() * objective.radius() && whenPasses(ctx, entry)) {
-                QuestLogic.setProgress(ctx, entry.quest(), objective.id(), 1, events);
+                progress(ctx, entry, 1, true, events);
             }
         }
         QuestLogic.evaluate(ctx, events);
+        // Every other visit (2 s): moving marker targets.
+        if ((player.tickCount / 20) % 2 == 0) {
+            Markers.sync(ctx);
+        }
+    }
+
+    /** Player intent "tick this off": only checkmark objectives of the current phase accept it. */
+    public static boolean check(ServerPlayer player, Quest quest, String objectiveId) {
+        ServerCtx ctx = ctx(player);
+        for (Active entry : active(ctx, "solace:checkmark")) {
+            if (entry.quest() == quest && entry.objective().id().equals(objectiveId) && whenPasses(ctx, entry)) {
+                progress(ctx, entry, 1, true, events(player));
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Hands items over to an NPC for "solace:deliver" objectives bound to it. */
+    public static void deliver(ServerPlayer player, Dialogue.NpcBinding binding) {
+        ServerCtx ctx = ctx(player);
+        QuestLogic.Events events = events(player);
+        for (Active entry : active(ctx, "solace:deliver")) {
+            Objective objective = entry.objective();
+            if (binding.id().equals(objective.ref()) && whenPasses(ctx, entry)
+                    && ctx.countItem(objective.target(), false) >= objective.count()) {
+                player.getInventory().clearOrCountMatchingItems(objective.target()::matches, objective.count(),
+                        player.inventoryMenu.getCraftSlots());
+                progress(ctx, entry, objective.count(), true, events);
+            }
+        }
     }
 
     /** Claims one reward, or all with {@code rewardId == null}. Returns how many were handed out. */
     public static int claim(ServerPlayer player, Quest quest, String rewardId) {
         ServerCtx ctx = ctx(player);
         List<Reward> rewards = QuestLogic.claim(ctx, quest, rewardId);
-        for (Reward reward : rewards) {
-            try {
-                grant(ctx, reward);
-            } catch (RuntimeException exception) {
-                LOGGER.error("[Solace Quests] Reward {} of {} failed for {}", reward.id(), quest.id(),
-                        player.getGameProfile().getName(), exception);
-            }
-        }
+        run(ctx, rewards);
         if (!rewards.isEmpty()) {
             QuestLogic.evaluate(ctx, events(player));
         }
         return rewards.size();
     }
 
-    private static void grant(ServerCtx ctx, Reward reward) {
+    /** Runs rewards or actions in order. One failing effect is logged and does not stop the rest. */
+    public static void run(ServerCtx ctx, List<Reward> effects) {
+        // Content can chain effects into each other (an action starting a quest whose on_enter
+        // runs an action...). Cut runaway chains instead of overflowing the stack.
+        if (effectDepth >= 8) {
+            LOGGER.error("[Solace Quests] Effect chain deeper than 8 for {}; skipping {} effect(s). "
+                    + "Check for actions that trigger each other.", ctx.player.getGameProfile().getName(),
+                    effects.size());
+            return;
+        }
+        effectDepth++;
+        try {
+            for (Reward effect : effects) {
+                try {
+                    apply(ctx, effect);
+                } catch (RuntimeException exception) {
+                    LOGGER.error("[Solace Quests] Effect {} ({}) failed for {}", effect.type(), effect.id(),
+                            ctx.player.getGameProfile().getName(), exception);
+                }
+            }
+        } finally {
+            effectDepth--;
+        }
+    }
+
+    private static void apply(ServerCtx ctx, Reward effect) {
         ServerPlayer player = ctx.player;
-        switch (reward.type()) {
+        QuestContent content = ctx.content();
+        QuestLogic.Events events = events(player);
+        Quest quest = effect.target() == null ? null : content.quests.get(effect.target());
+        switch (effect.type()) {
             case "solace:item" -> {
-                Item item = ForgeRegistries.ITEMS.getValue(reward.target());
+                Item item = ForgeRegistries.ITEMS.getValue(effect.target());
                 if (item == null || item == Items.AIR) {
-                    LOGGER.warn("[Solace Quests] Reward item {} does not exist", reward.target());
+                    LOGGER.warn("[Solace Quests] Item {} does not exist", effect.target());
                     return;
                 }
-                int left = reward.count();
+                int left = effect.count();
                 while (left > 0) {
                     ItemStack stack = new ItemStack(item, Math.min(left, item.getMaxStackSize()));
-                    if (reward.nbt() != null) {
-                        stack.setTag(reward.nbt().copy());
+                    if (effect.nbt() != null) {
+                        stack.setTag(effect.nbt().copy());
                     }
                     left -= stack.getCount();
                     // Overflow is dropped at the player's feet.
                     ItemHandlerHelper.giveItemToPlayer(player, stack);
                 }
             }
+            case "solace:take_item" -> player.getInventory().clearOrCountMatchingItems(
+                    stack -> effect.target().equals(ForgeRegistries.ITEMS.getKey(stack.getItem())), effect.count(),
+                    player.inventoryMenu.getCraftSlots());
             case "solace:xp" -> {
-                if (reward.on()) {
-                    player.giveExperienceLevels(reward.count());
+                if (effect.on()) {
+                    player.giveExperienceLevels(effect.count());
                 } else {
-                    player.giveExperiencePoints(reward.count());
+                    player.giveExperiencePoints(effect.count());
                 }
             }
             case "solace:loot_table" -> {
-                LootTable table = player.server.getLootData().getLootTable(reward.target());
+                LootTable table = player.server.getLootData().getLootTable(effect.target());
                 LootParams params = new LootParams.Builder(player.serverLevel())
                         .withParameter(LootContextParams.ORIGIN, player.position())
                         .withParameter(LootContextParams.THIS_ENTITY, player)
@@ -229,27 +321,81 @@ public final class QuestEngine {
                 // argument), not the name, so a crafted player name cannot inject command text.
                 CommandSourceStack source = player.server.createCommandSourceStack()
                         .withPosition(player.position()).withLevel(player.serverLevel())
-                        .withPermission(reward.count()).withSuppressedOutput();
+                        .withPermission(effect.count()).withSuppressedOutput();
                 player.server.getCommands().performPrefixedCommand(source,
-                        reward.name().replaceAll("@p\\b", player.getStringUUID()));
+                        effect.name().replaceAll("@p\\b", player.getStringUUID()));
             }
             case "solace:flag" -> {
-                if (reward.on()) {
-                    ctx.data().flags.add(reward.name());
+                if (effect.on()) {
+                    ctx.data().flags.add(effect.name());
                 } else {
-                    ctx.data().flags.remove(reward.name());
+                    ctx.data().flags.remove(effect.name());
                 }
                 ctx.changed();
             }
             case "solace:variable" -> {
-                ctx.data().variables.merge(reward.name(), reward.count(), (old, value) -> reward.on() ? old + value : value);
+                ctx.data().variables.merge(effect.name(), effect.count(), (old, value) -> effect.on() ? old + value : value);
                 ctx.changed();
             }
             case "solace:unlock" -> {
-                ctx.data().unlocked.add(reward.target());
+                ctx.data().unlocked.add(effect.target());
                 ctx.changed();
             }
-            default -> LOGGER.warn("[Solace Quests] Unknown reward type {}", reward.type());
+            case "solace:reputation" -> {
+                Faction faction = content.factions.get(effect.target());
+                if (faction != null) {
+                    Factions.add(ctx, faction, effect.count(), true);
+                }
+            }
+            case "solace:start_quest" -> {
+                // Ignores locks (the author asked for it) but never restarts a running or finished quest.
+                QuestLogic.View view = quest == null ? null : QuestLogic.view(ctx, quest);
+                if (view == QuestLogic.View.AVAILABLE || view == QuestLogic.View.LOCKED) {
+                    QuestLogic.start(ctx, quest, true, events);
+                }
+            }
+            case "solace:complete_quest", "solace:fail_quest" -> {
+                if (quest != null) {
+                    QuestLogic.move(ctx, quest, effect.type().equals("solace:fail_quest") ? Quest.FAIL : Quest.COMPLETE,
+                            "action", events);
+                }
+            }
+            case "solace:set_phase" -> {
+                if (quest != null) {
+                    QuestLogic.move(ctx, quest, effect.name(), "action", events);
+                }
+            }
+            case "solace:complete_objective" -> {
+                if (quest != null) {
+                    QuestLogic.setProgress(ctx, quest, effect.name(), Integer.MAX_VALUE, events);
+                }
+            }
+            case "solace:dialogue" -> {
+                Dialogue dialogue = content.dialogues.get(effect.target());
+                if (dialogue != null) {
+                    DialogueManager.open(player, dialogue, DialogueManager.npc(player), null, null);
+                }
+            }
+            case "solace:close" -> DialogueManager.close(player);
+            case "solace:add_marker" -> {
+                if (ctx.data().markers.add(effect.target())) {
+                    ctx.changed();
+                }
+            }
+            case "solace:remove_marker" -> {
+                if (ctx.data().markers.remove(effect.target())) {
+                    ctx.changed();
+                }
+            }
+            case "solace:custom" -> {
+                QuestApi.EffectHandler handler = QuestApi.EFFECTS.get(effect.name());
+                if (handler == null) {
+                    LOGGER.warn("[Solace Quests] No custom effect handler \"{}\" is registered", effect.name());
+                } else {
+                    handler.run(player, effect.data());
+                }
+            }
+            default -> LOGGER.warn("[Solace Quests] Unknown effect type {}", effect.type());
         }
     }
 

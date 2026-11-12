@@ -1,32 +1,87 @@
 {
   "chapter": "astralis:village",
   "title": "First Steps",
-  "description": "Prove you can handle yourself, then report back.",
-  "icon": { "item": "minecraft:iron_sword" },
-  "position": { "x": 0, "y": 0 },
+  "description": "Marrow the cleric wants proof you can handle yourself.",
+  "icon": {
+    "item": "minecraft:iron_sword"
+  },
+  "position": {
+    "x": 0,
+    "y": 0
+  },
   "phases": [
     {
       "id": "hunt",
       "story": "The dead are restless near the village. Three fewer would be a start.",
       "objectives": [
-        { "id": "zombies", "type": "solace:kill", "entity": "minecraft:zombie", "count": 3, "text": "Slay zombies" }
+        {
+          "id": "zombies",
+          "type": "solace:kill",
+          "entity": "minecraft:zombie",
+          "count": 3,
+          "text": "Slay zombies"
+        }
       ]
     },
     {
       "id": "report",
-      "story": "It is quiet again. Time to report back.",
+      "story": "It is quiet again. Marrow will want to hear it.",
       "objectives": [
-        { "id": "reported", "type": "solace:checkmark", "text": "Report back (/sq check astralis:village/first_steps reported)" }
+        {
+          "id": "talk",
+          "type": "solace:dialogue_node",
+          "dialogue": "astralis:cleric/first_steps",
+          "node": "report_done",
+          "text": "Report to Marrow"
+        }
+      ],
+      "markers": [
+        {
+          "target": "npc",
+          "npc": "astralis:cleric",
+          "label": "Marrow"
+        }
       ],
       "transitions": [
-        { "to": "@fail", "when": { "type": "solace:flag", "flag": "betrayed_village" }, "label": "betrayal" },
-        { "to": "@complete", "when": { "type": "solace:objectives_complete" } }
+        {
+          "to": "@fail",
+          "when": {
+            "type": "solace:flag",
+            "flag": "betrayed_village"
+          },
+          "label": "betrayal"
+        },
+        {
+          "to": "@complete",
+          "when": {
+            "type": "solace:objectives_complete"
+          }
+        }
       ]
     }
   ],
   "rewards": [
-    { "id": "xp", "type": "solace:xp", "levels": 3 },
-    { "id": "bread", "type": "solace:item", "item": "minecraft:bread", "count": 6 },
-    { "id": "trusted", "type": "solace:flag", "flag": "village_trusted" }
+    {
+      "id": "xp",
+      "type": "solace:xp",
+      "levels": 3
+    },
+    {
+      "id": "bread",
+      "type": "solace:item",
+      "item": "minecraft:bread",
+      "count": 6
+    },
+    {
+      "id": "trusted",
+      "type": "solace:flag",
+      "flag": "village_trusted"
+    },
+    {
+      "id": "standing",
+      "type": "solace:reputation",
+      "faction": "astralis:wardens",
+      "amount": 20
+    }
   ]
 }

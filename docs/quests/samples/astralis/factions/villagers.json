@@ -1,0 +1,50 @@
+{
+  "name": "Villagers",
+  "color": "#7FB069",
+  "icon": {
+    "item": "minecraft:emerald"
+  },
+  "min": -200,
+  "max": 200,
+  "ranks": [
+    {
+      "id": "hated",
+      "name": "Hated",
+      "at": -200
+    },
+    {
+      "id": "unwelcome",
+      "name": "Unwelcome",
+      "at": -100
+    },
+    {
+      "id": "distrusted",
+      "name": "Distrusted",
+      "at": -30
+    },
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "at": -5
+    },
+    {
+      "id": "accepted",
+      "name": "Accepted",
+      "at": 15
+    },
+    {
+      "id": "respected",
+      "name": "Respected",
+      "at": 50
+    },
+    {
+      "id": "honored",
+      "name": "Honored",
+      "at": 100
+    }
+  ],
+  "source": {
+    "type": "solace:villager_gossip",
+    "radius": 48
+  }
+}

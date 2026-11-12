@@ -1,0 +1,34 @@
+{
+  "chapter": "astralis:wardens",
+  "title": "Trusted",
+  "description": "Become a friend of the wardens.",
+  "icon": {
+    "item": "minecraft:golden_helmet"
+  },
+  "position": {
+    "x": 2,
+    "y": 0
+  },
+  "requires": {
+    "quests": [
+      "astralis:wardens/errand"
+    ]
+  },
+  "auto_start": true,
+  "objectives": [
+    {
+      "id": "rank",
+      "type": "solace:faction_rank",
+      "faction": "astralis:wardens",
+      "rank": "friendly",
+      "text": "Reach Friendly with the Wardens"
+    }
+  ],
+  "rewards": [
+    {
+      "id": "xp",
+      "type": "solace:xp",
+      "levels": 5
+    }
+  ]
+}

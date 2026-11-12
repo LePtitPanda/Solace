@@ -1,0 +1,43 @@
+{
+  "name": "Wardens",
+  "color": "#6FA8DC",
+  "icon": {
+    "item": "minecraft:shield"
+  },
+  "default": 0,
+  "min": -100,
+  "max": 200,
+  "ranks": [
+    {
+      "id": "hated",
+      "name": "Hated",
+      "at": -100
+    },
+    {
+      "id": "wary",
+      "name": "Wary",
+      "at": -30
+    },
+    {
+      "id": "neutral",
+      "name": "Neutral",
+      "at": 0
+    },
+    {
+      "id": "friendly",
+      "name": "Friendly",
+      "at": 50
+    },
+    {
+      "id": "honoured",
+      "name": "Honoured",
+      "at": 120
+    }
+  ],
+  "relations": [
+    {
+      "faction": "astralis:outlaws",
+      "factor": -0.5
+    }
+  ]
+}

@@ -13,22 +13,47 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** JSON to definitions. Every problem is reported through {@link In}; nothing throws. */
 public final class QuestParser {
+    /** Friendlier names accepted for effect types when used as dialogue/phase actions. */
+    private static final Map<String, String> ALIASES = Map.of("solace:give_item", "solace:item",
+            "solace:set_flag", "solace:flag", "solace:set_variable", "solace:variable");
+
     private QuestParser() {
     }
 
-    public static Chapter chapter(ResourceLocation id, In in) {
-        in.skip("icon");
+    private static void noId(In in) {
         if (in.has("id")) {
             in.warn("id", "ignored: the id comes from the file location");
             in.skip("id");
         }
-        Chapter chapter = new Chapter(id, in.text("title", true), in.text("description", false),
+    }
+
+    static String icon(In in) {
+        In iconIn = in.obj("icon");
+        if (iconIn == null) {
+            return null;
+        }
+        ResourceLocation item = iconIn.id("item", false);
+        ResourceLocation texture = iconIn.id("texture", false);
+        if (item != null) {
+            iconIn.known("item", "item", item);
+        } else if (texture == null) {
+            iconIn.err("", "expected {\"item\": id} or {\"texture\": id}");
+        }
+        iconIn.done();
+        return item != null ? "item:" + item : texture != null ? "texture:" + texture : null;
+    }
+
+    public static Chapter chapter(ResourceLocation id, In in) {
+        noId(in);
+        Chapter chapter = new Chapter(id, in.text("title", true), in.text("description", false), icon(in),
                 in.integer("order", 0, Integer.MIN_VALUE), condition(in, "unlock"),
                 in.bool("hidden_until_unlocked", false));
         in.done();
@@ -36,22 +61,23 @@ public final class QuestParser {
     }
 
     public static Quest quest(ResourceLocation id, In in) {
-        // Read by later phases (book layout, markers, time limits); valid today, just unused.
-        in.skip("icon", "position", "markers", "time_limit_seconds", "on_fail", "visible_when", "abandonable");
-        if (in.has("id")) {
-            in.warn("id", "ignored: the id comes from the file location");
-            in.skip("id");
-        }
+        noId(in);
         ResourceLocation chapter = in.ref("chapter", "chapters", true);
         Component title = in.text("title", true);
         Component description = in.text("description", false);
+        int x = 0, y = 0;
+        In position = in.obj("position");
+        if (position != null) {
+            x = position.integer("x", 0, Integer.MIN_VALUE);
+            y = position.integer("y", 0, Integer.MIN_VALUE);
+            position.done();
+        }
 
         List<ResourceLocation> requires = new ArrayList<>();
         int atLeast = 0;
         In requiresIn = in.obj("requires");
         if (requiresIn != null) {
-            List<String> ids = requiresIn.strs("quests");
-            for (String text : ids) {
+            for (String text : requiresIn.strs("quests")) {
                 ResourceLocation required = ResourceLocation.tryParse(text);
                 if (required == null) {
                     requiresIn.err("quests", "not a valid id: \"" + text + "\"");
@@ -123,7 +149,7 @@ public final class QuestParser {
         List<Reward> rewards = new ArrayList<>();
         Set<String> rewardIds = new HashSet<>();
         for (In rewardIn : in.objs("rewards")) {
-            Reward reward = reward(rewardIn);
+            Reward reward = effect(rewardIn, true);
             rewardIn.done();
             if (reward != null) {
                 if (!rewardIds.add(reward.id())) {
@@ -132,16 +158,22 @@ public final class QuestParser {
                 rewards.add(reward);
             }
         }
+        String onFail = in.str("on_fail", "keep");
+        if (!onFail.equals("keep") && !onFail.equals("reset")) {
+            in.err("on_fail", "expected \"keep\" or \"reset\"");
+        }
 
-        Quest quest = new Quest(id, chapter, title, description, atLeast, List.copyOf(requires),
+        Quest quest = new Quest(id, chapter, title, description, icon(in), x, y, atLeast, List.copyOf(requires),
                 in.bool("optional", false), in.bool("hidden_until_unlocked", false), in.bool("auto_start", false),
-                repeatable, cooldown, in.bool("auto_claim", false), List.copyOf(phases), List.copyOf(rewards));
+                repeatable, cooldown, in.bool("auto_claim", false), in.integer("time_limit_seconds", 0, 0),
+                onFail.equals("reset"), in.bool("abandonable", true), condition(in, "visible_when"),
+                // In the single-phase shorthand the top-level markers already belong to that phase.
+                in.has("phases") ? markers(in, "markers") : List.of(), List.copyOf(phases), List.copyOf(rewards));
         in.done();
         return quest;
     }
 
     private static Phase phase(String id, In in) {
-        in.skip("markers", "on_enter", "on_exit");
         List<Objective> objectives = new ArrayList<>();
         for (In objectiveIn : in.objs("objectives")) {
             Objective objective = objective(objectiveIn);
@@ -152,81 +184,154 @@ public final class QuestParser {
         }
         List<Transition> transitions = new ArrayList<>();
         for (In transitionIn : in.objs("transitions")) {
-            transitionIn.skip("actions");
             Condition when = condition(transitionIn, "when");
             transitions.add(new Transition(transitionIn.req("to"), when == null ? ctx -> true : when,
-                    transitionIn.str("label", null)));
+                    transitionIn.str("label", null), effects(transitionIn, "actions")));
             transitionIn.done();
         }
-        return new Phase(id, in.text("story", false), List.copyOf(objectives), List.copyOf(transitions));
+        return new Phase(id, in.text("story", false), List.copyOf(objectives), List.copyOf(transitions),
+                effects(in, "on_enter"), markers(in, "markers"));
     }
 
     private static Objective objective(In in) {
-        in.skip("icon", "hidden");
         String id = in.req("id");
         String type = in.req("type");
         Component text = in.text("text", false);
         int count = in.integer("count", 1, 1);
         boolean optional = in.bool("optional", false);
+        boolean hidden = in.bool("hidden", false);
         Condition when = condition(in, "when");
+        Condition auto = null;
         Target target = null;
         String name = null;
         boolean consume = false;
-        ResourceLocation dimension = null;
+        ResourceLocation ref = null;
         int x = 0, y = 0, z = 0, radius = 0;
         switch (type) {
-            case "solace:kill" -> {
+            case "solace:kill", "solace:interact_entity" -> {
                 target = in.target("entity", "entity_type", true);
                 name = in.str("name", null);
             }
-            case "solace:break_block", "solace:place_block" -> target = in.target("block", "block", true);
+            case "solace:break_block", "solace:place_block", "solace:interact_block" ->
+                    target = in.target("block", "block", true);
             case "solace:item" -> {
                 target = in.target("item", "item", true);
                 consume = in.bool("consume", false);
             }
+            case "solace:deliver" -> {
+                target = in.target("item", "item", true);
+                ref = in.ref("npc", "npcs", true);
+            }
+            case "solace:craft", "solace:smelt", "solace:use_item" -> target = in.target("item", "item", true);
             case "solace:reach_location" -> {
-                dimension = in.id("dimension", true);
+                ref = in.id("dimension", true);
                 radius = in.integer("radius", 8, 1);
-                JsonElement pos = in.raw("pos");
-                if (pos != null && pos.isJsonArray() && pos.getAsJsonArray().size() == 3) {
-                    try {
-                        x = pos.getAsJsonArray().get(0).getAsInt();
-                        y = pos.getAsJsonArray().get(1).getAsInt();
-                        z = pos.getAsJsonArray().get(2).getAsInt();
-                    } catch (RuntimeException exception) {
-                        in.err("pos", "expected [x, y, z] integers");
-                    }
-                } else {
-                    in.err("pos", "expected [x, y, z]");
-                }
+                int[] pos = pos(in);
+                x = pos[0];
+                y = pos[1];
+                z = pos[2];
                 count = 1;
+            }
+            case "solace:dialogue_node" -> {
+                ref = in.ref("dialogue", "dialogues", true);
+                name = in.req("node");
+                count = 1;
+            }
+            case "solace:find_structure" -> {
+                target = in.target("structure", "structure", true);
+                Target structure = target;
+                auto = structure == null ? null : ctx -> ctx.inStructure(structure);
+            }
+            case "solace:enter_biome" -> {
+                target = in.target("biome", "biome", true);
+                Target biome = target;
+                auto = biome == null ? null : ctx -> ctx.inBiome(biome);
+            }
+            case "solace:enter_dimension" -> {
+                ref = in.id("dimension", true);
+                String dimension = String.valueOf(ref);
+                auto = ctx -> dimension.equals(ctx.dimension());
+            }
+            case "solace:advancement" -> {
+                ref = in.id("advancement", true);
+                ResourceLocation advancement = ref;
+                auto = ctx -> ctx.hasAdvancement(advancement);
+            }
+            case "solace:reputation" -> {
+                ref = in.ref("faction", "factions", true);
+                auto = Conditions.reputation(ref, ">=", in.integer("min", 0, Integer.MIN_VALUE));
+            }
+            case "solace:faction_rank" -> {
+                ref = in.ref("faction", "factions", true);
+                name = in.req("rank");
+                auto = Conditions.factionRank(ref, ">=", name);
             }
             case "solace:condition" -> {
                 if (when == null) {
                     in.err("when", "a condition objective needs \"when\"");
                 }
-                count = 1;
             }
-            case "solace:checkmark" -> count = 1;
+            case "solace:checkmark" -> {
+            }
+            case "solace:custom" -> in.skip("handler", "data");
             default -> {
                 in.err("type", "unknown objective type \"" + type + "\"");
                 return null;
             }
         }
-        return new Objective(id, type, text, count, optional, target, name, consume, dimension, x, y, z, radius, when);
+        if (Quest.AUTO.contains(type)) {
+            count = 1;
+            if (auto != null && when != null) {
+                Condition gate = when, check = auto;
+                auto = ctx -> gate.test(ctx) && check.test(ctx);
+            }
+            when = auto != null ? auto : when;
+        }
+        return new Objective(id, type, text, icon(in), count, optional, hidden, target, name, consume, ref, x, y, z,
+                radius, when);
     }
 
-    private static Reward reward(In in) {
-        in.skip("text", "icon");
-        String id = in.req("id");
+    private static int[] pos(In in) {
+        JsonElement pos = in.raw("pos");
+        if (pos != null && pos.isJsonArray() && pos.getAsJsonArray().size() == 3) {
+            try {
+                return new int[]{pos.getAsJsonArray().get(0).getAsInt(), pos.getAsJsonArray().get(1).getAsInt(),
+                        pos.getAsJsonArray().get(2).getAsInt()};
+            } catch (RuntimeException exception) {
+                in.err("pos", "expected [x, y, z] integers");
+            }
+        } else {
+            in.err("pos", "expected [x, y, z]");
+        }
+        return new int[3];
+    }
+
+    static List<Reward> effects(In in, String key) {
+        List<Reward> list = new ArrayList<>();
+        for (In effectIn : in.objs(key)) {
+            Reward effect = effect(effectIn, false);
+            effectIn.done();
+            if (effect != null) {
+                list.add(effect);
+            }
+        }
+        return List.copyOf(list);
+    }
+
+    /** Rewards need an id (claim tracking is keyed by it); actions do not. */
+    private static Reward effect(In in, boolean reward) {
+        String id = reward ? in.req("id") : in.str("id", "");
         String type = in.req("type");
+        type = ALIASES.getOrDefault(type, type);
+        Component text = in.text("text", false);
         ResourceLocation target = null;
         int count = 0;
         CompoundTag nbt = null;
         String name = null;
+        String data = null;
         boolean on = false;
         switch (type) {
-            case "solace:item" -> {
+            case "solace:item", "solace:take_item" -> {
                 target = in.id("item", true);
                 if (target != null) {
                     in.known("item", "item", target);
@@ -240,12 +345,13 @@ public final class QuestParser {
                         in.err("nbt", "not valid SNBT: " + exception.getMessage());
                     }
                 }
+                on = in.bool("optional", false);
             }
             case "solace:xp" -> {
                 on = in.has("levels");
                 count = in.integer(on ? "levels" : "points", 0, 1);
                 if (count == 0) {
-                    in.err("points", "xp reward needs \"points\" or \"levels\"");
+                    in.err("points", "xp needs \"points\" or \"levels\"");
                 }
             }
             case "solace:loot_table" -> target = in.id("table", true);
@@ -273,15 +379,155 @@ public final class QuestParser {
                 on = in.has("chapter");
                 target = in.ref(on ? "chapter" : "quest", on ? "chapters" : "quests", true);
             }
+            case "solace:reputation" -> {
+                target = in.ref("faction", "factions", true);
+                count = in.integer("amount", 0, Integer.MIN_VALUE);
+            }
+            case "solace:start_quest", "solace:complete_quest", "solace:fail_quest" ->
+                    target = in.ref("quest", "quests", true);
+            case "solace:set_phase" -> {
+                target = in.ref("quest", "quests", true);
+                name = in.req("phase");
+            }
+            case "solace:complete_objective" -> {
+                target = in.ref("quest", "quests", true);
+                name = in.req("objective");
+            }
+            case "solace:dialogue", "solace:open_dialogue" -> {
+                type = "solace:dialogue";
+                target = in.ref("dialogue", "dialogues", true);
+            }
+            case "solace:add_marker", "solace:remove_marker" -> target = in.ref("marker", "markers", true);
+            case "solace:close" -> {
+            }
+            case "solace:custom" -> {
+                name = in.req("handler");
+                JsonElement raw = in.raw("data");
+                data = raw == null ? "null" : raw.toString();
+            }
             default -> {
-                in.err("type", "unknown reward type \"" + type + "\"");
+                in.err("type", "unknown " + (reward ? "reward" : "action") + " type \"" + type + "\"");
                 return null;
             }
         }
-        return new Reward(id, type, target, count, nbt, name, on);
+        return new Reward(id, type, text, icon(in), target, count, nbt, name, on, data);
     }
 
-    private static Condition condition(In in, String key) {
+    /** Each entry is a markers/ file id (string) or an inline marker object. */
+    static List<Marker> markers(In in, String key) {
+        List<Marker> list = new ArrayList<>();
+        JsonElement raw = in.raw(key);
+        if (raw == null) {
+            return list;
+        }
+        if (!raw.isJsonArray()) {
+            in.err(key, "expected a list");
+            return list;
+        }
+        for (int i = 0; i < raw.getAsJsonArray().size(); i++) {
+            JsonElement entry = raw.getAsJsonArray().get(i);
+            In itemIn = in.child(key + "[" + i + "]", entry);
+            if (itemIn != null) {
+                list.add(marker(itemIn));
+                itemIn.done();
+            } else if (entry.isJsonPrimitive() && ResourceLocation.tryParse(entry.getAsString()) != null) {
+                ResourceLocation ref = ResourceLocation.tryParse(entry.getAsString());
+                in.refTo(key + "[" + i + "]", "markers", ref);
+                list.add(new Marker(ref, "ref", null, 0, 0, 0, null, null, null, null, null, false));
+            } else {
+                in.err(key + "[" + i + "]", "expected a marker id or a marker object");
+            }
+        }
+        return List.copyOf(list);
+    }
+
+    public static Marker marker(In in) {
+        String kind = in.str("target", "position");
+        ResourceLocation dimension = null;
+        int[] pos = new int[3];
+        Target structure = null;
+        ResourceLocation npc = null;
+        String objective = null;
+        switch (kind) {
+            case "position" -> {
+                dimension = in.id("dimension", true);
+                pos = pos(in);
+            }
+            case "structure" -> structure = in.target("structure", "structure", true);
+            case "npc" -> npc = in.ref("npc", "npcs", true);
+            case "objective" -> objective = in.req("objective");
+            default -> in.err("target", "expected position, structure, npc or objective");
+        }
+        return new Marker(null, kind, dimension, pos[0], pos[1], pos[2], structure, npc, objective,
+                in.text("label", false), in.str("color", "gold"), in.bool("beam", false));
+    }
+
+    public static Marker markerFile(ResourceLocation id, In in) {
+        noId(in);
+        Marker marker = marker(in);
+        if (marker.kind().equals("objective")) {
+            in.err("target", "an \"objective\" marker only works inline in a quest or phase");
+        }
+        in.done();
+        return marker;
+    }
+
+    public static Faction faction(ResourceLocation id, In in) {
+        noId(in);
+        int color = 0xD4A843;
+        String hex = in.str("color", null);
+        if (hex != null) {
+            try {
+                color = Integer.parseInt(hex.replace("#", ""), 16) & 0xFFFFFF;
+            } catch (NumberFormatException exception) {
+                in.err("color", "expected \"#RRGGBB\"");
+            }
+        }
+        List<Faction.Rank> ranks = new ArrayList<>();
+        for (In rankIn : in.objs("ranks")) {
+            ranks.add(new Faction.Rank(rankIn.req("id"), rankIn.text("name", true),
+                    rankIn.integer("at", 0, Integer.MIN_VALUE)));
+            rankIn.done();
+        }
+        ranks.sort(Comparator.comparingInt(Faction.Rank::at));
+        if (ranks.isEmpty()) {
+            in.err("ranks", "a faction needs at least one rank");
+        }
+        List<Faction.Relation> relations = new ArrayList<>();
+        for (In relationIn : in.objs("relations")) {
+            ResourceLocation other = relationIn.ref("faction", "factions", true);
+            JsonElement factor = relationIn.raw("factor");
+            if (factor == null || !factor.isJsonPrimitive() || !factor.getAsJsonPrimitive().isNumber()) {
+                relationIn.err("factor", "expected a number, e.g. -0.5");
+            } else if (other != null) {
+                relations.add(new Faction.Relation(other, factor.getAsDouble()));
+            }
+            relationIn.done();
+        }
+        boolean gossip = false;
+        int radius = 48;
+        In source = in.obj("source");
+        if (source != null) {
+            gossip = source.req("type").equals("solace:villager_gossip");
+            if (!gossip) {
+                source.err("type", "the only source type is \"solace:villager_gossip\"");
+            }
+            radius = source.integer("radius", 48, 1);
+            source.done();
+        }
+        int min = in.integer("min", -1000, Integer.MIN_VALUE);
+        int max = in.integer("max", 1000, Integer.MIN_VALUE);
+        if (min > max) {
+            in.err("min", "min is greater than max");
+        }
+        Faction faction = new Faction(id, in.text("name", true), color, icon(in),
+                in.integer("default", 0, Integer.MIN_VALUE), min, max, List.copyOf(ranks), List.copyOf(relations),
+                gossip, radius);
+        in.done();
+        return faction;
+    }
+
+    static Condition condition(In in, String key) {
         In child = in.obj(key);
         return child == null ? null : Conditions.parse(child);
     }

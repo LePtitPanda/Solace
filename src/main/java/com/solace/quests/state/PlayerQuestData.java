@@ -53,6 +53,17 @@ public final class PlayerQuestData {
     public final Map<String, Integer> variables = new TreeMap<>();
     /** Quests and chapters force-unlocked by rewards, bypassing their requirements. */
     public final Set<ResourceLocation> unlocked = new TreeSet<>();
+    public final Map<ResourceLocation, Integer> reputation = new TreeMap<>();
+    /** "dialogue#node" or "dialogue#node/choice" -> game time until which it is on cooldown. */
+    public final Map<String, Long> cooldowns = new TreeMap<>();
+    /** Quests shown in the HUD tracker, at most {@link QuestLogic#MAX_TRACKED}. */
+    public final List<ResourceLocation> tracked = new ArrayList<>();
+    /** markers/ entries switched on by dialogue or phase actions. */
+    public final Set<ResourceLocation> markers = new TreeSet<>();
+    /** Resolved positions worth remembering: "structure:..." and "npc:..." -> "dimension x y z". */
+    public final Map<String, String> positions = new TreeMap<>();
+    /** Dialogue lines the player has seen, as text-component JSON, newest last. */
+    public final List<String> log = new ArrayList<>();
     /** Active objectives by type; rebuilt lazily by the engine, cleared on every change. Not saved. */
     public Map<String, List<Active>> index;
     /** The content snapshot {@link #index} was built from; a reload makes it stale. */
@@ -89,6 +100,18 @@ public final class PlayerQuestData {
         variables.forEach(variablesTag::putInt);
         tag.put("variables", variablesTag);
         tag.put("unlocked", strings(unlocked.stream().map(ResourceLocation::toString).toList()));
+        CompoundTag reputationTag = new CompoundTag();
+        reputation.forEach((id, value) -> reputationTag.putInt(id.toString(), value));
+        tag.put("reputation", reputationTag);
+        CompoundTag cooldownsTag = new CompoundTag();
+        cooldowns.forEach(cooldownsTag::putLong);
+        tag.put("cooldowns", cooldownsTag);
+        tag.put("tracked", strings(tracked.stream().map(ResourceLocation::toString).toList()));
+        tag.put("markers", strings(markers.stream().map(ResourceLocation::toString).toList()));
+        CompoundTag positionsTag = new CompoundTag();
+        positions.forEach(positionsTag::putString);
+        tag.put("positions", positionsTag);
+        tag.put("log", strings(log));
         return tag;
     }
 
@@ -128,7 +151,30 @@ public final class PlayerQuestData {
                 data.unlocked.add(id);
             }
         }
+        CompoundTag reputationTag = tag.getCompound("reputation");
+        for (String key : reputationTag.getAllKeys()) {
+            ResourceLocation id = ResourceLocation.tryParse(key);
+            if (id != null) {
+                data.reputation.put(id, reputationTag.getInt(key));
+            }
+        }
+        CompoundTag cooldownsTag = tag.getCompound("cooldowns");
+        cooldownsTag.getAllKeys().forEach(key -> data.cooldowns.put(key, cooldownsTag.getLong(key)));
+        ids(tag, "tracked", data.tracked);
+        ids(tag, "markers", data.markers);
+        CompoundTag positionsTag = tag.getCompound("positions");
+        positionsTag.getAllKeys().forEach(key -> data.positions.put(key, positionsTag.getString(key)));
+        tag.getList("log", Tag.TAG_STRING).forEach(entry -> data.log.add(entry.getAsString()));
         return data;
+    }
+
+    private static void ids(CompoundTag tag, String key, java.util.Collection<ResourceLocation> into) {
+        for (Tag entry : tag.getList(key, Tag.TAG_STRING)) {
+            ResourceLocation id = ResourceLocation.tryParse(entry.getAsString());
+            if (id != null) {
+                into.add(id);
+            }
+        }
     }
 
     private static ListTag strings(Iterable<String> values) {

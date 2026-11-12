@@ -1,16 +1,52 @@
 {
   "chapter": "astralis:village",
   "title": "The Origin",
-  "description": "Travel to the centre of the world.",
-  "icon": { "item": "minecraft:compass" },
-  "position": { "x": 2, "y": 2 },
+  "description": "Travel to the centre of the world before the hour is out.",
+  "icon": {
+    "item": "minecraft:compass"
+  },
+  "position": {
+    "x": 2,
+    "y": 2
+  },
   "optional": true,
-  "requires": { "mode": "any", "quests": ["astralis:village/first_steps", "astralis:village/supplies"] },
+  "requires": {
+    "mode": "any",
+    "quests": [
+      "astralis:village/first_steps",
+      "astralis:village/supplies"
+    ]
+  },
+  "time_limit_seconds": 3600,
+  "on_fail": "reset",
   "objectives": [
-    { "id": "origin", "type": "solace:reach_location", "dimension": "minecraft:overworld", "pos": [0, 80, 0], "radius": 64, "text": "Reach the world origin" }
+    {
+      "id": "origin",
+      "type": "solace:reach_location",
+      "dimension": "minecraft:overworld",
+      "pos": [
+        0,
+        80,
+        0
+      ],
+      "radius": 64,
+      "text": "Reach the world origin"
+    }
+  ],
+  "markers": [
+    {
+      "target": "objective",
+      "objective": "origin",
+      "label": "World origin",
+      "beam": true
+    }
   ],
   "auto_claim": true,
   "rewards": [
-    { "id": "xp", "type": "solace:xp", "points": 50 }
+    {
+      "id": "xp",
+      "type": "solace:xp",
+      "points": 50
+    }
   ]
 }

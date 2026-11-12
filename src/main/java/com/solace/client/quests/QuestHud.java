@@ -1,0 +1,132 @@
+package com.solace.client.quests;
+
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import com.solace.client.gui.WorldCreationThemeRenderer;
+import com.solace.quests.network.Views.MarkerView;
+import com.solace.quests.network.Views.ObjectiveView;
+import com.solace.quests.network.Views.QuestView;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
+import net.minecraftforge.client.gui.overlay.ForgeGui;
+
+import java.util.List;
+
+/** The on-screen quest tracker, its built-in compass, and in-world marker beams. */
+public final class QuestHud {
+    private static final int WIDTH = 150;
+
+    private QuestHud() {
+    }
+
+    public static void render(ForgeGui gui, GuiGraphics graphics, float partialTick, int screenWidth, int screenHeight) {
+        Minecraft minecraft = Minecraft.getInstance();
+        QuestClientConfig config = QuestClientConfig.get();
+        if (!config.hud || minecraft.options.hideGui || minecraft.player == null
+                || minecraft.screen instanceof DialogueScreen || minecraft.screen instanceof QuestBookScreen) {
+            return;
+        }
+        Font font = minecraft.font;
+        int x = config.hudSide.equals("left") ? 6 : screenWidth - WIDTH - 6;
+        int y = (int) (screenHeight * Mth.clamp(config.hudTop, 0.0, 0.9));
+        String dimension = minecraft.player.level().dimension().location().toString();
+        for (QuestView quest : ClientQuests.QUESTS.values()) {
+            if (!quest.tracked() || quest.status() != QuestView.ACTIVE) {
+                continue;
+            }
+            int height = 14 + quest.objectives().size() * 10;
+            graphics.fill(x, y, x + WIDTH, y + height, 0x900C0C1C);
+            graphics.fill(x, y, x + 2, y + height, WorldCreationThemeRenderer.GOLD);
+            String title = font.plainSubstrByWidth(quest.title().getString(), WIDTH - 60);
+            graphics.drawString(font, title, x + 6, y + 3, WorldCreationThemeRenderer.GOLD, false);
+
+            MarkerView marker = config.compass ? nearest(quest, dimension, minecraft.player.position()) : null;
+            if (marker != null) {
+                double dx = marker.x() + 0.5 - minecraft.player.getX();
+                double dz = marker.z() + 0.5 - minecraft.player.getZ();
+                String distance = (int) Math.sqrt(dx * dx + dz * dz) + "m";
+                graphics.drawString(font, distance, x + WIDTH - 16 - font.width(distance), y + 3,
+                        WorldCreationThemeRenderer.TEXT, false);
+                // Yaw to the target minus where the player looks: 0 = straight ahead = arrow up.
+                float turn = Mth.wrapDegrees((float) Math.toDegrees(Math.atan2(-dx, dz)) - minecraft.player.getYRot());
+                PoseStack pose = graphics.pose();
+                pose.pushPose();
+                pose.translate(x + WIDTH - 8, y + 7, 0);
+                pose.mulPose(Axis.ZP.rotationDegrees(turn));
+                graphics.fill(-1, -4, 1, 5, WorldCreationThemeRenderer.GOLD);
+                graphics.fill(-2, -3, 2, -2, WorldCreationThemeRenderer.GOLD);
+                graphics.fill(-3, -2, 3, -1, WorldCreationThemeRenderer.GOLD);
+                pose.popPose();
+            }
+            int lineY = y + 14;
+            for (ObjectiveView objective : quest.objectives()) {
+                boolean done = objective.progress() >= objective.count();
+                String count = objective.count() > 1 ? objective.progress() + "/" + objective.count() : done ? "done" : "";
+                List<FormattedCharSequence> text = font.split(objective.text(), WIDTH - 14 - font.width(count) - 4);
+                int color = done ? WorldCreationThemeRenderer.GOLD_DIM : WorldCreationThemeRenderer.TEXT;
+                if (!text.isEmpty()) {
+                    graphics.drawString(font, text.get(0), x + 8, lineY, color, false);
+                }
+                graphics.drawString(font, count, x + WIDTH - 4 - font.width(count), lineY, color, false);
+                lineY += 10;
+            }
+            y += height + 4;
+        }
+    }
+
+    /** Markers of a quest carry its id as a prefix ("quest#..."). */
+    private static MarkerView nearest(QuestView quest, String dimension, Vec3 from) {
+        MarkerView best = null;
+        double bestDistance = Double.MAX_VALUE;
+        String prefix = quest.id() + "#";
+        for (MarkerView marker : ClientQuests.markers) {
+            if (marker.id().startsWith(prefix) && marker.dimension().equals(dimension)) {
+                double dx = marker.x() - from.x, dz = marker.z() - from.z;
+                if (dx * dx + dz * dz < bestDistance) {
+                    bestDistance = dx * dx + dz * dz;
+                    best = marker;
+                }
+            }
+        }
+        return best;
+    }
+
+    /** A thin gold outline column at markers that ask for a beam, visible from afar without any map mod. */
+    public static void renderBeams(RenderLevelStageEvent event) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || minecraft.level == null
+                || ClientQuests.markers.isEmpty() || !QuestClientConfig.get().beams) {
+            return;
+        }
+        String dimension = minecraft.level.dimension().location().toString();
+        Vec3 camera = event.getCamera().getPosition();
+        MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
+        VertexConsumer lines = null;
+        for (MarkerView marker : ClientQuests.markers) {
+            if (!marker.beam() || !marker.dimension().equals(dimension)
+                    || Math.abs(marker.x() - camera.x) > 256 || Math.abs(marker.z() - camera.z) > 256) {
+                continue;
+            }
+            if (lines == null) {
+                lines = buffers.getBuffer(RenderType.lines());
+            }
+            AABB column = new AABB(marker.x() + 0.3, minecraft.level.getMinBuildHeight(), marker.z() + 0.3,
+                    marker.x() + 0.7, minecraft.level.getMaxBuildHeight(), marker.z() + 0.7)
+                    .move(-camera.x, -camera.y, -camera.z);
+            LevelRenderer.renderLineBox(event.getPoseStack(), lines, column, 0.83F, 0.66F, 0.26F, 1.0F);
+        }
+        if (lines != null) {
+            buffers.endBatch(RenderType.lines());
+        }
+    }
+}

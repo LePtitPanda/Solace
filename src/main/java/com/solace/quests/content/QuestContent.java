@@ -1,9 +1,11 @@
 package com.solace.quests.content;
 
 import com.google.gson.JsonElement;
+import com.solace.quests.content.Dialogue.NpcBinding;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,7 +15,7 @@ import java.util.TreeMap;
 
 /** One immutable snapshot of all loaded quest content. Swapped atomically on reload. */
 public final class QuestContent {
-    public static final List<String> KINDS = List.of("chapters", "quests");
+    public static final List<String> KINDS = List.of("chapters", "quests", "dialogues", "npcs", "factions", "markers");
     public static final QuestContent EMPTY = new QuestContent(Map.of(), List.of());
     public static volatile QuestContent current = EMPTY;
 
@@ -24,11 +26,17 @@ public final class QuestContent {
     public record Raw(JsonElement json, String error) {
     }
 
-    private record Entry(Object definition, List<In.Ref> refs) {
+    private record Entry(Object definition, List<In.Ref> refs, JsonElement json) {
     }
 
     public final Map<ResourceLocation, Chapter> chapters = new TreeMap<>();
     public final Map<ResourceLocation, Quest> quests = new TreeMap<>();
+    public final Map<ResourceLocation, Dialogue> dialogues = new TreeMap<>();
+    public final Map<ResourceLocation, NpcBinding> npcs = new TreeMap<>();
+    public final Map<ResourceLocation, Faction> factions = new TreeMap<>();
+    public final Map<ResourceLocation, Marker> markers = new TreeMap<>();
+    /** Highest priority first. */
+    public final List<NpcBinding> bindings = new ArrayList<>();
     public final List<Quest> autoStart = new ArrayList<>();
     public final Set<String> objectiveTypes = new HashSet<>();
     public final List<Problem> problems;
@@ -46,12 +54,54 @@ public final class QuestContent {
                     autoStart.add(quest);
                 }
                 quest.phases().forEach(phase -> phase.objectives().forEach(o -> objectiveTypes.add(o.type())));
+            } else if (entry.definition instanceof Dialogue dialogue) {
+                dialogues.put(dialogue.id(), dialogue);
+            } else if (entry.definition instanceof NpcBinding binding) {
+                npcs.put(binding.id(), binding);
+                bindings.add(binding);
+            } else if (entry.definition instanceof Faction faction) {
+                factions.put(faction.id(), faction);
             }
         }
+        entries.forEach((key, entry) -> {
+            if (entry.definition instanceof Marker marker) {
+                markers.put(key.id(), marker);
+            }
+        });
+        bindings.sort(Comparator.comparingInt(NpcBinding::priority).reversed());
     }
 
     public long errorCount() {
         return problems.stream().filter(Problem::error).count();
+    }
+
+    /** The JSON of every applied entry, for the editor. */
+    public Map<Key, JsonElement> sources() {
+        Map<Key, JsonElement> sources = new LinkedHashMap<>();
+        entries.forEach((key, entry) -> sources.put(key, entry.json));
+        return sources;
+    }
+
+    private static Object parse(Key key, In in) {
+        return switch (key.kind()) {
+            case "chapters" -> QuestParser.chapter(key.id(), in);
+            case "quests" -> QuestParser.quest(key.id(), in);
+            case "dialogues" -> DialogueParser.dialogue(key.id(), in);
+            case "npcs" -> DialogueParser.npc(key.id(), in);
+            case "factions" -> QuestParser.faction(key.id(), in);
+            default -> QuestParser.markerFile(key.id(), in);
+        };
+    }
+
+    /** Validates one file on its own, without applying it (editor "validate" and pre-save check). */
+    public static List<Problem> check(Key key, JsonElement json, In.Lookup lookup) {
+        In.Out out = new In.Out(key.kind(), key.id(), lookup);
+        if (json == null || !json.isJsonObject()) {
+            out.problems.add(new Problem(key.kind(), key.id().toString(), "$", true, "expected a JSON object"));
+        } else {
+            parse(key, new In(json.getAsJsonObject(), "$", out));
+        }
+        return out.problems;
     }
 
     /**
@@ -71,10 +121,8 @@ public final class QuestContent {
             } else if (!raw.json().isJsonObject()) {
                 out.problems.add(new Problem(key.kind(), key.id().toString(), "$", true, "expected a JSON object"));
             } else {
-                In in = new In(raw.json().getAsJsonObject(), "$", out);
-                Object definition = key.kind().equals("chapters") ? QuestParser.chapter(key.id(), in)
-                        : QuestParser.quest(key.id(), in);
-                entry = new Entry(definition, List.copyOf(out.refs));
+                Object definition = parse(key, new In(raw.json().getAsJsonObject(), "$", out));
+                entry = new Entry(definition, List.copyOf(out.refs), raw.json());
             }
             problems.addAll(out.problems);
             if (out.failed()) {

@@ -63,6 +63,19 @@ public final class In {
         return key == null || key.isEmpty() ? path : path + "." + key;
     }
 
+    public java.util.Set<String> keys() {
+        return json.keySet();
+    }
+
+    public String path() {
+        return path;
+    }
+
+    /** A reader for an element that is not a direct field (e.g. a list entry); null unless it is an object. */
+    public In child(String key, JsonElement element) {
+        return element != null && element.isJsonObject() ? new In(element.getAsJsonObject(), at(key), out) : null;
+    }
+
     public boolean has(String key) {
         return json.has(key);
     }

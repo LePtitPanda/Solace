@@ -1,0 +1,11 @@
+{
+  "entity": "minecraft:villager",
+  "when": {
+    "type": "solace:entity",
+    "name_contains": "Marrow"
+  },
+  "dialogue": "astralis:cleric/first_steps",
+  "priority": 10,
+  "freeze": true,
+  "max_distance": 6
+}

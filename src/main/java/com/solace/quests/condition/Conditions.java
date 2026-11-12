@@ -1,16 +1,23 @@
 package com.solace.quests.condition;
 
+import com.solace.quests.content.Faction;
 import com.solace.quests.content.In;
 import com.solace.quests.content.Target;
 import com.solace.quests.state.PlayerQuestData;
 import com.solace.quests.state.QuestLogic;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraftforge.registries.ForgeRegistries;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Parses {"type": ...} condition objects. Reputation, entity and custom types arrive in later phases. */
+/** Parses {"type": ...} condition objects. */
 public final class Conditions {
     private Conditions() {
     }
@@ -104,11 +111,82 @@ public final class Conditions {
                 ResourceLocation predicate = in.id("predicate", true);
                 return predicate == null ? null : ctx -> ctx.predicate(predicate);
             }
+            case "solace:reputation" -> {
+                ResourceLocation faction = in.ref("faction", "factions", true);
+                String op = op(in);
+                int value = in.integer("value", 0, Integer.MIN_VALUE);
+                return op == null ? null : reputation(faction, op, value);
+            }
+            case "solace:faction_rank" -> {
+                ResourceLocation faction = in.ref("faction", "factions", true);
+                String op = op(in);
+                String rank = in.req("rank");
+                return op == null ? null : factionRank(faction, op, rank);
+            }
+            case "solace:biome" -> {
+                Target biome = in.target("biome", "biome", true);
+                return biome == null ? null : ctx -> ctx.inBiome(biome);
+            }
+            case "solace:structure" -> {
+                Target structure = in.target("structure", "structure", true);
+                return structure == null ? null : ctx -> ctx.inStructure(structure);
+            }
+            case "solace:advancement" -> {
+                ResourceLocation advancement = in.id("advancement", true);
+                return advancement == null ? null : ctx -> ctx.hasAdvancement(advancement);
+            }
+            case "solace:entity" -> {
+                String name = in.str("name_contains", null);
+                ResourceLocation profession = in.id("profession", false);
+                CompoundTag nbt = null;
+                String snbt = in.str("nbt", null);
+                if (snbt != null) {
+                    try {
+                        nbt = TagParser.parseTag(snbt);
+                    } catch (Exception exception) {
+                        in.err("nbt", "not valid SNBT: " + exception.getMessage());
+                    }
+                }
+                CompoundTag wanted = nbt;
+                return ctx -> ctx.entity instanceof Entity entity
+                        && (name == null || entity.getName().getString().contains(name))
+                        && (profession == null || entity instanceof Villager villager && profession.equals(
+                        ForgeRegistries.VILLAGER_PROFESSIONS.getKey(villager.getVillagerData().getProfession())))
+                        && (wanted == null || NbtUtils.compareNbt(wanted, entity.saveWithoutId(new CompoundTag()), true));
+            }
+            case "solace:custom" -> {
+                String handler = in.req("handler");
+                com.google.gson.JsonElement raw = in.raw("data");
+                String data = raw == null ? "null" : raw.toString();
+                return ctx -> ctx.custom(handler, data);
+            }
             default -> {
                 in.err("type", "unknown condition type \"" + type + "\"");
                 return null;
             }
         }
+    }
+
+    private static String op(In in) {
+        String op = in.str("op", ">=");
+        if (!List.of("==", "!=", "<", "<=", ">", ">=").contains(op)) {
+            in.err("op", "expected one of == != < <= > >=");
+            return null;
+        }
+        return op;
+    }
+
+    public static Condition reputation(ResourceLocation faction, String op, int value) {
+        return ctx -> faction != null && compare(ctx.reputation(faction), op, value);
+    }
+
+    /** Compares rank positions, so "&gt;= friendly" is true for every rank above it too. */
+    public static Condition factionRank(ResourceLocation factionId, String op, String rank) {
+        return ctx -> {
+            Faction faction = factionId == null ? null : ctx.content().factions.get(factionId);
+            int wanted = faction == null ? -1 : faction.rankIndex(rank);
+            return wanted >= 0 && compare(faction.rankIndex(ctx.reputation(factionId)), op, wanted);
+        };
     }
 
     public static boolean compare(int left, String op, int right) {

@@ -23,5 +23,8 @@
   "block.solace.white_chalk_terrain_slab": "White Chalk Terrain Slab",
   "block.solace.travertine_terrain_slab": "Travertine Terrain Slab",
   "block.solace.chert_terrain_slab": "Chert Terrain Slab",
-  "block.solace.algal_sand_terrain_slab": "Algal Sand Slab"
+  "block.solace.algal_sand_terrain_slab": "Algal Sand Slab",
+  "key.categories.solace": "Solace",
+  "key.solace.quests.book": "Open Quest Book",
+  "key.solace.quests.hud": "Toggle Quest Tracker"
 }

@@ -34,8 +34,13 @@ public final class QuestLogic {
 
         default void failed(Quest quest) {
         }
+
+        /** Actions of a transition or of a phase's on_enter, to run in order. */
+        default void actions(Quest quest, List<Reward> actions) {
+        }
     }
 
+    public static final int MAX_TRACKED = 5;
     private static final int MAX_CHAIN = 32;
     private static int viewDepth;
 
@@ -60,22 +65,16 @@ public final class QuestLogic {
                         .anyMatch(reward -> !state.claimed.contains(reward.id()))) {
                     return View.CLAIMABLE;
                 }
-                if (!quest.repeatable() || ctx.gameTime() < state.cooldownUntil) {
+                boolean again = quest.repeatable() || state.status == Status.FAILED && quest.retry();
+                if (!again || ctx.gameTime() < state.cooldownUntil) {
                     return state.status == Status.FAILED ? View.FAILED : View.COMPLETED;
                 }
             }
             if (data.unlocked.contains(quest.id())) {
                 return View.AVAILABLE;
             }
-            Chapter chapter = ctx.content().chapters.get(quest.chapter());
-            if (chapter != null && chapter.unlock() != null && !data.unlocked.contains(chapter.id())) {
-                ResourceLocation outer = ctx.quest;
-                ctx.quest = null;
-                boolean open = chapter.unlock().test(ctx);
-                ctx.quest = outer;
-                if (!open) {
-                    return View.LOCKED;
-                }
+            if (!chapterOpen(ctx, quest.chapter())) {
+                return View.LOCKED;
             }
             int done = 0;
             for (ResourceLocation required : quest.requires()) {
@@ -87,6 +86,20 @@ public final class QuestLogic {
             return done >= quest.requiresAtLeast() ? View.AVAILABLE : View.LOCKED;
         } finally {
             viewDepth--;
+        }
+    }
+
+    public static boolean chapterOpen(Ctx ctx, ResourceLocation chapterId) {
+        Chapter chapter = ctx.content().chapters.get(chapterId);
+        if (chapter == null || chapter.unlock() == null || ctx.data().unlocked.contains(chapterId)) {
+            return true;
+        }
+        ResourceLocation outer = ctx.quest;
+        ctx.quest = null;
+        try {
+            return chapter.unlock().test(ctx);
+        } finally {
+            ctx.quest = outer;
         }
     }
 
@@ -131,15 +144,23 @@ public final class QuestLogic {
     }
 
     private static void begin(Ctx ctx, Quest quest, String via, Events events) {
-        QuestState state = ctx.data().quests.computeIfAbsent(quest.id(), id -> new QuestState());
+        PlayerQuestData data = ctx.data();
+        QuestState state = data.quests.computeIfAbsent(quest.id(), id -> new QuestState());
+        Phase first = quest.phases().get(0);
         state.status = Status.ACTIVE;
-        state.phase = quest.phases().get(0).id();
+        state.phase = first.id();
         state.progress.clear();
         state.claimed.clear();
         state.startedAt = ctx.gameTime();
         state.log(ctx.gameTime(), state.phase, via);
+        if (data.tracked.size() < MAX_TRACKED && !data.tracked.contains(quest.id())) {
+            data.tracked.add(quest.id());
+        }
         ctx.changed();
         events.started(quest);
+        if (!first.onEnter().isEmpty()) {
+            events.actions(quest, first.onEnter());
+        }
     }
 
     /** Sets (not adds) an objective's progress in the current phase. Returns false if it does not apply. */
@@ -168,46 +189,50 @@ public final class QuestLogic {
     /** Moves an active quest to a phase, {@link Quest#COMPLETE} or {@link Quest#FAIL}. */
     public static boolean move(Ctx ctx, Quest quest, String to, String via, Events events) {
         QuestState state = ctx.data().quests.get(quest.id());
-        if (state == null || state.status != Status.ACTIVE) {
-            return false;
-        }
-        if (!apply(ctx, quest, state, to, via, events)) {
+        if (state == null || state.status != Status.ACTIVE || !apply(ctx, quest, state, to, via, List.of(), events)) {
             return false;
         }
         evaluate(ctx, events);
         return true;
     }
 
-    private static boolean apply(Ctx ctx, Quest quest, QuestState state, String to, String via, Events events) {
-        if (to.equals(Quest.COMPLETE)) {
-            state.status = Status.COMPLETED;
-            state.completions++;
+    private static boolean apply(Ctx ctx, Quest quest, QuestState state, String to, String via,
+                                 List<Reward> actions, Events events) {
+        Phase phase = quest.phase(to);
+        boolean end = to.equals(Quest.COMPLETE) || to.equals(Quest.FAIL);
+        if (!end && phase == null) {
+            return false;
+        }
+        state.log(ctx.gameTime(), to, via);
+        if (end) {
+            state.status = to.equals(Quest.COMPLETE) ? Status.COMPLETED : Status.FAILED;
             state.cooldownUntil = ctx.gameTime() + quest.cooldownSeconds() * 20L;
-            state.log(ctx.gameTime(), to, via);
-            ctx.changed();
-            events.completed(quest);
-        } else if (to.equals(Quest.FAIL)) {
-            state.status = Status.FAILED;
-            state.cooldownUntil = ctx.gameTime() + quest.cooldownSeconds() * 20L;
-            state.log(ctx.gameTime(), to, via);
-            ctx.changed();
-            events.failed(quest);
-        } else {
-            Phase phase = quest.phase(to);
-            if (phase == null) {
-                return false;
+            ctx.data().tracked.remove(quest.id());
+            if (state.status == Status.COMPLETED) {
+                state.completions++;
+                ctx.changed();
+                events.completed(quest);
+            } else {
+                ctx.changed();
+                events.failed(quest);
             }
+        } else {
             state.phase = to;
-            state.log(ctx.gameTime(), to, via);
             ctx.changed();
             events.phase(quest, phase);
+        }
+        if (!actions.isEmpty()) {
+            events.actions(quest, actions);
+        }
+        if (phase != null && !phase.onEnter().isEmpty()) {
+            events.actions(quest, phase.onEnter());
         }
         return true;
     }
 
     /**
-     * Re-checks auto-start quests, condition objectives and transitions of every active quest
-     * until nothing moves. Bounded, so content that loops between phases cannot hang the server.
+     * Re-checks auto-start quests, time limits, self-completing objectives and transitions of every
+     * active quest until nothing moves. Bounded, so content that loops cannot hang the server.
      */
     public static void evaluate(Ctx ctx, Events events) {
         ResourceLocation outer = ctx.quest;
@@ -226,6 +251,11 @@ public final class QuestLogic {
                     if (quest == null || state.status != Status.ACTIVE) {
                         continue;
                     }
+                    if (quest.timeLimitSeconds() > 0
+                            && ctx.gameTime() >= state.startedAt + quest.timeLimitSeconds() * 20L) {
+                        moved |= apply(ctx, quest, state, Quest.FAIL, "time_limit", List.of(), events);
+                        continue;
+                    }
                     Phase phase = quest.phase(state.phase);
                     if (phase == null) {
                         // The phase id was removed from the content: restart from the first phase.
@@ -236,7 +266,7 @@ public final class QuestLogic {
                     }
                     ctx.quest = quest.id();
                     for (Objective objective : phase.objectives()) {
-                        if (objective.type().equals("solace:condition")
+                        if (Quest.AUTO.contains(objective.type()) && objective.when() != null
                                 && state.progress.getOrDefault(objective.id(), 0) < 1 && objective.when().test(ctx)) {
                             state.progress.put(objective.id(), 1);
                             ctx.changed();
@@ -261,12 +291,12 @@ public final class QuestLogic {
             }
             int next = quest.phases().indexOf(phase) + 1;
             String to = next < quest.phases().size() ? quest.phases().get(next).id() : Quest.COMPLETE;
-            return apply(ctx, quest, state, to, "objectives", events);
+            return apply(ctx, quest, state, to, "objectives", List.of(), events);
         }
         for (Transition transition : phase.transitions()) {
             if (transition.when().test(ctx)) {
                 return apply(ctx, quest, state, transition.to(),
-                        transition.label() == null ? "transition" : transition.label(), events);
+                        transition.label() == null ? "transition" : transition.label(), transition.actions(), events);
             }
         }
         return false;
@@ -298,7 +328,37 @@ public final class QuestLogic {
         if (ctx.data().quests.remove(questId) == null) {
             return false;
         }
+        ctx.data().tracked.remove(questId);
         ctx.changed();
         return true;
+    }
+
+    /** The player gives up an active quest; it becomes available again. */
+    public static boolean abandon(Ctx ctx, Quest quest) {
+        QuestState state = ctx.data().quests.get(quest.id());
+        if (state == null || state.status != Status.ACTIVE || !quest.abandonable()) {
+            return false;
+        }
+        int completions = state.completions;
+        reset(ctx, quest.id());
+        if (completions > 0) {
+            // Keep the fact that it was completed before (repeatable quests), drop the run.
+            QuestState kept = new QuestState();
+            kept.status = Status.COMPLETED;
+            kept.completions = completions;
+            quest.rewards().forEach(reward -> kept.claimed.add(reward.id()));
+            ctx.data().quests.put(quest.id(), kept);
+        }
+        return true;
+    }
+
+    public static boolean track(Ctx ctx, ResourceLocation questId, boolean on) {
+        List<ResourceLocation> tracked = ctx.data().tracked;
+        boolean changed = on ? !tracked.contains(questId) && tracked.size() < MAX_TRACKED && tracked.add(questId)
+                : tracked.remove(questId);
+        if (changed) {
+            ctx.changed();
+        }
+        return changed;
     }
 }
