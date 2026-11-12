@@ -78,7 +78,9 @@ Any text field takes vanilla text-component JSON: `"Plain words"`,
 | `optional` | false | Not counted in the chapter's done/total. |
 | `hidden_until_unlocked` | false | Not sent to the client while locked. |
 | `visible_when` | none | Condition; the quest is not sent to the client while false. |
-| `auto_start` | false | Starts by itself as soon as it is available. |
+| `hidden_until` | `none` | Keeps the quest out of the book until enough is done: `one_dependency`, `all_dependencies`, `n_dependencies` (required quests completed) or `one_objective`, `all_objectives`, `n_objectives` (its own objectives done; use with `auto_start`). While hidden it shows no toasts either. |
+| `hidden_count` | 1 | The N for `n_dependencies` / `n_objectives`. |
+| `auto_start` | false | Starts by itself the first time it becomes available. A repeatable quest does not restart itself. |
 | `auto_claim` | false | Rewards are handed out on completion instead of on claim. |
 | `repeatable` | off | `{"cooldown_seconds": 60}` — can be started again after the cooldown. Progress and claimed rewards reset on restart; unclaimed rewards must be claimed first. |
 | `time_limit_seconds` | 0 | Above 0: the quest fails when the time is up. |
@@ -378,7 +380,7 @@ check <quest> <objective>                (players) tick a checkmark objective
 
 ## In game
 
-- **Quest book**: key `J` by default (Controls → Solace). Tabs: Quests, Journal, Factions.
+- **Quest book**: key `J` by default (Controls → Solace). Tabs: Quests, Factions (only factions you have standing with are listed).
   Optionally also opened by right-clicking an item: set `bookItem` in
   `config/solace-quests-client.json`, e.g. `"minecraft:book"`.
 - **HUD tracker**: up to 5 tracked quests. Toggle key is unbound by default. Position and other

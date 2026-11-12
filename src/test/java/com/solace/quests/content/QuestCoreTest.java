@@ -414,4 +414,38 @@ class QuestCoreTest {
         QuestLogic.setProgress(ctx, acts, "tick", 1, events);
         assertEquals(List.of("solace:flag", "solace:item"), ran, "aliases are normalised; transition runs before on_enter");
     }
+
+    @Test
+    void autoStartRunsOnceAndHiddenUntilRevealsTheQuest() {
+        String auto = """
+                {"chapter":"t:village","title":"Auto","auto_start":true,"repeatable":{"cooldown_seconds":0},
+                 "hidden_until":"one_objective",
+                 "objectives":[{"id":"a","type":"solace:checkmark"},{"id":"b","type":"solace:checkmark"}]}""";
+        String secret = """
+                {"chapter":"t:village","title":"Secret","requires":{"quests":["t:auto"]},
+                 "hidden_until":"all_dependencies","objectives":[{"id":"a","type":"solace:checkmark"}]}""";
+        Fake ctx = new Fake(QuestContent.build(
+                files("chapters", "village", CHAPTER, "quests", "auto", auto, "quests", "secret", secret),
+                QuestContent.EMPTY, null));
+        assertEquals(List.of(), ctx.content.problems);
+        Quest quest = ctx.content.quests.get(id("auto"));
+        Quest dependent = ctx.content.quests.get(id("secret"));
+        int[] starts = {0};
+        QuestLogic.Events events = new QuestLogic.Events() {
+            @Override
+            public void started(Quest q) {
+                starts[0]++;
+            }
+        };
+        QuestLogic.evaluate(ctx, events);
+        assertTrue(QuestLogic.hidden(ctx, quest), "no objective done yet");
+        assertTrue(QuestLogic.hidden(ctx, dependent));
+        QuestLogic.setProgress(ctx, quest, "a", 1, events);
+        assertFalse(QuestLogic.hidden(ctx, quest));
+        QuestLogic.setProgress(ctx, quest, "b", 1, events);
+        assertFalse(QuestLogic.hidden(ctx, dependent), "its dependency is completed");
+        QuestLogic.evaluate(ctx, events);
+        assertEquals(View.AVAILABLE, QuestLogic.view(ctx, quest), "repeatable, so it can be started again by hand");
+        assertEquals(1, starts[0], "but it never restarts itself");
+    }
 }

@@ -198,6 +198,12 @@ export const CHAPTER: Field[] = [
   f('order', 'Order', 'number'),
   f('unlock', 'Unlocked when', 'condition', { advanced: true }),
   f('hidden_until_unlocked', 'Hidden until unlocked', 'bool', { advanced: true }),
+  f('hidden_until', 'Hidden from the player until', 'select', {
+    options: ['none', 'one_dependency', 'all_dependencies', 'n_dependencies', 'one_objective', 'all_objectives', 'n_objectives'],
+    advanced: true,
+    help: 'Dependencies = the required quests. Objectives = its own (use with "Starts by itself").',
+  }),
+  f('hidden_count', 'N (for the n_... choices)', 'number', { advanced: true }),
 ];
 
 export const QUEST: Field[] = [

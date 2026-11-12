@@ -22,7 +22,7 @@ public final class QuestClientConfig {
     /** "left" or "right" edge of the screen. */
     public String hudSide = "right";
     /** Distance from the top, as a fraction of the screen height. */
-    public double hudTop = 0.25;
+    public double hudTop = 0.33;
     public boolean toasts = true;
     /** Arrow and distance to the tracked quest's marker in the HUD tracker. */
     public boolean compass = true;

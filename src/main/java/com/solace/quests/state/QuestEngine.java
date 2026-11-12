@@ -55,15 +55,21 @@ public final class QuestEngine {
         return new QuestLogic.Events() {
             @Override
             public void started(Quest quest) {
-                QuestNetwork.toast(player, "started", Component.literal("Quest started"), quest.title(), quest.icon());
-                story(player, quest.phases().get(0));
+                if (!QuestLogic.hidden(ctx(player), quest)) {
+                    QuestNetwork.toast(player, "started", Component.literal("Quest started"), quest.title(),
+                            quest.icon());
+                    story(player, quest.phases().get(0));
+                }
                 post(QuestEvent.Type.QUEST_STARTED, player, quest.id(), "", 0);
             }
 
             @Override
             public void phase(Quest quest, Phase phase) {
-                QuestNetwork.toast(player, "phase", Component.literal("Quest updated"), quest.title(), quest.icon());
-                story(player, phase);
+                if (!QuestLogic.hidden(ctx(player), quest)) {
+                    QuestNetwork.toast(player, "phase", Component.literal("Quest updated"), quest.title(),
+                            quest.icon());
+                    story(player, phase);
+                }
                 post(QuestEvent.Type.PHASE_CHANGED, player, quest.id(), phase.id(), 0);
             }
 

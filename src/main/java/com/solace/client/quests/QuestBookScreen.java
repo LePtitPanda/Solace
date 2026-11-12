@@ -30,15 +30,15 @@ import static com.solace.client.gui.WorldCreationThemeRenderer.TEXT;
 
 /**
  * The quest book: chapters on the left, a pannable and zoomable quest graph in the middle, the
- * selected quest's details on the right; plus Journal and Factions tabs. Purely a view of
+ * selected quest's details on the right; plus a Factions tab. Purely a view of
  * {@link ClientQuests}; every button sends an intent the server re-checks.
  */
 public class QuestBookScreen extends Screen {
-    private enum Tab { QUESTS, JOURNAL, FACTIONS }
+    private enum Tab { QUESTS, FACTIONS }
 
     private static final int LEFT = 150;
     private static final int RIGHT = 210;
-    private static final int TOP = 30;
+    private static final int TOP = 36;
     private static final int GRID = 46;
     private static final int NODE = 26;
     private static final int[] STATUS_COLOR = {0xFF3A3A55, TEXT, GOLD, 0xFFFFE9A8, GOLD_DIM, 0xFFAA4444};
@@ -108,13 +108,13 @@ public class QuestBookScreen extends Screen {
         builtFor = signature();
         int x = 8;
         for (Tab value : Tab.values()) {
-            String name = value == Tab.QUESTS ? "Quests" : value == Tab.JOURNAL ? "Journal" : "Factions";
-            addRenderableWidget(new BookButton(x, 6, 44, 18, Component.literal(name), tab == value, () -> {
+            String name = value == Tab.QUESTS ? "Quests" : "Factions";
+            addRenderableWidget(new BookButton(x, 6, 100, 24, Component.literal(name), tab == value, () -> {
                 tab = value;
                 scroll = 0;
                 rebuildWidgets();
             }));
-            x += 46;
+            x += 104;
         }
         QuestView quest = quest();
         if (tab != Tab.QUESTS || quest == null) {
@@ -187,8 +187,6 @@ public class QuestBookScreen extends Screen {
             if (detailsOpen()) {
                 renderDetails(graphics, quest());
             }
-        } else if (tab == Tab.JOURNAL) {
-            renderLines(graphics, journal(), 16, this.width - 16);
         } else {
             renderFactions(graphics);
         }
@@ -367,56 +365,6 @@ public class QuestBookScreen extends Screen {
             }
             y += 11;
         }
-    }
-
-    private List<Line> journal() {
-        int width = this.width - 40;
-        List<Line> lines = new ArrayList<>();
-        String[] titles = {"Active", "Completed", "Failed"};
-        int[][] statuses = {{QuestView.ACTIVE}, {QuestView.COMPLETED, QuestView.CLAIMABLE}, {QuestView.FAILED}};
-        for (int group = 0; group < 3; group++) {
-            wrap(lines, Component.literal(titles[group]), GOLD, 0, width, null);
-            int count = 0;
-            for (QuestView quest : ClientQuests.QUESTS.values()) {
-                if (quest.status() != statuses[group][0] && quest.status() != statuses[group][statuses[group].length - 1]) {
-                    continue;
-                }
-                count++;
-                if (group == 0) {
-                    // Clicking an active quest toggles it in the HUD tracker.
-                    String id = quest.id().toString();
-                    boolean tracked = quest.tracked();
-                    wrap(lines, Component.literal(tracked ? "[tracked] " : "[track] ").append(quest.title()),
-                            tracked ? GOLD : TEXT, 6, width,
-                            () -> QuestNetwork.intent(QuestNetwork.TRACK, id, "", tracked ? 0 : 1, 0, 0));
-                    for (Component story : quest.story()) {
-                        wrap(lines, story.copy().withStyle(ChatFormatting.ITALIC), 0xFFAAAACC, 18, width, null);
-                    }
-                } else {
-                    wrap(lines, quest.title(), group == 1 ? GOLD_DIM : 0xFFAA4444, 6, width, null);
-                }
-            }
-            if (count == 0) {
-                wrap(lines, Component.literal("Nothing here."), MUTED, 6, width, null);
-            }
-            lines.add(null);
-        }
-        wrap(lines, Component.literal("Conversations"), GOLD, 0, width, null);
-        if (ClientQuests.log.isEmpty()) {
-            wrap(lines, Component.literal("Nothing here."), MUTED, 6, width, null);
-        }
-        for (Component line : ClientQuests.log) {
-            wrap(lines, line, TEXT, 6, width, null);
-        }
-        return lines;
-    }
-
-    private void renderLines(GuiGraphics graphics, List<Line> lines, int left, int right) {
-        int top = TOP + 4, bottom = this.height - 10;
-        scroll = Mth.clamp(scroll, 0, Math.max(0, lines.size() * 11 - (bottom - top - 12)));
-        graphics.enableScissor(left, top, right, bottom);
-        draw(graphics, lines, left + 4, top + 6 - (int) scroll, top, bottom);
-        graphics.disableScissor();
     }
 
     private void renderFactions(GuiGraphics graphics) {

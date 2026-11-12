@@ -230,6 +230,10 @@ export function typed(target: any, discriminator: string, table: Record<string, 
   const select = h('select', {
     onchange: (e: Event) => {
       target[discriminator] = (e.target as HTMLSelectElement).value;
+      const keep = new Set((table[target[discriminator]] ?? []).map((field) => field.key));
+      for (const field of Object.values(table).flat()) {
+        if (!keep.has(field.key)) delete target[field.key];
+      }
       touch();
       draw();
     },

@@ -76,17 +76,45 @@ public final class QuestLogic {
             if (!chapterOpen(ctx, quest.chapter())) {
                 return View.LOCKED;
             }
-            int done = 0;
-            for (ResourceLocation required : quest.requires()) {
-                QuestState other = data.quests.get(required);
-                if (other != null && other.completions > 0) {
-                    done++;
-                }
-            }
-            return done >= quest.requiresAtLeast() ? View.AVAILABLE : View.LOCKED;
+            return requiredDone(data, quest) >= quest.requiresAtLeast() ? View.AVAILABLE : View.LOCKED;
         } finally {
             viewDepth--;
         }
+    }
+
+    private static int requiredDone(PlayerQuestData data, Quest quest) {
+        int done = 0;
+        for (ResourceLocation required : quest.requires()) {
+            QuestState other = data.quests.get(required);
+            if (other != null && other.completions > 0) {
+                done++;
+            }
+        }
+        return done;
+    }
+
+    /** True while the quest's "hidden_until" rule keeps it out of the book. Never hides a completed quest. */
+    public static boolean hidden(Ctx ctx, Quest quest) {
+        QuestState state = ctx.data().quests.get(quest.id());
+        if (state != null && state.completions > 0) {
+            return false;
+        }
+        if (requiredDone(ctx.data(), quest) < Math.min(quest.hiddenDeps(), quest.requires().size())) {
+            return true;
+        }
+        if (quest.hiddenObjectives() == 0) {
+            return false;
+        }
+        int total = 0, done = 0;
+        for (Phase phase : quest.phases()) {
+            for (Objective objective : phase.objectives()) {
+                total++;
+                if (state != null && state.progress.getOrDefault(objective.id(), 0) >= objective.count()) {
+                    done++;
+                }
+            }
+        }
+        return done < Math.min(quest.hiddenObjectives(), total);
     }
 
     public static boolean chapterOpen(Ctx ctx, ResourceLocation chapterId) {
@@ -240,7 +268,8 @@ public final class QuestLogic {
             for (int round = 0; round < MAX_CHAIN; round++) {
                 boolean moved = false;
                 for (Quest quest : ctx.content().autoStart) {
-                    if (view(ctx, quest) == View.AVAILABLE) {
+                    // Only a quest that never ran: a repeatable one must not restart itself forever.
+                    if (!ctx.data().quests.containsKey(quest.id()) && view(ctx, quest) == View.AVAILABLE) {
                         begin(ctx, quest, "auto_start", events);
                         moved = true;
                     }

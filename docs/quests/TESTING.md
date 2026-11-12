@@ -50,7 +50,6 @@ Replace `@s` with your name where a command wants a player.
 | C3 | Click a node | A details panel on the right: title, status, description, objectives with counts, rewards, story so far. |
 | C4 | Select First Steps (rewards ready), click "Claim rewards" | 3 levels, 6 bread; rewards show `[x]`; the node dims. |
 | C5 | Start `astralis:village/landmark` by command, open the book, select it | "In progress" with a countdown, buttons "Untrack" and "Abandon". Holding "Abandon" until it fills removes the quest. |
-| C6 | Journal tab | Active / Completed / Failed lists, story text under active quests, and the lines Marrow said under "Conversations". Clicking an active quest toggles `[tracked]`. |
 | C7 | Close the book with an active tracked quest | A tracker on the right edge: quest title, objectives with `n/N`. Hidden with F1. |
 | C8 | `/time set night` | Toast "Quest completed — Night Watch" (needs the flag from C4). |
 | C9 | In Controls → Solace, bind "Toggle Quest Tracker" and press it | The tracker hides/shows. |

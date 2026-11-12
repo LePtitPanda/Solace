@@ -16,9 +16,6 @@
   },
   "auto_start": true,
   "auto_claim": true,
-  "repeatable": {
-    "cooldown_seconds": 60
-  },
   "objectives": [
     {
       "id": "night",

@@ -163,8 +163,26 @@ public final class QuestParser {
             in.err("on_fail", "expected \"keep\" or \"reset\"");
         }
 
+        // "hidden_until": the quest stays out of the book until enough dependencies or objectives are done.
+        int hiddenDeps = 0, hiddenObjectives = 0;
+        String hiddenUntil = in.str("hidden_until", "none");
+        int hiddenCount = in.integer("hidden_count", 1, 1);
+        switch (hiddenUntil) {
+            case "none" -> {
+            }
+            case "one_dependency" -> hiddenDeps = 1;
+            case "all_dependencies" -> hiddenDeps = Integer.MAX_VALUE;
+            case "n_dependencies" -> hiddenDeps = hiddenCount;
+            case "one_objective" -> hiddenObjectives = 1;
+            case "all_objectives" -> hiddenObjectives = Integer.MAX_VALUE;
+            case "n_objectives" -> hiddenObjectives = hiddenCount;
+            default -> in.err("hidden_until", "expected none, one_dependency, all_dependencies, n_dependencies, "
+                    + "one_objective, all_objectives or n_objectives");
+        }
+
         Quest quest = new Quest(id, chapter, title, description, icon(in), x, y, atLeast, List.copyOf(requires),
-                in.bool("optional", false), in.bool("hidden_until_unlocked", false), in.bool("auto_start", false),
+                in.bool("optional", false), in.bool("hidden_until_unlocked", false), hiddenDeps, hiddenObjectives,
+                in.bool("auto_start", false),
                 repeatable, cooldown, in.bool("auto_claim", false), in.integer("time_limit_seconds", 0, 0),
                 onFail.equals("reset"), in.bool("abandonable", true), condition(in, "visible_when"),
                 // In the single-phase shorthand the top-level markers already belong to that phase.

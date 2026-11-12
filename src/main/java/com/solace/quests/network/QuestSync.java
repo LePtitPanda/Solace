@@ -99,6 +99,10 @@ public final class QuestSync {
         }
         List<FactionView> factions = new ArrayList<>();
         for (Faction faction : content.factions.values()) {
+            // Factions the player has no history with stay out of the book.
+            if (!ctx.data().reputation.containsKey(faction.id())) {
+                continue;
+            }
             int value = Factions.get(ctx, faction.id());
             int rank = faction.rankIndex(value);
             factions.add(new FactionView(faction.id(), faction.name(), faction.color(), faction.icon(), value,
@@ -164,7 +168,7 @@ public final class QuestSync {
     private static QuestView view(ServerCtx ctx, Quest quest) {
         QuestLogic.View status = QuestLogic.view(ctx, quest);
         ctx.quest = null;
-        if (quest.hidden() && status == QuestLogic.View.LOCKED
+        if (quest.hidden() && status == QuestLogic.View.LOCKED || QuestLogic.hidden(ctx, quest)
                 || quest.visibleWhen() != null && !quest.visibleWhen().test(ctx)) {
             return null;
         }

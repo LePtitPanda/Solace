@@ -8,10 +8,15 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.List;
 import java.util.Set;
 
-/** {@code icon} fields are "item:<id>" or "texture:<id>", or null. */
+/**
+ * {@code icon} fields are "item:<id>" or "texture:<id>", or null. {@code hiddenDeps} and
+ * {@code hiddenObjectives}: how many must be done before the player sees the quest (0 = no rule,
+ * Integer.MAX_VALUE = all).
+ */
 public record Quest(ResourceLocation id, ResourceLocation chapter, Component title, Component description,
                     String icon, int x, int y, int requiresAtLeast, List<ResourceLocation> requires,
-                    boolean optional, boolean hidden, boolean autoStart, boolean repeatable, int cooldownSeconds,
+                    boolean optional, boolean hidden, int hiddenDeps, int hiddenObjectives,
+                    boolean autoStart, boolean repeatable, int cooldownSeconds,
                     boolean autoClaim, int timeLimitSeconds, boolean retry, boolean abandonable,
                     Condition visibleWhen, List<Marker> markers, List<Phase> phases, List<Reward> rewards) {
     public static final String COMPLETE = "@complete";

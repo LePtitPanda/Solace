@@ -71,8 +71,20 @@ public final class ClientQuests {
         }
     }
 
+    private static boolean fancyBroken;
+
     public static void toast(QuestNetwork.Toast toast) {
         if (QuestClientConfig.get().toasts) {
+            // A finished quest goes to Fancy Toasts when that mod is installed.
+            if (toast.kind().equals("completed") && !fancyBroken && ModList.get().isLoaded("fancytoasts")) {
+                try {
+                    FancyToastCompat.show(toast);
+                    return;
+                } catch (RuntimeException | LinkageError exception) {
+                    fancyBroken = true;
+                    LOGGER.warn("[Solace Quests] Fancy Toasts is not compatible; using the built-in toast.", exception);
+                }
+            }
             Minecraft.getInstance().getToasts().addToast(new QuestToast(toast));
         }
     }
