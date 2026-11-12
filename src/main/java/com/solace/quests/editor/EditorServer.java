@@ -105,6 +105,33 @@ public final class EditorServer {
         return 1;
     }
 
+    /**
+     * Written on every world load so "Open Quest Editor.bat" can serve the editor without the game:
+     * the page, the launcher, the registries and the datapack content. Loose files are read live.
+     */
+    public static void snapshot(MinecraftServer server) {
+        Path folder = FMLPaths.CONFIGDIR.get().resolve("solace").resolve("quest-editor");
+        try {
+            for (String name : List.of("index.html", "server.ps1", "Open Quest Editor.bat")) {
+                try (InputStream resource = EditorServer.class.getResourceAsStream("/assets/solace/quest_editor/" + name)) {
+                    if (resource != null) {
+                        write(folder.resolve(name), new String(resource.readAllBytes(), StandardCharsets.UTF_8));
+                    }
+                }
+            }
+            write(folder.resolve("registries.json"), GSON.toJson(registries(server)));
+            JsonArray shipped = new JsonArray();
+            content().getAsJsonArray("entries").forEach(entry -> {
+                if (entry.getAsJsonObject().get("source").getAsString().equals("datapack")) {
+                    shipped.add(entry);
+                }
+            });
+            write(folder.resolve("datapack.json"), GSON.toJson(shipped));
+        } catch (IOException | RuntimeException exception) {
+            LOGGER.warn("[Solace Quests] Could not write the offline editor snapshot", exception);
+        }
+    }
+
     public static synchronized void stop() {
         if (socket != null) {
             try {

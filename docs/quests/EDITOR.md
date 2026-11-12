@@ -22,6 +22,19 @@ from your own content, and asks the game to validate as you type.
 The editor never writes outside `config/solace/quests/`. To ship content with the pack, move the
 files into the datapack (`data/<namespace>/solace_quests/…`) when you are happy with them.
 
+## Without the game
+
+Double-click `config/solace/quest-editor/Open Quest Editor.bat`. It opens the same editor in your
+browser, reading and saving the live files in `config/solace/quests/`. Close the console window
+to stop it.
+
+- The folder is written every time a world loads, so id autocomplete uses the registries and
+  the datapack content of the last world you loaded. Load a world once after installing or
+  changing mods.
+- There is no quest validation while the game is off: any valid JSON is saved, and the game
+  reports problems on its next load or `/solacequests reload`.
+- It is local only: `localhost`, a random port and a random token, like the live link.
+
 ### Security of the link
 
 - The server listens on `127.0.0.1` only, on a random port, and only after an operator runs the

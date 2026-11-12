@@ -166,6 +166,9 @@ tasks.named('processResources', ProcessResources).configure {
         include 'index.html'
         into 'assets/solace/quest_editor'
     }
+    from('editor/standalone') {
+        into 'assets/solace/quest_editor'
+    }
 
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]

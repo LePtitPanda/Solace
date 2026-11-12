@@ -31,6 +31,7 @@ export const state = {
 };
 
 let token = '';
+let offline = false; // served by "Open Quest Editor.bat", no game behind it
 let changed: () => void = () => {};
 export const onChange = (listener: () => void) => (changed = listener);
 export const notify = () => changed();
@@ -44,7 +45,7 @@ async function api(method: string, path: string, body?: unknown): Promise<any> {
   const response = await fetch('/api/' + path, {
     method,
     headers: { Authorization: 'Bearer ' + token },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body, null, 2), // the offline server writes it as is
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok && response.status !== 422) {
@@ -79,11 +80,13 @@ export async function connect() {
     return;
   }
   try {
-    await api('GET', 'session');
+    offline = !!(await api('GET', 'session')).offline;
     state.registries = await api('GET', 'registries');
     setContent(await api('GET', 'content'));
     state.online = true;
-    state.status = 'Connected to the game.';
+    state.status = offline
+      ? 'Game not running: editing the live files with the registries of the last world load. The game validates on its next load.'
+      : 'Connected to the game.';
   } catch (error) {
     state.status = 'Could not reach the game (' + (error as Error).message + '). Run /solacequests editor again.';
   }
@@ -106,7 +109,7 @@ export async function save(e: Entry) {
     if (result.saved) {
       e.dirty = false;
       e.source = 'loose';
-      state.status = 'Saved ' + e.id + '. Use "Reload game" to apply.';
+      state.status = 'Saved ' + e.id + (offline ? '.' : '. Use "Reload game" to apply.');
     } else {
       state.status = 'Not saved: ' + e.id + ' has errors (see Problems).';
     }
@@ -163,7 +166,7 @@ export async function remove(e: Entry) {
 export async function reloadGame() {
   setContent(await api('POST', 'reload'));
   const errors = state.problems.filter((p) => p.severity === 'error').length;
-  state.status = 'Game reloaded: ' + errors + ' error(s), ' + (state.problems.length - errors) + ' warning(s).';
+  state.status = offline ? 'Files read again from disk.' : 'Game reloaded: ' + errors + ' error(s), ' + (state.problems.length - errors) + ' warning(s).';
   notify();
 }
 
