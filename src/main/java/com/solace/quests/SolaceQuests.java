@@ -96,8 +96,15 @@ public final class SolaceQuests {
      */
     @SubscribeEvent(priority = EventPriority.HIGH)
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
-        if (!(event.getEntity() instanceof ServerPlayer player) || !real(player)
-                || event.getHand() != InteractionHand.MAIN_HAND) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !real(player)) {
+            return;
+        }
+        if (event.getHand() != InteractionHand.MAIN_HAND) {
+            // The off-hand pass of a click that already opened a dialogue must not reach vanilla (trading).
+            if (DialogueManager.npc(player) == event.getTarget()) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+            }
             return;
         }
         QuestEngine.objective(player, "solace:interact_entity", objective -> objective.target().matches(event.getTarget())

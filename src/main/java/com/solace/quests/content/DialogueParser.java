@@ -69,6 +69,8 @@ public final class DialogueParser {
     }
 
     private static Node node(String id, In in) {
+        // Where the web editor drew the node; means nothing to the game.
+        in.skip("editor");
         boolean entityPortrait = true;
         ResourceLocation itemPortrait = null;
         In portrait = in.obj("portrait");

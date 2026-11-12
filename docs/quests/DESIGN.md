@@ -1,7 +1,9 @@
 # Solace Quests — Design
 
-Status: **approved 2026-11-12** with the §1 recommendations. Phase 2 (core) is implemented; see §16.
-Where the code deliberately differs from this plan it is marked **As built**.
+Status: **approved 2026-11-12** with the §1 recommendations. Phases 1-8 are implemented (§16);
+only phase 2 has been run in a real game so far. Where the code differs from this plan it is
+marked **As built**, and §17 lists every such difference in one place. The up-to-date reference
+for content authors is [AUTHORING.md](AUTHORING.md), not the examples in §5.
 Branch: `feature/solace-quests` in the `Solace` submodule.
 
 Solace Quests is a feature module inside the Solace mod (Forge 47.4.15, MC 1.20.1, official
@@ -796,14 +798,55 @@ those classes when KubeJS is absent.
 | Phase | Contents | Status |
 |-------|----------|--------|
 | 1 | This document | done |
-| 2 | Loader, validation, hot reload, conditions, flags/variables, `QuestSavedData`, engine, commands, objectives (kill, break, place, item, reach location, condition, checkmark), rewards | done — no sync yet (see §8); time limits, NBT matching and the `orphaned` flag being stored (it is derived instead) are not in |
-| 3 | Dialogue runtime, NPC bindings, `DialogueScreen`, actions | |
-| 4 | Quest book, journal, HUD tracker, toasts | |
-| 5 | Factions, reputation, gossip bridge, Thief events | |
-| 6 | Markers, Xaero bridge, compass/beam fallback | |
-| 7 | Remaining objectives, time limits, KubeJS, polish, JEI/EMI if time | |
-| 8 | Web editor (can start once §5 is frozen after phase 3) | |
-| 9 | Blabber migration script for the 41 files in `…/data/astralis/blabber/dialogues/` | |
+| 2 | Loader, validation, hot reload, conditions, flags/variables, saved data, engine, commands, first objectives, rewards | done, loaded in game |
+| 3 | Dialogue runtime, NPC bindings, dialogue screen, actions | done, not run in game |
+| 4 | Quest book, journal, HUD tracker, toasts | done, not run in game |
+| 5 | Factions, reputation, gossip bridge, Thief events | done, not run in game |
+| 6 | Markers, Xaero bridge, compass and beam fallback | done, not run in game |
+| 7 | Remaining objectives, time limits, KubeJS, Java API | done, not run in game |
+| 8 | Web editor | done; page checked in a browser against a mock of the game API, the real link not run |
+| 9 | Blabber / ArcQuest migration | dropped at the user's request |
 
-Documentation written as the code lands: `AUTHORING.md`, `EDITOR.md`, `KUBEJS.md`,
-`TROUBLESHOOTING.md` in this folder.
+Guides: [AUTHORING.md](AUTHORING.md), [EDITOR.md](EDITOR.md), [KUBEJS.md](KUBEJS.md),
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md), [TESTING.md](TESTING.md).
+
+## 17. As built: differences from the plan above
+
+- **Packages**: `quests` (wiring, commands), `.content`, `.condition`, `.state` (data, logic,
+  engine, factions, markers), `.dialogue`, `.network`, `.editor`, `.api`, `.compat`;
+  client code in `client.quests`.
+- **Effects**: rewards and actions are one set of types (§5.5 and the action list in §5.6 merged),
+  with friendlier aliases for actions (`give_item`, `set_flag`, `set_variable`).
+- **Self-completing objectives**: reputation, faction rank, advancement, dimension, biome and
+  structure objectives are compiled into conditions and checked with the transitions, instead of
+  each having an event or timer of its own.
+- **Objective lookup** is per owner (§6.2 note). There is no structure LRU cache: the check is
+  one `getStructureWithPieceAt` per second, only for players holding such an objective.
+- **Sync** (§8.1): the client never receives content definitions. The server builds per-player
+  *views* (what this player may see, with texts and progress) and sends only the views whose
+  bytes changed. This gives the spoiler protection of §1 decision 5 for free. `ContentSync`,
+  `StateSnapshot` and `StateDelta` became `Meta` (chapters, factions, log) and `Quests`.
+- **Intents** (§8.2): one `Intent` packet with a kind, instead of one packet class per intent.
+- **NPC freeze**: no goal and no stored state. While a session exists the server stops the mob's
+  navigation and points its look control at the player each tick, so it is released the moment
+  the session ends. No mixin was needed.
+- **Dialogue node cooldown**: a node on cooldown closes the dialogue.
+- **Structure markers**: searched once (64-chunk radius, at most one search per update) and
+  remembered per player and dimension, including "not found". The search runs on the server
+  thread and can pause the game for a moment the first time.
+- **Xaero**: uses `MinimapWorldManager.getCustomWaypoints(solace:quests)`, which the minimap's
+  waypoint collector draws and never saves. These are not per dimension, so the client lists only
+  the current dimension's markers and rebuilds on dimension change.
+- **Editor server** (§1 decision 3, §13.1): written on plain `ServerSocket` rather than
+  `com.sun.net.httpserver`. The module is present in the runtimes checked, but whether Forge's
+  module layers expose it could not be verified without running the game, and the socket version
+  cannot fail that way. Endpoints: `GET session|registries|content`, `POST reload`,
+  `PUT|POST|DELETE content/<kind>/<namespace>/<path>` (POST = validate only).
+- **Quest book item**: no new item is registered. `bookItem` in the client config names an
+  existing item whose right-click opens the book.
+- **Journal**: one scrolling page (active with story, completed, failed, conversations), and a
+  separate Factions tab.
+- **Config**: `config/solace-quests-client.json` exists; `config/solace-quests.json` is only read
+  for `editorAllowDedicated`. Limits and timers are constants.
+- **Not done**: JEI/EMI lookups, light editor theme, `solace:open_shop`, texture portraits in
+  dialogue, quest-level `orphaned` flag stored on disk (it is derived), party progress.

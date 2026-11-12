@@ -160,6 +160,12 @@ tasks.named('processResources', ProcessResources).configure {
     ]
     inputs.properties replaceProperties
 
+    // The quest web editor, built by "npm run build" in editor/ and committed as one file.
+    from('editor/dist') {
+        include 'index.html'
+        into 'assets/solace/quest_editor'
+    }
+
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]
     }
