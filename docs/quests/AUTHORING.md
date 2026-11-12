@@ -81,7 +81,7 @@ Any text field takes vanilla text-component JSON: `"Plain words"`,
 | `hidden_until` | `none` | Keeps the quest out of the book until enough is done: `one_dependency`, `all_dependencies`, `n_dependencies` (required quests completed) or `one_objective`, `all_objectives`, `n_objectives` (its own objectives done; use with `auto_start`). While hidden it shows no toasts either. |
 | `hidden_count` | 1 | The N for `n_dependencies` / `n_objectives`. |
 | `auto_start` | false | Starts by itself the first time it becomes available. A repeatable quest does not restart itself. |
-| `auto_claim` | false | Rewards are handed out on completion instead of on claim. |
+| `auto_claim` | false | Rewards are handed out on completion instead of on claim. Without it only item, XP and loot rewards wait for "Claim rewards"; flags, reputation and other bookkeeping rewards always apply on completion. |
 | `repeatable` | off | `{"cooldown_seconds": 60}` — can be started again after the cooldown. Progress and claimed rewards reset on restart; unclaimed rewards must be claimed first. |
 | `time_limit_seconds` | 0 | Above 0: the quest fails when the time is up. |
 | `on_fail` | `"keep"` | `"reset"`: a failed quest becomes available again. |

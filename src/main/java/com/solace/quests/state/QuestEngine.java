@@ -42,6 +42,8 @@ import java.util.function.Predicate;
 /** Server-side entry point: turns game events into {@link QuestLogic} calls and runs effects. */
 public final class QuestEngine {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private static final java.util.Set<String> CLAIMED_BY_HAND = java.util.Set.of("solace:item", "solace:xp",
+            "solace:loot_table");
     private static int effectDepth;
 
     private QuestEngine() {
@@ -75,11 +77,19 @@ public final class QuestEngine {
 
             @Override
             public void completed(Quest quest) {
-                QuestNetwork.toast(player, "completed", Component.literal("Quest completed"), quest.title(),
-                        quest.icon());
-                if (quest.autoClaim()) {
-                    claim(player, quest, null);
+                // Only rewards that land in the inventory wait for "Claim rewards". Flags, reputation,
+                // unlocks and the like apply now, so other quests never stall on an unclaimed one.
+                boolean waiting = false;
+                for (Reward reward : quest.rewards()) {
+                    if (quest.autoClaim() || !CLAIMED_BY_HAND.contains(reward.type())) {
+                        claim(player, quest, reward.id());
+                    } else {
+                        waiting = true;
+                    }
                 }
+                QuestNetwork.toast(player, "completed",
+                        Component.literal(waiting ? "Quest completed - claim rewards in the quest book" : "Quest completed"),
+                        quest.title(), quest.icon());
                 post(QuestEvent.Type.QUEST_COMPLETED, player, quest.id(), "", 0);
             }
 
