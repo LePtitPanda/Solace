@@ -1,0 +1,9 @@
+{
+  "chapter": "astralis:village",
+  "titel": "Typo In The Field Name",
+  "requires": { "quests": ["astralis:village/does_not_exist"] },
+  "objectives": [
+    { "id": "a", "type": "solace:kill", "entity": "minecraft:zombie", "count": "three" },
+    { "id": "b", "type": "solace:dance" }
+  ]
+}

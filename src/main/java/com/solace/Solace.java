@@ -43,6 +43,7 @@ public class Solace {
         SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
         com.solace.compat.terrainslabs.TerrainSlabsCompat.register(FMLJavaModLoadingContext.get().getModEventBus());
         LootEditorNetwork.register();
+        com.solace.quests.SolaceQuests.init();
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
         MinecraftForge.EVENT_BUS.register(OverworldSpawnManager.class);
         updateCraftPresenceConfig();

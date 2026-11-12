@@ -1,0 +1,18 @@
+{
+  "chapter": "astralis:village",
+  "title": "Supplies",
+  "description": "Gather wood, quarry some stone and set up a workbench.",
+  "icon": { "item": "minecraft:oak_log" },
+  "position": { "x": 2, "y": 0 },
+  "requires": { "mode": "all", "quests": ["astralis:village/first_steps"] },
+  "objectives": [
+    { "id": "logs", "type": "solace:item", "item": "#minecraft:logs", "count": 8, "consume": true, "text": "Hand over logs" },
+    { "id": "stone", "type": "solace:break_block", "block": "#minecraft:base_stone_overworld", "count": 4, "text": "Quarry stone" },
+    { "id": "bench", "type": "solace:place_block", "block": "minecraft:crafting_table", "text": "Place a crafting table" }
+  ],
+  "rewards": [
+    { "id": "tools", "type": "solace:loot_table", "table": "minecraft:chests/village/village_toolsmith" },
+    { "id": "thanks", "type": "solace:command", "command": "title @p actionbar {\"text\":\"The village thanks you\",\"color\":\"gold\"}" },
+    { "id": "gold", "type": "solace:variable", "name": "gold", "op": "add", "value": 10 }
+  ]
+}

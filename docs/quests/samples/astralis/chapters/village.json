@@ -1,0 +1,6 @@
+{
+  "title": "The Village",
+  "description": "Find your feet among the people of the village.",
+  "icon": { "item": "minecraft:bell" },
+  "order": 10
+}

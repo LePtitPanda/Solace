@@ -1,0 +1,299 @@
+package com.solace.quests.content;
+
+import com.google.gson.JsonParser;
+import com.solace.quests.condition.Ctx;
+import com.solace.quests.content.QuestContent.Key;
+import com.solace.quests.content.QuestContent.Raw;
+import com.solace.quests.state.PlayerQuestData;
+import com.solace.quests.state.QuestLogic;
+import com.solace.quests.state.QuestLogic.View;
+import com.solace.quests.state.QuestSavedData;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class QuestCoreTest {
+    private static final String CHAPTER = "{\"title\":\"Village\"}";
+    private static final String HUNT = """
+            {"chapter":"t:village","title":"Hunt",
+             "phases":[
+               {"id":"hunt","objectives":[{"id":"zombies","type":"solace:kill","entity":"minecraft:zombie","count":3}]},
+               {"id":"report","objectives":[{"id":"tick","type":"solace:checkmark"}],
+                "transitions":[
+                  {"to":"@fail","when":{"type":"solace:flag","flag":"betrayed"},"label":"betrayal"},
+                  {"to":"@complete","when":{"type":"solace:objectives_complete"}}]}],
+             "rewards":[{"id":"xp","type":"solace:xp","levels":1},{"id":"flag","type":"solace:flag","flag":"hunter"}]}""";
+    private static final String SEQUEL = """
+            {"chapter":"t:village","title":"Sequel","requires":{"quests":["t:hunt"]},
+             "objectives":[{"id":"rich","type":"solace:condition",
+               "when":{"type":"solace:variable","name":"gold","op":">=","value":10}}]}""";
+
+    private static ResourceLocation id(String path) {
+        return new ResourceLocation("t", path);
+    }
+
+    private static Map<Key, Raw> files(String... kindIdJson) {
+        Map<Key, Raw> files = new LinkedHashMap<>();
+        for (int i = 0; i < kindIdJson.length; i += 3) {
+            files.put(new Key(kindIdJson[i], id(kindIdJson[i + 1])),
+                    new Raw(JsonParser.parseString(kindIdJson[i + 2]), null));
+        }
+        return files;
+    }
+
+    private static QuestContent valid() {
+        QuestContent content = QuestContent.build(
+                files("chapters", "village", CHAPTER, "quests", "hunt", HUNT, "quests", "sequel", SEQUEL),
+                QuestContent.EMPTY, null);
+        assertEquals(List.of(), content.problems);
+        return content;
+    }
+
+    private static final class Fake extends Ctx {
+        final QuestContent content;
+        final PlayerQuestData data = new PlayerQuestData();
+        long time;
+
+        Fake(QuestContent content) {
+            this.content = content;
+        }
+
+        @Override
+        public QuestContent content() {
+            return content;
+        }
+
+        @Override
+        public PlayerQuestData data() {
+            return data;
+        }
+
+        @Override
+        public long gameTime() {
+            return time;
+        }
+
+        @Override
+        public String dimension() {
+            return "minecraft:overworld";
+        }
+
+        @Override
+        public long dayTime() {
+            return 6000;
+        }
+
+        @Override
+        public int countItem(Target item, boolean heldOnly) {
+            return 0;
+        }
+
+        @Override
+        public boolean predicate(ResourceLocation id) {
+            return false;
+        }
+
+        @Override
+        public void changed() {
+        }
+    }
+
+    private static final QuestLogic.Events QUIET = new QuestLogic.Events() {
+    };
+
+    @Test
+    void parsesValidContent() {
+        QuestContent content = valid();
+        Quest hunt = content.quests.get(id("hunt"));
+        assertEquals(2, hunt.phases().size());
+        assertEquals(3, hunt.phases().get(0).objectives().get(0).count());
+        assertEquals("main", content.quests.get(id("sequel")).phases().get(0).id());
+        assertTrue(content.objectiveTypes.contains("solace:kill"));
+    }
+
+    @Test
+    void errorsNameFileAndJsonPath() {
+        QuestContent content = QuestContent.build(files("chapters", "village", CHAPTER, "quests", "hunt",
+                HUNT.replace("\"count\":3", "\"count\":\"three\"")), QuestContent.EMPTY, null);
+        Problem problem = content.problems.stream().filter(Problem::error).findFirst().orElseThrow();
+        assertEquals("t:hunt", problem.id());
+        assertEquals("$.phases[0].objectives[0].count", problem.path());
+        assertTrue(problem.message().contains("expected integer >= 1"), problem.message());
+        assertNull(content.quests.get(id("hunt")));
+        assertNotNull(content.chapters.get(id("village")), "other files are unaffected");
+    }
+
+    @Test
+    void unknownFieldIsOnlyAWarning() {
+        QuestContent content = QuestContent.build(files("chapters", "village",
+                "{\"title\":\"Village\",\"titel\":\"x\"}"), QuestContent.EMPTY, null);
+        assertEquals(0, content.errorCount());
+        assertEquals("$.titel", content.problems.get(0).path());
+        assertNotNull(content.chapters.get(id("village")));
+    }
+
+    @Test
+    void brokenFileKeepsItsPreviousVersionOnly() {
+        QuestContent previous = valid();
+        QuestContent next = QuestContent.build(files("chapters", "village", CHAPTER,
+                "quests", "hunt", "{\"chapter\":\"t:village\"}",
+                "quests", "sequel", SEQUEL.replace("Sequel", "Sequel II")), previous, null);
+        assertTrue(next.errorCount() > 0);
+        assertEquals("Hunt", next.quests.get(id("hunt")).title().getString(), "previous version kept");
+        assertEquals("Sequel II", next.quests.get(id("sequel")).title().getString(), "valid file still updated");
+    }
+
+    @Test
+    void unreadableFileAndDanglingReferenceAreDropped() {
+        Map<Key, Raw> files = files("quests", "hunt", HUNT, "quests", "sequel", SEQUEL);
+        files.put(new Key("chapters", id("village")), new Raw(null, "invalid JSON: boom"));
+        QuestContent content = QuestContent.build(files, QuestContent.EMPTY, null);
+        // No chapter -> hunt is dangling -> sequel (requires hunt) is dangling too.
+        assertTrue(content.quests.isEmpty());
+        assertTrue(content.problems.stream().anyMatch(p -> p.message().contains("unknown chapters entry \"t:village\"")));
+        assertTrue(content.problems.stream().anyMatch(p -> p.message().contains("unknown quests entry \"t:hunt\"")));
+    }
+
+    @Test
+    void streamLimitsNeedNoFilePath() throws Exception {
+        long[] budget = {QuestContentLoader.MAX_TOTAL_BYTES};
+        byte[] big = new byte[QuestContentLoader.MAX_FILE_BYTES + 1];
+        assertTrue(QuestContentLoader.parse(new ByteArrayInputStream(big), budget).error().contains("larger than"));
+        String deep = "[".repeat(100_000);
+        assertTrue(QuestContentLoader.parse(new ByteArrayInputStream(deep.getBytes(StandardCharsets.UTF_8)), budget)
+                .error().contains("nested deeper"));
+        assertTrue(QuestContentLoader.parse(new ByteArrayInputStream("{oops".getBytes(StandardCharsets.UTF_8)), budget)
+                .error().contains("invalid JSON"));
+        Raw ok = QuestContentLoader.parse(new ByteArrayInputStream("{\"a\":\"[[{\"}".getBytes(StandardCharsets.UTF_8)),
+                budget);
+        assertNull(ok.error());
+        long[] empty = {1};
+        assertTrue(QuestContentLoader.parse(new ByteArrayInputStream("{}".getBytes(StandardCharsets.UTF_8)), empty)
+                .error().contains("total content size"));
+    }
+
+    @Test
+    void questRunsThroughPhasesAndClaimsOnce() {
+        Fake ctx = new Fake(valid());
+        Quest hunt = ctx.content.quests.get(id("hunt"));
+        Quest sequel = ctx.content.quests.get(id("sequel"));
+        List<String> log = new ArrayList<>();
+        QuestLogic.Events events = new QuestLogic.Events() {
+            @Override
+            public void phase(Quest quest, Quest.Phase phase) {
+                log.add(phase.id());
+            }
+
+            @Override
+            public void completed(Quest quest) {
+                log.add("done:" + quest.id().getPath());
+            }
+        };
+
+        assertEquals(View.AVAILABLE, QuestLogic.view(ctx, hunt));
+        assertEquals(View.LOCKED, QuestLogic.view(ctx, sequel));
+        assertFalse(QuestLogic.start(ctx, sequel, false, events), "locked quests do not start");
+        assertTrue(QuestLogic.start(ctx, hunt, false, events));
+        assertFalse(QuestLogic.start(ctx, hunt, false, events), "already active");
+
+        assertFalse(QuestLogic.addProgress(ctx, hunt, "tick", 1, events), "objective of a later phase");
+        QuestLogic.addProgress(ctx, hunt, "zombies", 2, events);
+        assertEquals("hunt", ctx.data.quests.get(id("hunt")).phase);
+        QuestLogic.addProgress(ctx, hunt, "zombies", 5, events);
+        assertEquals(3, ctx.data.quests.get(id("hunt")).progress.get("zombies"), "clamped to count");
+        assertEquals("report", ctx.data.quests.get(id("hunt")).phase, "implicit move to the next phase");
+
+        assertTrue(QuestLogic.claim(ctx, hunt, null).isEmpty(), "nothing to claim before completion");
+        QuestLogic.setProgress(ctx, hunt, "tick", 1, events);
+        assertEquals(List.of("report", "done:hunt"), log);
+        assertEquals(View.CLAIMABLE, QuestLogic.view(ctx, hunt));
+        assertTrue(QuestLogic.is(ctx, id("hunt"), View.COMPLETED));
+
+        assertEquals(1, QuestLogic.claim(ctx, hunt, "xp").size());
+        assertEquals(1, QuestLogic.claim(ctx, hunt, null).size(), "only the unclaimed reward is left");
+        assertTrue(QuestLogic.claim(ctx, hunt, null).isEmpty(), "never twice");
+        assertEquals(View.COMPLETED, QuestLogic.view(ctx, hunt));
+
+        assertEquals(View.AVAILABLE, QuestLogic.view(ctx, sequel));
+        QuestLogic.start(ctx, sequel, false, events);
+        assertEquals(View.ACTIVE, QuestLogic.view(ctx, sequel));
+        ctx.data.variables.put("gold", 10);
+        QuestLogic.evaluate(ctx, events);
+        assertEquals(View.COMPLETED, QuestLogic.view(ctx, sequel), "condition objective completed the quest");
+    }
+
+    @Test
+    void transitionsAreOrderedAndRecordTheBranch() {
+        Fake ctx = new Fake(valid());
+        Quest hunt = ctx.content.quests.get(id("hunt"));
+        QuestLogic.start(ctx, hunt, false, QUIET);
+        QuestLogic.setProgress(ctx, hunt, "zombies", 3, QUIET);
+        ctx.data.flags.add("betrayed");
+        QuestLogic.setProgress(ctx, hunt, "tick", 1, QUIET);
+        assertEquals(View.FAILED, QuestLogic.view(ctx, hunt), "first matching transition wins");
+        List<PlayerQuestData.History> history = ctx.data.quests.get(id("hunt")).history;
+        assertEquals("betrayal", history.get(history.size() - 1).via());
+    }
+
+    @Test
+    void stateSurvivesSaveAndContentRemoval() {
+        Fake ctx = new Fake(valid());
+        Quest hunt = ctx.content.quests.get(id("hunt"));
+        QuestLogic.start(ctx, hunt, false, QUIET);
+        QuestLogic.addProgress(ctx, hunt, "zombies", 2, QUIET);
+        ctx.data.flags.add("met_cleric");
+        ctx.data.variables.put("gold", 7);
+
+        PlayerQuestData loaded = PlayerQuestData.load(ctx.data.save());
+        assertEquals(ctx.data.save(), loaded.save());
+        assertEquals(2, loaded.quests.get(id("hunt")).progress.get("zombies"));
+
+        // The quest disappears from the content: its state is orphaned, not deleted.
+        Fake empty = new Fake(QuestContent.EMPTY);
+        empty.data.quests.putAll(loaded.quests);
+        QuestLogic.evaluate(empty, QUIET);
+        assertEquals(2, empty.data.quests.get(id("hunt")).progress.get("zombies"));
+    }
+
+    @Test
+    void newerSaveSchemaIsNeverOverwritten() {
+        CompoundTag future = new CompoundTag();
+        future.putInt("schema", QuestSavedData.SCHEMA + 1);
+        future.putString("somethingNew", "keep me");
+        QuestSavedData data = QuestSavedData.load(future);
+        assertTrue(data.frozen());
+        assertEquals(future, data.save(new CompoundTag()));
+    }
+
+    /** Keeps docs/quests/samples loadable through the real loose-folder reader. */
+    @Test
+    void samplePackLoadsCleanAndBrokenSampleReportsEverything() {
+        Path samples = Path.of("docs/quests/samples");
+        QuestContent content = QuestContent.build(
+                QuestContentLoader.read(ResourceManager.Empty.INSTANCE, samples), QuestContent.EMPTY, null);
+        assertEquals(List.of(), content.problems);
+        assertEquals(4, content.quests.size());
+
+        QuestContent broken = QuestContent.build(
+                QuestContentLoader.read(ResourceManager.Empty.INSTANCE, samples.resolve("broken")), content, null);
+        List<String> paths = broken.problems.stream().map(Problem::path).toList();
+        assertTrue(paths.containsAll(List.of("$.title", "$.titel", "$.objectives[0].count", "$.objectives[1].type")),
+                paths.toString());
+        assertTrue(broken.quests.isEmpty());
+    }
+}

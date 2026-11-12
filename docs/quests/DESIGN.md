@@ -1,6 +1,7 @@
 # Solace Quests — Design
 
-Status: **draft for review** (phase 1, 2026-11-12). Nothing here is implemented yet.
+Status: **approved 2026-11-12** with the §1 recommendations. Phase 2 (core) is implemented; see §16.
+Where the code deliberately differs from this plan it is marked **As built**.
 Branch: `feature/solace-quests` in the `Solace` submodule.
 
 Solace Quests is a feature module inside the Solace mod (Forge 47.4.15, MC 1.20.1, official
@@ -66,7 +67,12 @@ Server/common code under `com.solace.quests`, client under `com.solace.client.qu
 | `quests.compat` | `ThiefCompat`, `KubeJsCompat` (+ plugin), guarded by `ModList.get().isLoaded`. |
 | `client.quests` | Client content/state mirror, `QuestBookScreen`, `JournalScreen`, `DialogueScreen`, `QuestHud`, toasts, keybinds, `XaeroMarkerCompat`, compass fallback. |
 
-Wiring in `Solace.java`: one line, `SolaceQuests.init(modEventBus)`, next to
+**As built (phase 2):** fewer packages than planned — `quests` (`SolaceQuests` wiring and event
+handlers, `QuestCommands`), `quests.content` (definitions, `In` parser, loader), `quests.condition`,
+`quests.state` (`PlayerQuestData`, `QuestSavedData`, pure `QuestLogic`, server-side `QuestEngine`
+with reward granting). The rest of the table appears as its phase lands.
+
+Wiring in `Solace.java`: one line, `SolaceQuests.init()`, next to
 `LootEditorNetwork.register()`. No mixins are planned for phases 2–5; if NPC freezing needs one in
 phase 3 it will be called out then.
 
@@ -460,6 +466,12 @@ delta for the owner's online players → fire the Forge/KubeJS event.
 
 ### 6.2 Objective index
 
+**As built:** the index is per owner, not global: `type → active objectives of this owner's current
+phases`, rebuilt lazily after a state change or reload, plus a global set of objective types in
+use for an early exit. Tags are tested live (`is(tag)`), so there is nothing to expand or rebuild
+on tag reload. An event costs one set lookup when no quest uses its type, otherwise a walk over
+that player's few active objectives of the type. The paragraphs below describe the original plan.
+
 Built at reload and on `TagsUpdatedEvent`:
 `Map<ObjectiveType, Map<ResourceLocation target, List<ObjectiveRef>>>`, with tags expanded to
 their members and a wildcard bucket for objectives that match on name/NBT only.
@@ -535,6 +547,11 @@ vanished is moved to its first phase and the fact is logged.
 ---
 
 ## 8. Networking
+
+**As built (phase 2):** no packets yet — there is no client UI to feed. Feedback is chat lines, and
+the two player intents that exist are commands re-checked on the server: `/sq claim <quest>` and
+`/sq check <quest> <objective>`. The channel below arrives with the dialogue screen (phase 3) and
+the book (phase 4).
 
 Channel `solace:quests`, `SimpleChannel`, protocol string `"1"`, same shape as
 `LootEditorNetwork`. Bump the string on any wire change.
@@ -778,8 +795,8 @@ those classes when KubeJS is absent.
 
 | Phase | Contents | Status |
 |-------|----------|--------|
-| 1 | This document | draft |
-| 2 | Loader, validation, hot reload, conditions, flags/variables, `QuestSavedData`, engine, commands, objectives (kill, break, place, item, reach location, condition, checkmark), rewards, minimal sync | |
+| 1 | This document | done |
+| 2 | Loader, validation, hot reload, conditions, flags/variables, `QuestSavedData`, engine, commands, objectives (kill, break, place, item, reach location, condition, checkmark), rewards | done — no sync yet (see §8); time limits, NBT matching and the `orphaned` flag being stored (it is derived instead) are not in |
 | 3 | Dialogue runtime, NPC bindings, `DialogueScreen`, actions | |
 | 4 | Quest book, journal, HUD tracker, toasts | |
 | 5 | Factions, reputation, gossip bridge, Thief events | |

@@ -1,0 +1,16 @@
+{
+  "chapter": "astralis:village",
+  "title": "The Origin",
+  "description": "Travel to the centre of the world.",
+  "icon": { "item": "minecraft:compass" },
+  "position": { "x": 2, "y": 2 },
+  "optional": true,
+  "requires": { "mode": "any", "quests": ["astralis:village/first_steps", "astralis:village/supplies"] },
+  "objectives": [
+    { "id": "origin", "type": "solace:reach_location", "dimension": "minecraft:overworld", "pos": [0, 80, 0], "radius": 64, "text": "Reach the world origin" }
+  ],
+  "auto_claim": true,
+  "rewards": [
+    { "id": "xp", "type": "solace:xp", "points": 50 }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "chapter": "astralis:village",
+  "title": "Night Watch",
+  "description": "Starts by itself once the village trusts you. Stay up until nightfall.",
+  "icon": { "item": "minecraft:lantern" },
+  "position": { "x": 4, "y": 0 },
+  "requires": { "quests": ["astralis:village/first_steps"] },
+  "auto_start": true,
+  "auto_claim": true,
+  "repeatable": { "cooldown_seconds": 60 },
+  "objectives": [
+    { "id": "night", "type": "solace:condition", "text": "Wait for night",
+      "when": { "type": "solace:all", "of": [
+        { "type": "solace:flag", "flag": "village_trusted" },
+        { "type": "solace:time", "from": 13000, "to": 23000 }
+      ] } }
+  ],
+  "rewards": [
+    { "id": "xp", "type": "solace:xp", "points": 20 }
+  ]
+}
