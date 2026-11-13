@@ -24,6 +24,9 @@ public abstract class CraftingMenuRecipeLockMixin {
     @Inject(method = "slotChangedCraftingGrid", at = @At("TAIL"))
     private static void solace$recipeLock(AbstractContainerMenu menu, Level level, Player player,
                                           CraftingContainer grid, ResultContainer result, CallbackInfo callback) {
+        if (player instanceof ServerPlayer polymorphPlayer) {
+            com.solace.compat.PolymorphRecipeLocks.filter(polymorphPlayer);
+        }
         if (player instanceof ServerPlayer server && !result.getItem(0).isEmpty()
                 && RecipeLocks.locked(server, result.getRecipeUsed())) {
             result.setItem(0, ItemStack.EMPTY);

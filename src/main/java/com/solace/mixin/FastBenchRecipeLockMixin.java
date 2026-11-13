@@ -24,6 +24,9 @@ public abstract class FastBenchRecipeLockMixin {
     @Inject(method = "slotChangedCraftingGrid", at = @At("TAIL"))
     private static void solace$recipeLock(Level level, Player player, CraftingInventoryExt inventory,
                                           ResultContainer result, CallbackInfo callback) {
+        if (player instanceof ServerPlayer polymorphPlayer) {
+            com.solace.compat.PolymorphRecipeLocks.filter(polymorphPlayer);
+        }
         if (player instanceof ServerPlayer server && !result.getItem(0).isEmpty()
                 && RecipeLocks.locked(server, result.getRecipeUsed())) {
             result.setItem(0, ItemStack.EMPTY);

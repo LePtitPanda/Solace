@@ -49,9 +49,6 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
     @Override public String getRefMapperConfig() { return null; }
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        if (mixinClassName.endsWith(".PolymorphRecipeLockMixin")) {
-            return hasClass("com/illusivesoulworks/polymorph/common/PolymorphForgePacketDistributor.class");
-        }
         if (mixinClassName.endsWith(".FastBenchRecipeLockMixin")) {
             return hasClass("dev/shadowsoffire/fastbench/util/FastBenchUtil.class");
         }
