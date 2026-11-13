@@ -50,7 +50,7 @@ public final class RecipeLocks {
                 Set<ResourceLocation> ids = new HashSet<>();
                 for (Recipe<?> recipe : recipes.getRecipes()) {
                     ResourceLocation type = ForgeRegistries.RECIPE_TYPES.getKey(recipe.getType());
-                    if (lock.types().contains(type) && covers(lock, recipe, access)) {
+                    if (type != null && lock.types().contains(type) && covers(lock, recipe, access)) {
                         ids.add(recipe.getId());
                     }
                 }
