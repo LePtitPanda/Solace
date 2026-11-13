@@ -92,11 +92,15 @@ public final class RecipeLocks {
 
     /** True when this recipe is locked for this player. Cheap: a set lookup. */
     public static boolean locked(ServerPlayer player, Recipe<?> recipe) {
+        return recipe != null && locked(player, recipe.getId());
+    }
+
+    public static boolean locked(ServerPlayer player, ResourceLocation recipe) {
         Set<ResourceLocation> locked = LOCKED.get(player.getUUID());
         if (locked == null) {
             locked = refresh(player);
         }
-        return recipe != null && locked.contains(recipe.getId());
+        return recipe != null && locked.contains(recipe);
     }
 
     /** Recomputes the player's locked recipes; tells the client when the set changed. Called once a second. */
@@ -115,7 +119,21 @@ public final class RecipeLocks {
         }
         Set<ResourceLocation> before = LOCKED.put(player.getUUID(), locked);
         if (!locked.equals(before)) {
-            QuestNetwork.lockedRecipes(player, List.copyOf(locked));
+            // The items those recipes make: EMI hides every recipe making them (machine copies included).
+            Set<ResourceLocation> items = new HashSet<>();
+            for (ResourceLocation id : locked) {
+                player.server.getRecipeManager().byKey(id).ifPresent(recipe -> {
+                    try {
+                        items.add(ForgeRegistries.ITEMS.getKey(recipe.getResultItem(player.server.registryAccess())
+                                .getItem()));
+                    } catch (RuntimeException ignored) {
+                        // A recipe whose result needs a real container: its id is still hidden.
+                    }
+                });
+            }
+            items.remove(null);
+            items.remove(ForgeRegistries.ITEMS.getKey(net.minecraft.world.item.Items.AIR));
+            QuestNetwork.lockedRecipes(player, List.copyOf(locked), List.copyOf(items));
         }
         return locked;
     }

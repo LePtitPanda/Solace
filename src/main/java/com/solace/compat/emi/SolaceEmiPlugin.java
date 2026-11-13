@@ -23,7 +23,9 @@ public class SolaceEmiPlugin implements EmiPlugin {
         registry.addRecipe(new EmiInfoRecipe(ingredients, pages, UID));
         // Recipe locks: recipes this player has not learned yet (re-run when the server sends a change).
         registry.removeRecipes(recipe -> recipe.getId() != null
-                && com.solace.client.quests.ClientRecipeLocks.locked.contains(recipe.getId()));
+                && com.solace.client.quests.ClientRecipeLocks.locked.contains(recipe.getId())
+                || !com.solace.client.quests.ClientRecipeLocks.items.isEmpty() && recipe.getOutputs().stream()
+                .anyMatch(output -> com.solace.client.quests.ClientRecipeLocks.items.contains(output.getId())));
         registry.removeRecipes(recipe -> {
             ResourceLocation category = recipe.getCategory().getId();
             return category.getNamespace().equals("irons_spellbooks") && category.getPath().contains("arcane_anvil");

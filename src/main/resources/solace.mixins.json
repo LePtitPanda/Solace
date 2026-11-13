@@ -60,6 +60,8 @@
     "LootTableMixin",
     "CraftingMenuRecipeLockMixin",
     "FastBenchRecipeLockMixin",
+    "PolymorphRecipeLockMixin",
+    "CraftingMenuAccessor",
     "MerchantMenuAccessor",
     "MerchantMenuTradeLockMixin",
     "MerchantContainerTradeLockMixin",

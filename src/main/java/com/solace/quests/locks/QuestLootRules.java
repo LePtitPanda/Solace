@@ -44,6 +44,11 @@ public final class QuestLootRules {
                     ? id.startsWith(pattern.substring(0, pattern.length() - 1)) : id.equals(pattern))) {
                 continue;
             }
+            // A rule with no table, entity or block filter is about containers: chest-type tables only.
+            if (rule.tables().isEmpty() && rule.entity() == null && rule.block() == null
+                    && !table.getPath().contains("chests/")) {
+                continue;
+            }
             if (rule.entity() != null && (victim == null || victim == player || !rule.entity().matches(victim))) {
                 continue;
             }

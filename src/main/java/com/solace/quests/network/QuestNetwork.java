@@ -69,10 +69,14 @@ public final class QuestNetwork {
         CHANNEL.messageBuilder(Quests.class, 6).encoder(Quests::encode).decoder(Quests::decode)
                 .consumerMainThread((packet, context) -> client(context, () -> () -> ClientQuests.quests(packet))).add();
         CHANNEL.messageBuilder(LockedRecipes.class, 7)
-                .encoder((p, b) -> b.writeCollection(p.recipes, FriendlyByteBuf::writeResourceLocation))
-                .decoder(b -> new LockedRecipes(b.readList(FriendlyByteBuf::readResourceLocation)))
+                .encoder((p, b) -> {
+                    b.writeCollection(p.recipes, FriendlyByteBuf::writeResourceLocation);
+                    b.writeCollection(p.items, FriendlyByteBuf::writeResourceLocation);
+                })
+                .decoder(b -> new LockedRecipes(b.readList(FriendlyByteBuf::readResourceLocation),
+                        b.readList(FriendlyByteBuf::readResourceLocation)))
                 .consumerMainThread((packet, context) -> client(context,
-                        () -> () -> com.solace.client.quests.ClientRecipeLocks.set(packet.recipes))).add();
+                        () -> () -> com.solace.client.quests.ClientRecipeLocks.set(packet.recipes, packet.items))).add();
     }
 
     private static void client(Supplier<NetworkEvent.Context> context, Supplier<Runnable> action) {
@@ -117,11 +121,11 @@ public final class QuestNetwork {
     }
 
     /** The recipes locked for this player (technique notes they have not learned). */
-    public static void lockedRecipes(ServerPlayer player, List<ResourceLocation> recipes) {
-        send(player, new LockedRecipes(recipes));
+    public static void lockedRecipes(ServerPlayer player, List<ResourceLocation> recipes, List<ResourceLocation> items) {
+        send(player, new LockedRecipes(recipes, items));
     }
 
-    record LockedRecipes(List<ResourceLocation> recipes) {
+    record LockedRecipes(List<ResourceLocation> recipes, List<ResourceLocation> items) {
     }
 
     public static void forget(UUID player) {

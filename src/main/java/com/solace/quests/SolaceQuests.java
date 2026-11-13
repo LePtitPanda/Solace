@@ -164,6 +164,21 @@ public final class SolaceQuests {
         BRED.remove(entity.getUUID());
     }
 
+    /**
+     * A crafting grid that keeps its items (Visual Workbench) reopens without recomputing its result, so
+     * Polymorph never gets asked and its button is missing. Recompute once on open.
+     */
+    @SubscribeEvent
+    public static void onMenuOpen(net.minecraftforge.event.entity.player.PlayerContainerEvent.Open event) {
+        if (event.getContainer() instanceof net.minecraft.world.inventory.CraftingMenu) {
+            net.minecraft.world.inventory.CraftingContainer grid =
+                    ((com.solace.mixin.CraftingMenuAccessor) event.getContainer()).solace$getCraftSlots();
+            if (!grid.isEmpty()) {
+                event.getContainer().slotsChanged(grid);
+            }
+        }
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onConvert(LivingConversionEvent.Post event) {
         if (!event.getEntity().level().isClientSide() && event.getEntity().getServer() != null) {

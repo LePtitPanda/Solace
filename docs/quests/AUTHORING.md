@@ -383,7 +383,7 @@ mob drops, block drops), on top of the table and its modifiers.
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `items` | required | `{item, count` or `min`/`max`, `nbt`, `chance}` |
-| `tables` | any | loot table ids; an entry ending in `*` is a prefix |
+| `tables` | chests | loot table ids; an entry ending in `*` is a prefix. A rule with no `tables`, `entity` or `block` only applies to chest-type tables (path containing `chests/`), so a `structure` rule does not touch mob drops. |
 | `structure` | any | the loot's origin is inside this structure (id or `#tag`) |
 | `entity` | any | dropped by this entity (id or `#tag`) |
 | `block` | any | dropped by this block |
@@ -411,6 +411,9 @@ inventory, FastWorkbench) and are hidden in JEI and EMI, for each player until t
 | `consume_item` | false | the note is used up |
 | `learn_text` | a generic line | chat message when learned |
 | `unlock_when` | none | also unlocked while this condition holds |
+
+Hidden in EMI: the recipes themselves and **every recipe that makes the same item** (Create's automatic crafting copies, sawing...). Machines (Create crafters, saws, presses) have no player, so they still process locked recipes: gate the machine itself with a lock if that matters.
+Polymorph's recipe button never lists a locked recipe.
 
 Learned = the player has the flag `recipes:<lock id>` (also set by `solace:unlock_recipes`).
 
