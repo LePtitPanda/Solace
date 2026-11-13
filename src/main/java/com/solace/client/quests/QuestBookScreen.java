@@ -323,8 +323,13 @@ public class QuestBookScreen extends Screen {
                 Component text = Component.literal(done ? "[x] " : tickable ? "[ ] " : " -  ").append(objective.text())
                         .append(suffix + (objective.optional() ? " (optional)" : "") + (tickable ? "  (click)" : ""));
                 String questId = quest.id().toString();
-                wrap(lines, text, done ? GOLD_DIM : tickable ? GOLD : TEXT, 4, width, tickable
-                        ? () -> QuestNetwork.intent(QuestNetwork.CHECK, questId, objective.id(), 0, 0, 0) : null);
+                int indent = objective.indent() ? 14 : 4;
+                wrap(lines, text, done ? GOLD_DIM : objective.paused() ? MUTED : tickable ? GOLD : TEXT, indent, width,
+                        tickable && !objective.paused()
+                                ? () -> QuestNetwork.intent(QuestNetwork.CHECK, questId, objective.id(), 0, 0, 0) : null);
+                if (objective.paused()) {
+                    wrap(lines, objective.pausedText(), MUTED, indent + 16, width, null);
+                }
             }
         }
         if (!quest.rewards().isEmpty()) {

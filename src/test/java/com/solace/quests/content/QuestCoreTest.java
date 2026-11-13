@@ -78,6 +78,18 @@ class QuestCoreTest {
             return content;
         }
 
+        final java.util.Set<String> areas = new java.util.HashSet<>();
+
+        @Override
+        public boolean inArea(String area) {
+            return areas.contains(area);
+        }
+
+        @Override
+        public boolean nearNpc(ResourceLocation binding, int radius) {
+            return false;
+        }
+
         @Override
         public PlayerQuestData data() {
             return data;
@@ -447,5 +459,128 @@ class QuestCoreTest {
         QuestLogic.evaluate(ctx, events);
         assertEquals(View.AVAILABLE, QuestLogic.view(ctx, quest), "repeatable, so it can be started again by hand");
         assertEquals(1, starts[0], "but it never restarts itself");
+    }
+
+    // --- while / needs / on_lost / group / distinct ---
+
+    private static String crows(String onLost) {
+        return """
+                {"chapter":"t:village","title":"Crows","objectives":[
+                  {"id":"in_village","type":"solace:while","when":{"type":"solace:area","area":"bellhaven"}},
+                  {"id":"crows","type":"solace:kill","entity":"minecraft:zombie","count":3,
+                   "needs":["in_village"],"on_lost":"%s"}]}""".formatted(onLost);
+    }
+
+    private static Fake started(String questJson) {
+        QuestContent content = QuestContent.build(files("chapters", "village", CHAPTER, "quests", "q", questJson),
+                QuestContent.EMPTY, null);
+        assertEquals(List.of(), content.problems.stream().filter(Problem::error).toList());
+        Fake ctx = new Fake(content);
+        assertTrue(QuestLogic.start(ctx, content.quests.get(id("q")), false, QUIET));
+        return ctx;
+    }
+
+    private static int progress(Fake ctx, String objective) {
+        return ctx.data.quests.get(id("q")).progress.getOrDefault(objective, 0);
+    }
+
+    @Test
+    void needsBlockProgressUntilTheWhileHolds() {
+        Fake ctx = started(crows("keep"));
+        Quest quest = ctx.content.quests.get(id("q"));
+        QuestLogic.addProgress(ctx, quest, "crows", 1, QUIET);
+        assertEquals(0, progress(ctx, "crows"), "outside the area nothing counts");
+        ctx.areas.add("bellhaven");
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(1, progress(ctx, "in_village"));
+        QuestLogic.addProgress(ctx, quest, "crows", 1, QUIET);
+        assertEquals(1, progress(ctx, "crows"));
+        ctx.areas.clear();
+        QuestLogic.evaluate(ctx, QUIET);
+        assertEquals(0, progress(ctx, "in_village"), "a while objective un-ticks");
+        assertEquals(1, progress(ctx, "crows"), "keep");
+        ctx.areas.add("bellhaven");
+        QuestLogic.addProgress(ctx, quest, "crows", 2, QUIET);
+        assertEquals(View.COMPLETED, QuestLogic.view(ctx, quest));
+    }
+
+    @Test
+    void onLostResetAndFail() {
+        Fake reset = started(crows("reset"));
+        reset.areas.add("bellhaven");
+        QuestLogic.evaluate(reset, QUIET);
+        QuestLogic.addProgress(reset, reset.content.quests.get(id("q")), "crows", 2, QUIET);
+        reset.areas.clear();
+        QuestLogic.evaluate(reset, QUIET);
+        assertEquals(0, progress(reset, "crows"));
+        assertEquals(View.ACTIVE, QuestLogic.view(reset, reset.content.quests.get(id("q"))));
+
+        Fake fail = started(crows("fail"));
+        fail.areas.add("bellhaven");
+        QuestLogic.evaluate(fail, QUIET);
+        QuestLogic.addProgress(fail, fail.content.quests.get(id("q")), "crows", 1, QUIET);
+        fail.areas.clear();
+        QuestLogic.evaluate(fail, QUIET);
+        assertEquals(View.FAILED, QuestLogic.view(fail, fail.content.quests.get(id("q"))));
+    }
+
+    @Test
+    void groupCompletesWithEnoughChildren() {
+        Fake ctx = started("""
+                {"chapter":"t:village","title":"Album","objectives":[
+                  {"id":"album","type":"solace:group","of":["a","b","c"],"count":2},
+                  {"id":"a","type":"solace:checkmark","optional":true},
+                  {"id":"b","type":"solace:checkmark","optional":true},
+                  {"id":"c","type":"solace:checkmark","optional":true}]}""");
+        Quest quest = ctx.content.quests.get(id("q"));
+        QuestLogic.setProgress(ctx, quest, "a", 1, QUIET);
+        assertEquals(1, progress(ctx, "album"));
+        assertEquals(View.ACTIVE, QuestLogic.view(ctx, quest));
+        QuestLogic.setProgress(ctx, quest, "c", 1, QUIET);
+        assertEquals(View.COMPLETED, QuestLogic.view(ctx, quest));
+    }
+
+    @Test
+    void distinctCountsEachKeyOnceAndIsSaved() {
+        Fake ctx = started("""
+                {"chapter":"t:village","title":"Zoo","objectives":[
+                  {"id":"kinds","type":"solace:kill","entity":"#t:animals","count":3,"distinct":"entity_type"}]}""");
+        Quest quest = ctx.content.quests.get(id("q"));
+        QuestLogic.addDistinct(ctx, quest, "kinds", "minecraft:cow", QUIET);
+        QuestLogic.addDistinct(ctx, quest, "kinds", "minecraft:cow", QUIET);
+        QuestLogic.addDistinct(ctx, quest, "kinds", "minecraft:pig", QUIET);
+        assertEquals(2, progress(ctx, "kinds"));
+        PlayerQuestData loaded = PlayerQuestData.load(ctx.data.save());
+        assertEquals(java.util.Set.of("minecraft:cow", "minecraft:pig"), loaded.quests.get(id("q")).seen.get("kinds"));
+    }
+
+    @Test
+    void badNeedsAndDistinctAreErrors() {
+        QuestContent content = QuestContent.build(files("chapters", "village", CHAPTER, "quests", "q", """
+                {"chapter":"t:village","title":"Bad","objectives":[
+                  {"id":"a","type":"solace:checkmark","needs":["nope"]},
+                  {"id":"b","type":"solace:item","item":"minecraft:stick","distinct":"item"}]}"""),
+                QuestContent.EMPTY, null);
+        List<String> errors = content.problems.stream().filter(Problem::error).map(Problem::message).toList();
+        assertTrue(errors.stream().anyMatch(message -> message.contains("unknown objective \"nope\"")), errors.toString());
+        assertTrue(errors.stream().anyMatch(message -> message.contains("not supported by solace:item")), errors.toString());
+    }
+
+    @Test
+    void locksAndLootParse() {
+        QuestContent content = QuestContent.build(files(
+                "recipe_locks", "rotation", """
+                        {"outputs":["create:shaft","#forge:gears"],"item":"kubejs:technique_rotation",
+                         "learn_text":"You learned Rotation."}""",
+                "trades", "distrusted", """
+                        {"offers":"all","mode":"hide","unlock_when":{"type":"solace:flag","flag":"trusted"}}""",
+                "loot", "shift_board", """
+                        {"tables":["minecraft:chests/*"],"once":true,
+                         "items":[{"item":"minecraft:paper","min":1,"max":2,"chance":0.5}]}"""),
+                QuestContent.EMPTY, null);
+        assertEquals(0, content.errorCount(), content.problems.toString());
+        assertTrue(content.tradeLocks.get(id("distrusted")).all());
+        assertEquals(2, content.recipeLocks.get(id("rotation")).outputs().size());
+        assertEquals(2, content.loot.get(id("shift_board")).items().get(0).max());
     }
 }

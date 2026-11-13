@@ -29,9 +29,12 @@ public record Dialogue(ResourceLocation id, List<Start> start, Map<String, Node>
                          Condition enabledWhen, Component disabledText, int cooldownSeconds) {
     }
 
-    /** Binds dialogues to entities. The first of {@code dialogues} whose condition passes is opened. */
+    /**
+     * Binds dialogues to entities. The first of {@code dialogues} whose condition passes is opened.
+     * {@code firstMet}: the first matching entity talked to becomes the only one (see NpcRegistry).
+     */
     public record NpcBinding(ResourceLocation id, Target entity, Condition when, List<Bound> dialogues, int priority,
-                             boolean freeze, int maxDistance) {
+                             boolean freeze, int maxDistance, boolean firstMet) {
     }
 
     public record Bound(ResourceLocation dialogue, Condition when) {

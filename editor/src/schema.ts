@@ -32,7 +32,7 @@ export interface Field {
 
 const f = (key: string, label: string, kind: FieldKind, extra: Partial<Field> = {}): Field => ({ key, label, kind, ...extra });
 
-export const KINDS = ['chapters', 'quests', 'dialogues', 'npcs', 'factions', 'markers'] as const;
+export const KINDS = ['chapters', 'quests', 'dialogues', 'npcs', 'factions', 'markers', 'loot', 'recipe_locks', 'trades'] as const;
 export type Kind = (typeof KINDS)[number];
 export const KIND_LABEL: Record<Kind, string> = {
   chapters: 'Chapters',
@@ -41,6 +41,9 @@ export const KIND_LABEL: Record<Kind, string> = {
   npcs: 'NPCs',
   factions: 'Factions',
   markers: 'Markers',
+  loot: 'Quest loot',
+  recipe_locks: 'Recipe locks',
+  trades: 'Trade locks',
 };
 
 const OPS = ['==', '!=', '<', '<=', '>', '>='];
@@ -79,7 +82,10 @@ export const CONDITIONS: Record<string, Field[]> = {
     f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }),
     f('count', 'Count', 'number'),
     f('held', 'Must be held', 'bool'),
+    f('nbt', 'NBT the item must contain (SNBT)', 'string', { advanced: true }),
   ],
+  'solace:area': [f('area', 'Area name', 'string', { required: true, help: 'Set by solace:set_area or /sq area set' })],
+  'solace:near_npc': [f('npc', 'NPC', 'ref', { ref: 'npcs', required: true }), f('radius', 'Within (blocks, default 8)', 'number')],
   'solace:dimension': [f('dimension', 'Dimension', 'reg', { reg: 'dimensions', required: true })],
   'solace:biome': [f('biome', 'Biome or #tag', 'reg', { reg: 'biomes', required: true })],
   'solace:structure': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true })],
@@ -102,6 +108,10 @@ const objectiveCommon: Field[] = [
   f('hidden', 'Hidden from the player', 'bool', { advanced: true }),
   f('icon', 'Icon', 'icon', { advanced: true }),
   f('when', 'Only counts when', 'condition', { advanced: true }),
+  f('needs', 'Needs (objective ids of this phase)', 'strings', { advanced: true, help: 'Only progresses while these are done. Drawn indented under them.' }),
+  f('on_lost', 'When a need stops holding', 'select', { options: ['keep', 'reset', 'fail'], advanced: true, help: 'keep (default), reset its progress, or fail the quest' }),
+  f('paused_text', 'Text while paused', 'text', { advanced: true }),
+  f('distinct', 'Count each only once', 'select', { options: ['entity_type', 'entity', 'item', 'block', 'structure'], advanced: true }),
 ];
 
 export const OBJECTIVES: Record<string, Field[]> = {
@@ -110,11 +120,17 @@ export const OBJECTIVES: Record<string, Field[]> = {
   'solace:place_block': [f('block', 'Block or #tag', 'reg', { reg: 'blocks', required: true })],
   'solace:interact_block': [f('block', 'Block or #tag', 'reg', { reg: 'blocks', required: true })],
   'solace:interact_entity': [f('entity', 'Entity or #tag', 'reg', { reg: 'entities', required: true }), f('name', 'Name contains', 'string')],
-  'solace:item': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('consume', 'Take the items', 'bool')],
-  'solace:deliver': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('npc', 'To NPC', 'ref', { ref: 'npcs', required: true })],
-  'solace:craft': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true })],
-  'solace:smelt': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true })],
-  'solace:use_item': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true })],
+  'solace:item': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('consume', 'Take the items', 'bool'), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:deliver': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('npc', 'To NPC', 'ref', { ref: 'npcs', required: true }), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:craft': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:smelt': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:use_item': [f('item', 'Item or #tag', 'reg', { reg: 'items', required: true }), f('nbt', 'NBT (SNBT)', 'string', { advanced: true })],
+  'solace:tame': [f('entity', 'Entity or #tag', 'reg', { reg: 'entities', required: true })],
+  'solace:breed': [f('entity', 'Entity or #tag', 'reg', { reg: 'entities', required: true })],
+  'solace:shear': [f('entity', 'Entity or #tag', 'reg', { reg: 'entities', required: true })],
+  'solace:hatch': [f('entity', 'Entity or #tag', 'reg', { reg: 'entities', required: true })],
+  'solace:while': [],
+  'solace:group': [f('of', 'Objectives in the group (ids)', 'strings', { required: true, help: 'Count = how many must be done (default all)' })],
   'solace:reach_location': [
     f('dimension', 'Dimension', 'reg', { reg: 'dimensions', required: true }),
     f('pos', 'Position', 'pos', { required: true }),
@@ -177,6 +193,20 @@ export const EFFECTS: Record<string, Field[]> = {
     f('mode', 'Mode (empty = config default)', 'select', { options: ['once', 'infinite'] }),
   ],
   'solace:close_structure_gate': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true })],
+  'solace:set_area': [
+    f('area', 'Area name', 'string', { required: true }),
+    f('radius', 'Radius / margin (blocks, default 48)', 'number'),
+    f('at', 'Centred on', 'select', { options: ['player', 'npc', 'structure'] }),
+    f('structure', 'Structure (for "structure")', 'reg', { reg: 'structures' }),
+    f('replace', 'Replace if already set', 'bool'),
+  ],
+  'solace:remove_area': [f('area', 'Area name', 'string', { required: true })],
+  'solace:free_captive': [
+    f('into', 'Becomes (default minecraft:villager)', 'reg', { reg: 'entities' }),
+    f('profession', 'Profession if no saved person', 'reg', { reg: 'professions' }),
+  ],
+  'solace:unlock_recipes': [f('lock', 'Recipe lock', 'ref', { ref: 'recipe_locks', required: true })],
+  'solace:lock_recipes': [f('lock', 'Recipe lock', 'ref', { ref: 'recipe_locks', required: true })],
   'solace:give_structure_map': [
     f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
     f('name', 'Map name', 'text'),
@@ -282,6 +312,36 @@ export const NPC: Field[] = [
   f('freeze', 'Stands still while talking', 'bool', { advanced: true, help: 'Default: true' }),
   f('max_distance', 'Max distance', 'number', { advanced: true }),
   f('dialogues', 'Several dialogues', 'json', { advanced: true, help: '[{"dialogue": id, "when": condition}] - first match wins' }),
+  f('bind', 'Binding', 'select', { options: ['none', 'first_met'], help: 'first_met: the first matching entity talked to becomes the only one; the next takes over if it dies' }),
+];
+
+export const LOOT: Field[] = [
+  f('items', 'Items', 'json', { required: true, help: '[{"item": id, "count" or "min"/"max", "nbt", "chance"}]' }),
+  f('tables', 'Loot tables (ids, "prefix*")', 'strings'),
+  f('structure', 'Only inside structure', 'reg', { reg: 'structures' }),
+  f('entity', 'Only from entity', 'reg', { reg: 'entities' }),
+  f('block', 'Only from block', 'reg', { reg: 'blocks' }),
+  f('when', 'Only when (the player)', 'condition'),
+  f('chance', 'Chance (0-1)', 'number'),
+  f('once', 'Once per player', 'bool'),
+];
+
+export const RECIPE_LOCK: Field[] = [
+  f('recipes', 'Recipe ids ("prefix*")', 'strings'),
+  f('outputs', 'Or every recipe making (item / #tag)', 'strings'),
+  f('types', 'Recipe types (default minecraft:crafting)', 'strings', { advanced: true }),
+  f('item', 'Technique note item (use it to learn)', 'reg', { reg: 'items' }),
+  f('consume_item', 'Note is used up', 'bool'),
+  f('learn_text', 'Message when learned', 'text'),
+  f('unlock_when', 'Also unlocked when', 'condition', { advanced: true }),
+];
+
+export const TRADE_LOCK: Field[] = [
+  f('entity', 'Merchant (default minecraft:villager)', 'reg', { reg: 'entities' }),
+  f('when', 'Which merchants', 'condition', { help: 'solace:entity sees the merchant (profession, name...)' }),
+  f('offers', 'Offers', 'json', { required: true, help: '"all" or [{"result": item, "cost": item}]' }),
+  f('mode', 'Locked offers are', 'select', { options: ['disable', 'hide'] }),
+  f('unlock_when', 'Unlocked when', 'condition', { required: true }),
 ];
 
 export const FACTION: Field[] = [
@@ -310,5 +370,11 @@ export function blank(kind: Kind, firstChapter: string): any {
       return { name: 'New faction', ranks: [{ id: 'neutral', name: 'Neutral', at: 0 }] };
     case 'markers':
       return { target: 'position', dimension: 'minecraft:overworld', pos: [0, 64, 0], label: 'Marker' };
+    case 'loot':
+      return { tables: ['minecraft:chests/*'], items: [{ item: 'minecraft:paper' }] };
+    case 'recipe_locks':
+      return { outputs: [] };
+    case 'trades':
+      return { offers: 'all', unlock_when: { type: 'solace:flag', flag: 'trusted' } };
   }
 }

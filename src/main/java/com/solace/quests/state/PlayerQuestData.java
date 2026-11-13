@@ -37,6 +37,8 @@ public final class PlayerQuestData {
         public int completions;
         public long cooldownUntil;
         public final Set<String> claimed = new TreeSet<>();
+        /** Objective id -> keys already counted, for objectives with "distinct". */
+        public final Map<String, Set<String>> seen = new TreeMap<>();
         /** The branch path the player took, oldest first. */
         public final List<History> history = new ArrayList<>();
 
@@ -83,6 +85,11 @@ public final class PlayerQuestData {
             q.putInt("completions", state.completions);
             q.putLong("cooldownUntil", state.cooldownUntil);
             q.put("claimed", strings(state.claimed));
+            if (!state.seen.isEmpty()) {
+                CompoundTag seen = new CompoundTag();
+                state.seen.forEach((objective, keys) -> seen.put(objective, strings(keys)));
+                q.put("seen", seen);
+            }
             ListTag history = new ListTag();
             for (History entry : state.history) {
                 CompoundTag h = new CompoundTag();
@@ -136,6 +143,12 @@ public final class PlayerQuestData {
             state.completions = q.getInt("completions");
             state.cooldownUntil = q.getLong("cooldownUntil");
             q.getList("claimed", Tag.TAG_STRING).forEach(entry -> state.claimed.add(entry.getAsString()));
+            CompoundTag seen = q.getCompound("seen");
+            for (String objective : seen.getAllKeys()) {
+                Set<String> keys = new TreeSet<>();
+                seen.getList(objective, Tag.TAG_STRING).forEach(entry -> keys.add(entry.getAsString()));
+                state.seen.put(objective, keys);
+            }
             for (Tag entry : q.getList("history", Tag.TAG_COMPOUND)) {
                 CompoundTag h = (CompoundTag) entry;
                 state.history.add(new History(h.getLong("time"), h.getString("phase"), h.getString("via")));

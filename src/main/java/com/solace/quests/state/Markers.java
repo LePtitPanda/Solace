@@ -121,23 +121,16 @@ public final class Markers {
                 if (binding == null) {
                     return;
                 }
-                // The nearest loaded match, otherwise where the player last talked to this NPC.
-                ctx.entity = null;
-                Entity nearest = null;
-                for (Entity entity : player.level().getEntities(player, player.getBoundingBox().inflate(64),
-                        binding.entity()::matches)) {
-                    ctx.entity = entity;
-                    if ((binding.when() == null || binding.when().test(ctx))
-                            && (nearest == null || entity.distanceToSqr(player) < nearest.distanceToSqr(player))) {
-                        nearest = entity;
-                    }
-                }
-                ctx.entity = null;
+                // The nearest loaded match (the bound one, for a first_met binding), otherwise where the
+                // bound NPC was last seen, otherwise where the player last talked to this NPC.
+                Entity nearest = com.solace.quests.npc.NpcRegistry.nearest(ctx, binding, 64);
                 if (nearest != null) {
                     out.add(new MarkerView(key, ctx.dimension(), nearest.getBlockX(), nearest.getBlockY(),
                             nearest.getBlockZ(), label, marker.color(), marker.beam()));
                 } else {
-                    String seen = ctx.data().positions.get("npc:" + marker.npc());
+                    String seen = binding.firstMet()
+                            ? com.solace.quests.npc.NpcRegistry.get(player.server).lastSeen(binding.id()) : null;
+                    seen = seen != null ? seen : ctx.data().positions.get("npc:" + marker.npc());
                     if (seen != null) {
                         String[] parts = seen.split(" ");
                         out.add(new MarkerView(key, parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),

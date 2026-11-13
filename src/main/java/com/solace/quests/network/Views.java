@@ -33,8 +33,9 @@ public final class Views {
         }
     }
 
+    /** {@code indent}: drawn under the objective it needs or the group it belongs to. {@code paused}: waiting on a need. */
     public record ObjectiveView(String id, Component text, String icon, int progress, int count, boolean optional,
-                                boolean checkmark) {
+                                boolean checkmark, boolean indent, boolean paused, Component pausedText) {
         public void write(FriendlyByteBuf buf) {
             buf.writeUtf(id, 256);
             buf.writeComponent(text);
@@ -43,11 +44,15 @@ public final class Views {
             buf.writeVarInt(count);
             buf.writeBoolean(optional);
             buf.writeBoolean(checkmark);
+            buf.writeBoolean(indent);
+            buf.writeBoolean(paused);
+            buf.writeComponent(pausedText);
         }
 
         public static ObjectiveView read(FriendlyByteBuf buf) {
             return new ObjectiveView(buf.readUtf(256), buf.readComponent(), buf.readUtf(300), buf.readVarInt(),
-                    buf.readVarInt(), buf.readBoolean(), buf.readBoolean());
+                    buf.readVarInt(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(),
+                    buf.readComponent());
         }
     }
 

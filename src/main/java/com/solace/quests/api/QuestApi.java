@@ -125,6 +125,39 @@ public final class QuestApi {
         return id == null ? "not gated" : StructureGates.describe(server, id);
     }
 
+    /** Named areas (world-wide). {@code area} column of +-radius around x, z. */
+    public static void setArea(MinecraftServer server, String area, String dimension, int x, int z, int radius) {
+        com.solace.quests.state.Areas.get(server).set(area,
+                com.solace.quests.state.Areas.Area.around(dimension, x, z, radius), true);
+    }
+
+    public static boolean inArea(ServerPlayer player, String area) {
+        return com.solace.quests.state.Areas.get(player.server).contains(area,
+                player.level().dimension().location().toString(), player.getX(), player.getZ());
+    }
+
+    /** The entity bound to a first_met NPC binding, if loaded; else null. */
+    public static net.minecraft.world.entity.Entity npc(MinecraftServer server, String binding) {
+        ResourceLocation id = ResourceLocation.tryParse(binding);
+        return id == null ? null : com.solace.quests.npc.NpcRegistry.get(server).entity(server, id);
+    }
+
+    /** Replaces a captive with an entity of {@code into} that keeps its identity (see solace:free_captive). */
+    public static net.minecraft.world.entity.Entity freeCaptive(net.minecraft.world.entity.Entity captive, String into) {
+        ResourceLocation type = ResourceLocation.tryParse(into == null ? "minecraft:villager" : into);
+        return captive.getServer() == null || type == null ? null
+                : com.solace.quests.npc.NpcRegistry.get(captive.getServer()).free(captive, type, null);
+    }
+
+    /** Recipe locks: same as the solace:unlock_recipes effect. */
+    public static void unlockRecipes(ServerPlayer player, String lock) {
+        ResourceLocation id = ResourceLocation.tryParse(lock);
+        if (id != null) {
+            setFlag(player, com.solace.quests.locks.RecipeLocks.flag(id), true);
+            com.solace.quests.locks.RecipeLocks.refresh(player);
+        }
+    }
+
     private static Quest quest(String id) {
         ResourceLocation key = ResourceLocation.tryParse(id);
         return key == null ? null : QuestContent.current.quests.get(key);

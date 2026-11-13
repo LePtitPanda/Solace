@@ -57,7 +57,8 @@ public final class DialogueManager {
         ServerCtx ctx = QuestEngine.ctx(player);
         ctx.entity = target;
         for (NpcBinding binding : ctx.content().bindings) {
-            if (!binding.entity().matches(target) || binding.when() != null && !binding.when().test(ctx)) {
+            if (!binding.entity().matches(target) || binding.when() != null && !binding.when().test(ctx)
+                    || !com.solace.quests.npc.NpcRegistry.accepts(player.server, binding, target, true)) {
                 continue;
             }
             // Remember where this NPC was seen, for "npc" markers.

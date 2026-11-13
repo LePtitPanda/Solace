@@ -49,6 +49,9 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
     @Override public String getRefMapperConfig() { return null; }
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
+        if (mixinClassName.endsWith(".FastBenchRecipeLockMixin")) {
+            return hasClass("dev/shadowsoffire/fastbench/util/FastBenchUtil.class");
+        }
         if (mixinClassName.contains(".Structurify")) {
             return hasClass("com/faboslav/structurify/common/Structurify.class");
         }

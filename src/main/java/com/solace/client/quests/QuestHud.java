@@ -7,6 +7,7 @@ import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.quests.network.Views.MarkerView;
 import com.solace.quests.network.Views.ObjectiveView;
 import com.solace.quests.network.Views.QuestView;
+import net.minecraft.network.chat.Component;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -72,10 +73,14 @@ public final class QuestHud {
             for (ObjectiveView objective : quest.objectives()) {
                 boolean done = objective.progress() >= objective.count();
                 String count = objective.count() > 1 ? objective.progress() + "/" + objective.count() : done ? "done" : "";
-                List<FormattedCharSequence> text = font.split(objective.text(), WIDTH - 14 - font.width(count) - 4);
-                int color = done ? WorldCreationThemeRenderer.GOLD_DIM : WorldCreationThemeRenderer.TEXT;
+                int indent = objective.indent() ? 6 : 0;
+                // A paused objective shows why it waits instead of what it asks.
+                Component line = objective.paused() ? objective.pausedText() : objective.text();
+                List<FormattedCharSequence> text = font.split(line, WIDTH - 14 - indent - font.width(count) - 4);
+                int color = done ? WorldCreationThemeRenderer.GOLD_DIM
+                        : objective.paused() ? 0xFF808080 : WorldCreationThemeRenderer.TEXT;
                 if (!text.isEmpty()) {
-                    graphics.drawString(font, text.get(0), x + 8, lineY, color, false);
+                    graphics.drawString(font, text.get(0), x + 8 + indent, lineY, color, false);
                 }
                 graphics.drawString(font, count, x + WIDTH - 4 - font.width(count), lineY, color, false);
                 lineY += 10;

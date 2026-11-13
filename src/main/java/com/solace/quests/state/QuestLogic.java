@@ -178,6 +178,7 @@ public final class QuestLogic {
         state.status = Status.ACTIVE;
         state.phase = first.id();
         state.progress.clear();
+        state.seen.clear();
         state.claimed.clear();
         state.startedAt = ctx.gameTime();
         state.log(ctx.gameTime(), state.phase, via);
@@ -191,8 +192,48 @@ public final class QuestLogic {
         }
     }
 
+    /**
+     * Like {@link #needsMet} but first re-tests the "while" objectives it needs, so progress that arrives
+     * between two ticks (a kill right after entering the area) sees the current state.
+     */
+    private static boolean needsMetNow(Ctx ctx, Quest quest, QuestState state, Phase phase, Objective objective) {
+        ResourceLocation outer = ctx.quest;
+        ctx.quest = quest.id();
+        try {
+            for (String need : objective.needs()) {
+                Objective other = phase.objective(need);
+                if (other != null && other.type().equals(Quest.WHILE)) {
+                    state.progress.put(need, other.when() != null && other.when().test(ctx) ? 1 : 0);
+                }
+            }
+        } finally {
+            ctx.quest = outer;
+        }
+        return needsMet(state, phase, objective);
+    }
+
+    /** True when every objective this one "needs" is done. */
+    public static boolean needsMet(QuestState state, Phase phase, Objective objective) {
+        for (String need : objective.needs()) {
+            Objective other = phase.objective(need);
+            if (other == null || state.progress.getOrDefault(need, 0) < other.count()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     /** Sets (not adds) an objective's progress in the current phase. Returns false if it does not apply. */
     public static boolean setProgress(Ctx ctx, Quest quest, String objectiveId, int value, Events events) {
+        return setProgress(ctx, quest, objectiveId, value, false, events);
+    }
+
+    /**
+     * {@code force} ignores "needs" (author actions such as solace:complete_objective). Without it, progress
+     * can only go up while the objective's needs are met.
+     */
+    public static boolean setProgress(Ctx ctx, Quest quest, String objectiveId, int value, boolean force,
+                                      Events events) {
         QuestState state = ctx.data().quests.get(quest.id());
         Phase phase = state == null || state.status != Status.ACTIVE ? null : quest.phase(state.phase);
         Objective objective = phase == null ? null : phase.objective(objectiveId);
@@ -200,12 +241,37 @@ public final class QuestLogic {
             return false;
         }
         int clamped = Math.max(0, Math.min(objective.count(), value));
-        if (state.progress.getOrDefault(objectiveId, 0) != clamped) {
+        int current = state.progress.getOrDefault(objectiveId, 0);
+        if (!force && clamped > current && !needsMetNow(ctx, quest, state, phase, objective)) {
+            return true;
+        }
+        if (current != clamped) {
             state.progress.put(objectiveId, clamped);
             ctx.changed();
             evaluate(ctx, events);
         }
         return true;
+    }
+
+    /**
+     * Counts {@code key} once for a "distinct" objective: progress becomes the number of different keys seen.
+     * Keys are only remembered while the objective's needs are met.
+     */
+    public static boolean addDistinct(Ctx ctx, Quest quest, String objectiveId, String key, Events events) {
+        QuestState state = ctx.data().quests.get(quest.id());
+        Phase phase = state == null || state.status != Status.ACTIVE ? null : quest.phase(state.phase);
+        Objective objective = phase == null ? null : phase.objective(objectiveId);
+        if (objective == null || key == null) {
+            return false;
+        }
+        if (!needsMetNow(ctx, quest, state, phase, objective)) {
+            return true;
+        }
+        java.util.Set<String> seen = state.seen.computeIfAbsent(objectiveId, id -> new java.util.TreeSet<>());
+        if (seen.size() < objective.count() && seen.add(key)) {
+            ctx.changed();
+        }
+        return setProgress(ctx, quest, objectiveId, seen.size(), events);
     }
 
     public static boolean addProgress(Ctx ctx, Quest quest, String objectiveId, int amount, Events events) {
@@ -294,12 +360,10 @@ public final class QuestLogic {
                         ctx.changed();
                     }
                     ctx.quest = quest.id();
-                    for (Objective objective : phase.objectives()) {
-                        if (Quest.AUTO.contains(objective.type()) && objective.when() != null
-                                && state.progress.getOrDefault(objective.id(), 0) < 1 && objective.when().test(ctx)) {
-                            state.progress.put(objective.id(), 1);
-                            ctx.changed();
-                        }
+                    String lost = refresh(ctx, state, phase);
+                    if (lost != null) {
+                        moved |= apply(ctx, quest, state, Quest.FAIL, "lost:" + lost, List.of(), events);
+                        continue;
                     }
                     moved |= step(ctx, quest, state, phase, events);
                 }
@@ -310,6 +374,72 @@ public final class QuestLogic {
         } finally {
             ctx.quest = outer;
         }
+    }
+
+    /**
+     * Brings the phase's computed objectives up to date: live "while" objectives, objectives whose
+     * needs stopped holding (on_lost), self-completing objectives and groups. Returns the id of an
+     * objective with on_lost "fail" that was lost, or null.
+     */
+    static String refresh(Ctx ctx, QuestState state, Phase phase) {
+        boolean changed = false;
+        for (Objective objective : phase.objectives()) {
+            if (objective.type().equals(Quest.WHILE)) {
+                int now = objective.when() != null && objective.when().test(ctx) ? 1 : 0;
+                if (state.progress.getOrDefault(objective.id(), 0) != now) {
+                    state.progress.put(objective.id(), now);
+                    changed = true;
+                }
+            }
+        }
+        for (Objective objective : phase.objectives()) {
+            int current = state.progress.getOrDefault(objective.id(), 0);
+            if (objective.needs().isEmpty() || current <= 0 || current >= objective.count()
+                    || needsMet(state, phase, objective)) {
+                continue;
+            }
+            if (objective.onLost() == Quest.OnLost.FAIL) {
+                if (changed) {
+                    ctx.changed();
+                }
+                return objective.id();
+            }
+            if (objective.onLost() == Quest.OnLost.RESET) {
+                state.progress.put(objective.id(), 0);
+                state.seen.remove(objective.id());
+                changed = true;
+            }
+        }
+        for (Objective objective : phase.objectives()) {
+            // A find_structure with distinct "structure" is counted by the engine, not latched here.
+            if (Quest.AUTO.contains(objective.type()) && objective.when() != null && objective.distinct() == null
+                    && state.progress.getOrDefault(objective.id(), 0) < 1 && needsMet(state, phase, objective)
+                    && objective.when().test(ctx)) {
+                state.progress.put(objective.id(), 1);
+                changed = true;
+            }
+        }
+        for (Objective objective : phase.objectives()) {
+            if (objective.type().equals(Quest.GROUP)) {
+                int done = 0;
+                for (String child : objective.of()) {
+                    Objective other = phase.objective(child);
+                    if (other != null && state.progress.getOrDefault(child, 0) >= other.count()) {
+                        done++;
+                    }
+                }
+                int now = needsMet(state, phase, objective) ? Math.min(objective.count(), done)
+                        : Math.min(state.progress.getOrDefault(objective.id(), 0), done);
+                if (state.progress.getOrDefault(objective.id(), 0) != now) {
+                    state.progress.put(objective.id(), now);
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            ctx.changed();
+        }
+        return null;
     }
 
     private static boolean step(Ctx ctx, Quest quest, QuestState state, Phase phase, Events events) {

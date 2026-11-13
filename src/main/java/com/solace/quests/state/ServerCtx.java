@@ -118,6 +118,36 @@ public final class ServerCtx extends Ctx {
     }
 
     @Override
+    public boolean inArea(String area) {
+        return Areas.get(player.server).contains(area, dimension(), player.getX(), player.getZ());
+    }
+
+    @Override
+    public boolean nearNpc(ResourceLocation binding, int radius) {
+        com.solace.quests.content.Dialogue.NpcBinding npc = content().npcs.get(binding);
+        return npc != null && com.solace.quests.npc.NpcRegistry.nearest(this, npc, radius) != null;
+    }
+
+    /** "dimension x z" of the start of the structure the player stands in, or null. */
+    public String structureStart(Target structure) {
+        ServerLevel level = player.serverLevel();
+        BlockPos pos = player.blockPosition();
+        if (!level.isLoaded(pos)) {
+            return null;
+        }
+        net.minecraft.world.level.levelgen.structure.StructureStart start;
+        if (structure.tag()) {
+            start = level.structureManager().getStructureWithPieceAt(pos,
+                    TagKey.create(Registries.STRUCTURE, structure.id()));
+        } else {
+            Structure exact = level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(structure.id());
+            start = exact == null ? null : level.structureManager().getStructureWithPieceAt(pos, exact);
+        }
+        return start == null || !start.isValid() ? null
+                : dimension() + " " + start.getChunkPos().x + " " + start.getChunkPos().z;
+    }
+
+    @Override
     public boolean custom(String handler, String json) {
         QuestApi.ConditionHandler registered = QuestApi.CONDITIONS.get(handler);
         return registered != null && registered.test(player, json);

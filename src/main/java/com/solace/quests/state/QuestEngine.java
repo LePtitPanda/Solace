@@ -150,6 +150,15 @@ public final class QuestEngine {
      */
     public static void objective(ServerPlayer player, String type, Predicate<Objective> match, int amount,
                                  Entity entity) {
+        objective(player, type, match, amount, entity, null);
+    }
+
+    /**
+     * {@code keyFor} turns an objective's "distinct" mode (entity_type, entity, item, block) into the key
+     * of this event, or null when the event has none; objectives with "distinct" then count each key once.
+     */
+    public static void objective(ServerPlayer player, String type, Predicate<Objective> match, int amount,
+                                 Entity entity, java.util.function.Function<String, String> keyFor) {
         if (!QuestContent.current.objectiveTypes.contains(type)) {
             return;
         }
@@ -159,8 +168,24 @@ public final class QuestEngine {
         for (Active entry : active(ctx, type)) {
             Objective objective = entry.objective();
             if (match.test(objective) && whenPasses(ctx, entry)) {
-                progress(ctx, entry, amount, false, events);
+                String key = objective.distinct() == null || keyFor == null ? null : keyFor.apply(objective.distinct());
+                if (key != null) {
+                    distinct(ctx, entry, key, events);
+                } else {
+                    progress(ctx, entry, amount, false, events);
+                }
             }
+        }
+    }
+
+    private static void distinct(ServerCtx ctx, Active entry, String key, QuestLogic.Events events) {
+        QuestState state = ctx.data().quests.get(entry.quest().id());
+        String id = entry.objective().id();
+        int before = state == null ? 0 : state.progress.getOrDefault(id, 0);
+        QuestLogic.addDistinct(ctx, entry.quest(), id, key, events);
+        int after = state == null ? 0 : state.progress.getOrDefault(id, 0);
+        if (after != before) {
+            post(QuestEvent.Type.OBJECTIVE_PROGRESSED, ctx.player, entry.quest().id(), id, after);
         }
     }
 
@@ -197,6 +222,9 @@ public final class QuestEngine {
         if (!content.factions.isEmpty() && (player.tickCount / 20) % 5 == 0) {
             Factions.refreshGossip(ctx);
         }
+        if (!content.recipeLocks.isEmpty()) {
+            com.solace.quests.locks.RecipeLocks.refresh(player);
+        }
         if (ctx.data().quests.isEmpty() && content.autoStart.isEmpty() && ctx.data().markers.isEmpty()) {
             return;
         }
@@ -222,6 +250,15 @@ public final class QuestEngine {
                     && player.distanceToSqr(objective.x() + 0.5, objective.y() + 0.5, objective.z() + 0.5)
                     <= (double) objective.radius() * objective.radius() && whenPasses(ctx, entry)) {
                 progress(ctx, entry, 1, true, events);
+            }
+        }
+        for (Active entry : active(ctx, "solace:find_structure")) {
+            Objective objective = entry.objective();
+            if ("structure".equals(objective.distinct()) && whenPasses(ctx, entry)) {
+                String start = ctx.structureStart(objective.target());
+                if (start != null) {
+                    distinct(ctx, entry, start, events);
+                }
             }
         }
         QuestLogic.evaluate(ctx, events);
@@ -386,7 +423,7 @@ public final class QuestEngine {
             }
             case "solace:complete_objective" -> {
                 if (quest != null) {
-                    QuestLogic.setProgress(ctx, quest, effect.name(), Integer.MAX_VALUE, events);
+                    QuestLogic.setProgress(ctx, quest, effect.name(), Integer.MAX_VALUE, true, events);
                 }
             }
             case "solace:dialogue" -> {
@@ -420,6 +457,25 @@ public final class QuestEngine {
                     handler.run(player, effect.data());
                 }
             }
+            case "solace:set_area" -> setArea(ctx, effect);
+            case "solace:remove_area" -> Areas.get(player.server).remove(effect.name());
+            case "solace:free_captive" -> {
+                Entity captive = DialogueManager.npc(player);
+                if (captive == null) {
+                    LOGGER.warn("[Solace Quests] solace:free_captive runs only in a dialogue with the captive");
+                    return;
+                }
+                DialogueManager.close(player);
+                ResourceLocation profession = effect.data() == null ? null : ResourceLocation.tryParse(effect.data());
+                com.solace.quests.npc.NpcRegistry.get(player.server).free(captive, effect.target(), profession);
+            }
+            case "solace:unlock_recipes", "solace:lock_recipes" -> {
+                String flag = com.solace.quests.locks.RecipeLocks.flag(effect.target());
+                if (effect.type().equals("solace:unlock_recipes") ? ctx.data().flags.add(flag)
+                        : ctx.data().flags.remove(flag)) {
+                    ctx.changed();
+                }
+            }
             // World-wide and idempotent: the first player to reach this opens it for everyone.
             case "solace:open_structure_gate" -> {
                 if (StructureGates.open(player.server, effect.name(), StructureGateConfig.Mode.parse(effect.data())) < 0) {
@@ -439,6 +495,59 @@ public final class QuestEngine {
             }
             default -> LOGGER.warn("[Solace Quests] Unknown effect type {}", effect.type());
         }
+    }
+
+    /** solace:set_area: around the player, the dialogue NPC, or the structure the player stands in. */
+    private static void setArea(ServerCtx ctx, Reward effect) {
+        com.google.gson.JsonObject options = com.google.gson.JsonParser.parseString(effect.data()).getAsJsonObject();
+        String at = options.get("at").getAsString();
+        Areas.Area area = null;
+        switch (at) {
+            case "npc" -> {
+                Entity npc = DialogueManager.npc(ctx.player);
+                if (npc != null) {
+                    area = Areas.Area.around(npc.level().dimension().location().toString(), npc.getBlockX(),
+                            npc.getBlockZ(), effect.count());
+                }
+            }
+            case "structure" -> {
+                String text = options.get("structure").getAsString();
+                boolean tag = text.startsWith("#");
+                net.minecraft.world.level.levelgen.structure.BoundingBox box = structureBox(ctx.player,
+                        ResourceLocation.tryParse(tag ? text.substring(1) : text), tag);
+                if (box != null) {
+                    int r = effect.count();
+                    area = new Areas.Area(ctx.dimension(), box.minX() - r, box.minZ() - r, box.maxX() + r,
+                            box.maxZ() + r);
+                }
+            }
+            default -> area = Areas.Area.around(ctx.dimension(), ctx.player.getBlockX(), ctx.player.getBlockZ(),
+                    effect.count());
+        }
+        if (area == null) {
+            LOGGER.warn("[Solace Quests] solace:set_area {}: nothing to center it on (at = {})", effect.name(), at);
+        } else {
+            Areas.get(ctx.player.server).set(effect.name(), area, effect.on());
+        }
+    }
+
+    private static net.minecraft.world.level.levelgen.structure.BoundingBox structureBox(ServerPlayer player,
+                                                                                         ResourceLocation id,
+                                                                                         boolean tag) {
+        if (id == null) {
+            return null;
+        }
+        net.minecraft.server.level.ServerLevel level = player.serverLevel();
+        net.minecraft.world.level.levelgen.structure.StructureStart start;
+        if (tag) {
+            start = level.structureManager().getStructureWithPieceAt(player.blockPosition(),
+                    net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.STRUCTURE, id));
+        } else {
+            net.minecraft.world.level.levelgen.structure.Structure exact = level.registryAccess()
+                    .registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE).get(id);
+            start = exact == null ? null : level.structureManager().getStructureWithPieceAt(player.blockPosition(), exact);
+        }
+        return start == null || !start.isValid() ? null : start.getBoundingBox();
     }
 
     public static Quest quest(ResourceLocation id) {

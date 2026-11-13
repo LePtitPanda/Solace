@@ -178,6 +178,7 @@ public final class LootExtraManager {
         ObjectArrayList<ItemStack> modified = ForgeHooks.modifyLoot(table, generated, context);
         observeAdditions(table, base, modified);
         applyRules(table, base, modified, context);
+        com.solace.quests.locks.QuestLootRules.apply(table, modified, context);
         return modified;
     }
 

@@ -124,9 +124,13 @@ public final class DialogueParser {
         if (dialogues.isEmpty()) {
             in.err("dialogue", "an NPC binding needs \"dialogue\" or \"dialogues\"");
         }
+        String bind = in.str("bind", "none");
+        if (!bind.equals("none") && !bind.equals("first_met")) {
+            in.err("bind", "expected \"none\" or \"first_met\"");
+        }
         NpcBinding binding = new NpcBinding(id, entity, when, List.copyOf(dialogues),
                 in.integer("priority", 0, Integer.MIN_VALUE), in.bool("freeze", true),
-                in.integer("max_distance", 6, 1));
+                in.integer("max_distance", 6, 1), bind.equals("first_met"));
         in.done();
         return binding;
     }

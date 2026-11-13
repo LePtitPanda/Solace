@@ -45,6 +45,13 @@ SolaceQuests.addReputation(player, 'astralis:wardens', 10)
 SolaceQuests.openStructureGate(server, 'irons_spellbooks:evoker_fort', 'once')  // mode null = config default
 SolaceQuests.closeStructureGate(server, '#astralis:host_outposts')
 SolaceQuests.structureGateStatus(server, 'irons_spellbooks:evoker_fort')       // "open (once)", "closed | generated at ..."
+
+// Areas, NPCs, captives, recipe locks (see AUTHORING.md).
+SolaceQuests.setArea(server, 'bellhaven', 'minecraft:overworld', x, z, 64)
+SolaceQuests.inArea(player, 'bellhaven')
+SolaceQuests.npc(server, 'astralis:giver_banker')          // the bound entity if loaded, else null
+SolaceQuests.freeCaptive(entity, 'minecraft:villager')     // same as solace:free_captive
+SolaceQuests.unlockRecipes(player, 'astralis:rotation')
 ```
 
 `player` is a server player (`event.player` in server events).

@@ -14,7 +14,8 @@ Related: [EDITOR.md](EDITOR.md) (web editor), [KUBEJS.md](KUBEJS.md) (scripting)
 | Datapack: `data/<namespace>/solace_quests/<kind>/…` | `<namespace>:village/first_steps` |
 | Loose: `config/solace/quests/<namespace>/<kind>/…` | `<namespace>:village/first_steps` |
 
-`<kind>` is one of `chapters`, `quests`, `dialogues`, `npcs`, `factions`, `markers`. The id always
+`<kind>` is one of `chapters`, `quests`, `dialogues`, `npcs`, `factions`, `markers`, `loot`,
+`recipe_locks`, `trades`. The id always
 comes from the location; an `id` field is ignored with a warning.
 
 **Loose files win** over a datapack file with the same id. A loose file containing only
@@ -122,7 +123,29 @@ Any text field takes vanilla text-component JSON: `"Plain words"`,
 Common fields: `id` (required, unique in the quest — saved progress is keyed by it), `type`,
 `text`, `icon`, `count` (default 1), `optional` (default false), `hidden` (not shown to the
 player), `when` (condition that must hold for progress to count; for kill and interact objectives
-it may use `solace:entity` to inspect the entity).
+it may use `solace:entity` to inspect the entity), and:
+
+| Field | Meaning |
+|-------|---------|
+| `needs` | Ids of objectives **in the same phase** that must be done for this one to progress. The book and HUD draw it indented under them and greyed out ("Paused until: …") while they are not done. Also gives an order inside one phase ("craft the camera" before "take a photo"). |
+| `on_lost` | What happens to a started, unfinished objective when one of its needs stops holding (only a `solace:while` can stop holding): `keep` (default), `reset` (back to 0), `fail` (the quest fails, history label `lost:<id>`). |
+| `paused_text` | Text shown instead of the default "Paused until: …". |
+| `distinct` | Count each thing once: `entity_type` or `entity` (kill, interact_entity, tame, breed, shear, hatch), `item` (craft, smelt, use_item), `block` (break, place, interact_block), `structure` (find_structure: separate structures, so `count` can be above 1). |
+| `nbt` | Item objectives (`item`, `deliver`, `craft`, `smelt`, `use_item`): SNBT that must be contained in the stack's tag. |
+
+**"Kill 6 crows in the village"** — a live objective and one that needs it:
+
+```json
+"objectives": [
+  { "id": "in_village", "type": "solace:while", "text": "Be in Bellhaven",
+    "when": { "type": "solace:area", "area": "bellhaven" } },
+  { "id": "crows", "type": "solace:kill", "entity": "alexsmobs:crow", "count": 6,
+    "needs": ["in_village"], "on_lost": "keep" }
+]
+```
+
+A `while` objective counts toward completion like any other, so the quest completes while the
+player is in the area. Mark it `optional` if it should only gate other objectives.
 
 | Type | Fields | Counts when |
 |------|--------|-------------|
@@ -145,6 +168,12 @@ it may use `solace:entity` to inspect the entity).
 | `solace:reputation` | `faction`, `min` | standing is at least `min` |
 | `solace:faction_rank` | `faction`, `rank` | standing is at that rank or higher |
 | `solace:condition` | `when` (required) | the condition becomes true |
+| `solace:while` | `when` (required) | **live**: done while the condition holds, undone when it stops holding |
+| `solace:group` | `of` (objective ids of this phase), `count` (default all) | `count` of the listed objectives are done ("8 of 12"). Make the children `optional` so only the group is required. |
+| `solace:tame` | `entity` | the player tames it (AnimalTameEvent, or the animal belongs to the player right after a right-click — catches mods that do not fire the event) |
+| `solace:breed` | `entity` | the player breeds it (counts the child) |
+| `solace:shear` | `entity` | the player right-clicks it with shears while it can be sheared (any IForgeShearable) |
+| `solace:hatch` | `entity` | a baby of it appears within 16 blocks of the player without being bred (egg blocks, thrown eggs, mod eggs) |
 | `solace:checkmark` | — | the player clicks it in the quest book (or `/sq check <quest> <objective>`) |
 | `solace:custom` | — | a script or mod calls `SolaceQuests.progress(...)`; see [KUBEJS.md](KUBEJS.md) |
 
@@ -171,7 +200,9 @@ Used by chapter `unlock`, quest `visible_when`, objective `when`, transition `wh
 | `solace:variable` | `name`, `op` (`==` `!=` `<` `<=` `>` `>=`, default `==`), `value` |
 | `solace:reputation` | `faction`, `op` (default `>=`), `value` |
 | `solace:faction_rank` | `faction`, `op` (default `>=`), `rank` — compares rank positions |
-| `solace:has_item` | `item` (id or `#tag`), `count` (default 1), `held` (default false: anywhere in the inventory) |
+| `solace:has_item` | `item` (id or `#tag`), `count` (default 1), `held` (default false: anywhere in the inventory), `nbt` |
+| `solace:area` | `area`: the player stands inside that named area (see *Areas*); false while it is not set |
+| `solace:near_npc` | `npc` (binding id), `radius` (default 8): an entity of that binding (its bound entity, for `first_met`) is that close |
 | `solace:dimension` | `dimension` |
 | `solace:biome` | `biome` (id or `#tag`) |
 | `solace:structure` | `structure` (id or `#tag`) — the player stands inside it |
@@ -220,6 +251,10 @@ still claimed with the rest.
 | `solace:open_structure_gate` | `structure` (id or `#tag`, must be in `config/solace-structure-gates.json`), `mode` (`once` or `infinite`, default: the config's). World-wide and idempotent; a `once` gate whose copy already generated stays closed. See [../structure-gates.md](../structure-gates.md). |
 | `solace:close_structure_gate` | `structure` (id or `#tag`) |
 | `solace:give_structure_map` | `structure` (id or `#tag`), `name` and `lore` (text components; `lore` a list), `decoration` (map decoration type, default `red_x`), `search_radius` (chunks, default 100). Searches off-thread; nothing found → a blank map ("the ink won't settle") that searches again when used. |
+| `solace:set_area` | `area`, `radius` (default 48), `at`: `player` (default), `npc` (the dialogue NPC) or `structure` (the box of the `structure` the player stands in, plus `radius` as margin), `replace` (default false: keep an area that is already set — the first player defines it). |
+| `solace:remove_area` | `area` |
+| `solace:free_captive` | `into` (entity, default `minecraft:villager`), `profession` (used when there is no saved person). Runs in a dialogue with the captive: see *Captives and identity*. |
+| `solace:unlock_recipes`, `solace:lock_recipes` | `lock` (a `recipe_locks/` id): sets or clears the flag `recipes:<lock>` |
 | `solace:give_structure_compass` | `structure` (id or `#tag`), `item` (default `minecraft:compass`), `name`, `lore`, `sound` (optional sound id, hums while held, louder when closer), `search_radius`. Lodestone-style target in NBT; using the item searches again. |
 
 ## Dialogue — `dialogues/**/*.json`
@@ -305,8 +340,97 @@ A `solace:dialogue_node` objective completes when the node is entered, after the
 | `freeze` | true | The NPC stops and faces the player while talking. |
 | `max_distance` | 6 | The dialogue closes if the player walks further away. |
 
+| `bind` | `"none"` | `"first_met"`: the first matching entity the player talks to becomes **the** NPC (world-wide); no other entity matches the binding while it lives. When it dies or is removed for good, the binding is free and the next matching entity talked to takes over. |
+
 Right-clicking an entity is only intercepted when a binding matches and a dialogue opens; any
 other villager trades as usual. The binding id is what `deliver` objectives and `npc` markers use.
+
+### Captives and identity
+
+A `first_met` NPC carries its binding id as its **identity** (entity persistent data
+`solace_identity`), and Solace keeps a snapshot of it: custom name, villager data (profession,
+level), trades, XP and gossip, refreshed every time someone talks to it.
+
+A captive placed in a structure is linked to a person with the entity tag
+`"solace_identity=<binding id>"` (e.g. `Tags:["solace_identity=astralis:giver_banker"]` in the
+structure NBT). Give the captive its own binding (matching that tag with `solace:entity` `nbt`)
+whose dialogue has a choice running `solace:free_captive`. Freeing replaces the captive with a
+villager (or `into`) that **is the same person**: the snapshot is restored, the binding moves to
+it (displacing whoever took over meanwhile), and it is made persistent. Without a snapshot, the
+captive's name and `profession` are used. A captive with no identity simply becomes a new villager.
+
+The same transfer happens when another mod converts an entity with an identity (Forge
+`LivingConversionEvent`): the identity moves along, and the binding follows if the new entity
+matches it; a villager that comes out jobless gets the snapshot back.
+
+## Areas
+
+Named, world-wide columns (a box in one dimension, all heights), e.g. `bellhaven`. Set by the
+`solace:set_area` effect (e.g. in the first quest: `"at": "structure", "structure": "#minecraft:village"`)
+or `/sq area set <name> <radius>`; read by the `solace:area` condition.
+
+## Quest loot — `loot/*.json`
+
+Items added to loot as it is generated (chests when first opened — Lootr chests per player —,
+mob drops, block drops), on top of the table and its modifiers.
+
+```json
+{ "tables": ["minecraft:chests/*"], "structure": "#astralis:mineshafts",
+  "when": { "type": "solace:quest_state", "quest": "astralis:c1/wilds/ls2_old_crew", "state": "active" },
+  "once": true, "items": [ { "item": "lets-do-quest-items:calendar", "chance": 1.0 } ] }
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `items` | required | `{item, count` or `min`/`max`, `nbt`, `chance}` |
+| `tables` | any | loot table ids; an entry ending in `*` is a prefix |
+| `structure` | any | the loot's origin is inside this structure (id or `#tag`) |
+| `entity` | any | dropped by this entity (id or `#tag`) |
+| `block` | any | dropped by this block |
+| `when` | none | condition on the player who opened, killed or broke it. Loot rolled without a player never matches a rule with `when` or `once`. |
+| `chance` | 1 | for the whole rule |
+| `once` | false | at most once per player (flag `loot:<id>`) |
+
+## Recipe locks — `recipe_locks/*.json`
+
+Technique notes. A lock's recipes give no result in the crafting grid (vanilla table and
+inventory, FastWorkbench) and are hidden in JEI and EMI, for each player until they learn it.
+
+```json
+{ "outputs": ["create:shaft", "create:cogwheel", "#create:gearboxes"],
+  "item": "kubejs:technique_rotation", "consume_item": false,
+  "learn_text": "The Mason's scrawl about rotation. You can make shafts and cogs now." }
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `recipes` | — | recipe ids; an entry ending in `*` is a prefix |
+| `outputs` | — | or: every recipe whose result is this item / `#tag` |
+| `types` | `["minecraft:crafting"]` | recipe types the lock covers (only crafting is blocked in the grid; others are hidden in JEI/EMI only — a processing recipe has no crafting player) |
+| `item` | none | right-clicking this item learns the lock (the technique note) |
+| `consume_item` | false | the note is used up |
+| `learn_text` | a generic line | chat message when learned |
+| `unlock_when` | none | also unlocked while this condition holds |
+
+Learned = the player has the flag `recipes:<lock id>` (also set by `solace:unlock_recipes`).
+
+## Trade locks — `trades/*.json`
+
+```json
+{ "entity": "minecraft:villager", "when": { "type": "solace:entity", "profession": "minecraft:armorer" },
+  "offers": [ { "result": "minecraft:iron_chestplate" } ], "mode": "hide",
+  "unlock_when": { "type": "solace:quest_state", "quest": "astralis:c1/prof/ar2", "state": "completed" } }
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `entity` | `minecraft:villager` | merchant entity or `#tag` |
+| `when` | none | which merchants (`solace:entity` sees the merchant) |
+| `offers` | required | `"all"` or a list of `{result, cost}` (item or `#tag`; either may be left out) |
+| `mode` | `disable` | `disable`: shown out of stock; `hide`: not shown |
+| `unlock_when` | required | condition on the player (the merchant is in context) |
+
+The server never fills the result slot for a locked offer, whatever the client sends.
 
 ## Faction — `factions/*.json`
 
@@ -378,6 +502,8 @@ var set|add <player> <name> <value>
 rep get|set|add <player> <faction> [value]
 debug <player>                           flags, variables, reputation, every quest's state and branch path
 editor                                   start the web editor link (see EDITOR.md)
+area list | set <name> <radius> | remove <name>     named areas (set: around you)
+npc list | unbind <binding> | bind <binding> <entity> | free <entity> [into]
 claim <quest>                            (players) claim rewards
 check <quest> <objective>                (players) tick a checkmark objective
 ```

@@ -4,6 +4,7 @@ import { graph, GraphEdge, GraphNode } from './graph';
 import {
   blank, CHAPTER, CHOICE, DIALOGUE_NODE, FACTION, Kind, KIND_LABEL, KINDS, MARKER_TARGETS, NPC, OBJECTIVES, PHASE, QUEST,
   RANK, RELATION, TRANSITION,
+  LOOT, RECIPE_LOCK, TRADE_LOCK,
 } from './schema';
 import { connect, Entry, entry, idsOf, key, onChange, openFiles, openFolder, reloadGame, remove, save, saveAll, state, validate } from './store';
 
@@ -563,6 +564,15 @@ function renderInspector() {
       break;
     case 'factions':
       body = factionForm(e);
+      break;
+    case 'loot':
+      body = [section('Quest loot', fields(e.json, LOOT, t))];
+      break;
+    case 'recipe_locks':
+      body = [section('Recipe lock', fields(e.json, RECIPE_LOCK, t))];
+      break;
+    case 'trades':
+      body = [section('Trade lock', fields(e.json, TRADE_LOCK, t))];
       break;
     default:
       body = [section('Marker', typed(e.json, 'target', MARKER_TARGETS, t))];

@@ -90,9 +90,27 @@ public final class Conditions {
             }
             case "solace:has_item" -> {
                 Target item = in.target("item", "item", true);
+                String snbt = in.str("nbt", null);
+                if (item != null && snbt != null) {
+                    try {
+                        item = item.withNbt(TagParser.parseTag(snbt));
+                    } catch (Exception exception) {
+                        in.err("nbt", "not valid SNBT: " + exception.getMessage());
+                    }
+                }
+                Target wanted = item;
                 int count = in.integer("count", 1, 1);
                 boolean held = in.bool("held", false);
-                return item == null ? null : ctx -> ctx.countItem(item, held) >= count;
+                return wanted == null ? null : ctx -> ctx.countItem(wanted, held) >= count;
+            }
+            case "solace:area" -> {
+                String area = in.req("area");
+                return ctx -> ctx.inArea(area);
+            }
+            case "solace:near_npc" -> {
+                ResourceLocation npc = in.ref("npc", "npcs", true);
+                int radius = in.integer("radius", 8, 1);
+                return npc == null ? null : ctx -> ctx.nearNpc(npc, radius);
             }
             case "solace:dimension" -> {
                 ResourceLocation dimension = in.id("dimension", true);

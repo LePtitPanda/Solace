@@ -49,6 +49,8 @@ public final class QuestCommands {
     private static final SuggestionProvider<CommandSourceStack> FACTIONS = (context, builder) ->
             SharedSuggestionProvider.suggestResource(QuestContent.current.factions.keySet(), builder);
     private static final Predicate<CommandSourceStack> OP = source -> source.hasPermission(2);
+    private static final SuggestionProvider<CommandSourceStack> NPCS = (context, builder) ->
+            SharedSuggestionProvider.suggestResource(QuestContent.current.npcs.keySet(), builder);
 
     private QuestCommands() {
     }
@@ -141,8 +143,61 @@ public final class QuestCommands {
                                     quest(context), StringArgumentType.getString(context, "objective"));
                             return reply(context, done, "Checked", "That is not a checkmark objective you can tick now");
                         }))));
+        root.then(literal("area").requires(OP)
+                .then(literal("list").executes(context -> {
+                    var areas = com.solace.quests.state.Areas.get(context.getSource().getServer()).all();
+                    context.getSource().sendSuccess(() -> Component.literal(areas.isEmpty() ? "No areas"
+                            : String.join("\n", areas.entrySet().stream()
+                            .map(entry -> entry.getKey() + ": " + entry.getValue()).toList())), false);
+                    return areas.size();
+                }))
+                .then(literal("set").then(argument("name", StringArgumentType.word())
+                        .then(argument("radius", IntegerArgumentType.integer(0)).executes(context -> {
+                            CommandSourceStack source = context.getSource();
+                            int radius = IntegerArgumentType.getInteger(context, "radius");
+                            com.solace.quests.state.Areas.get(source.getServer()).set(
+                                    StringArgumentType.getString(context, "name"),
+                                    com.solace.quests.state.Areas.Area.around(source.getLevel().dimension().location()
+                                            .toString(), (int) source.getPosition().x, (int) source.getPosition().z, radius),
+                                    true);
+                            return reply(context, true, "Area set around you", "");
+                        }))))
+                .then(literal("remove").then(argument("name", StringArgumentType.word()).executes(context ->
+                        reply(context, com.solace.quests.state.Areas.get(context.getSource().getServer())
+                                .remove(StringArgumentType.getString(context, "name")), "Area removed", "No such area")))));
+        root.then(literal("npc").requires(OP)
+                .then(literal("list").executes(context -> {
+                    var entries = com.solace.quests.npc.NpcRegistry.get(context.getSource().getServer()).all();
+                    context.getSource().sendSuccess(() -> Component.literal(entries.isEmpty() ? "No bound NPCs"
+                            : String.join("\n", entries.entrySet().stream().map(entry -> entry.getKey() + ": "
+                            + (entry.getValue().uuid == null ? "unbound" : entry.getValue().uuid) + " at "
+                            + entry.getValue().dimension + " " + entry.getValue().pos.toShortString()).toList())), false);
+                    return entries.size();
+                }))
+                .then(literal("unbind").then(argument("binding", ResourceLocationArgument.id()).suggests(NPCS)
+                        .executes(context -> reply(context, com.solace.quests.npc.NpcRegistry
+                                .get(context.getSource().getServer())
+                                .unbind(ResourceLocationArgument.getId(context, "binding").toString()),
+                                "Unbound: the next one met takes over", "Not bound"))))
+                .then(literal("bind").then(argument("binding", ResourceLocationArgument.id()).suggests(NPCS)
+                        .then(argument("entity", EntityArgument.entity()).executes(context -> {
+                            com.solace.quests.npc.NpcRegistry.get(context.getSource().getServer()).bind(
+                                    ResourceLocationArgument.getId(context, "binding").toString(),
+                                    EntityArgument.getEntity(context, "entity"), false);
+                            return reply(context, true, "Bound", "");
+                        }))))
+                .then(literal("free").then(argument("entity", EntityArgument.entity())
+                        .executes(context -> free(context, new ResourceLocation("minecraft", "villager")))
+                        .then(argument("into", ResourceLocationArgument.id())
+                                .executes(context -> free(context, ResourceLocationArgument.getId(context, "into")))))));
         LiteralCommandNode<CommandSourceStack> node = dispatcher.register(root);
         dispatcher.register(literal("sq").redirect(node));
+    }
+
+    private static int free(CommandContext<CommandSourceStack> context, ResourceLocation into)
+            throws CommandSyntaxException {
+        return reply(context, com.solace.quests.npc.NpcRegistry.get(context.getSource().getServer())
+                .free(EntityArgument.getEntity(context, "entity"), into, null) != null, "Freed", "Could not free it");
     }
 
     private static int dialogue(CommandContext<CommandSourceStack> context, String node) throws CommandSyntaxException {

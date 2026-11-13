@@ -180,12 +180,19 @@ public final class QuestSync {
                 : status == QuestLogic.View.LOCKED || status == QuestLogic.View.AVAILABLE ? quest.phases().get(0) : null;
         List<ObjectiveView> objectives = new ArrayList<>();
         if (phase != null) {
+            Set<String> children = new java.util.HashSet<>();
+            phase.objectives().forEach(objective -> children.addAll(objective.of()));
             for (Objective objective : phase.objectives()) {
                 if (!objective.hidden()) {
+                    int progress = active ? state.progress.getOrDefault(objective.id(), 0) : 0;
+                    boolean paused = active && progress < objective.count()
+                            && !QuestLogic.needsMet(state, phase, objective);
+                    Component pausedText = !paused ? Component.empty()
+                            : objective.pausedText() != null ? objective.pausedText() : waitingFor(state, phase, objective);
                     objectives.add(new ObjectiveView(objective.id(),
                             objective.text() != null ? objective.text() : describe(objective), objective.icon(),
-                            active ? state.progress.getOrDefault(objective.id(), 0) : 0, objective.count(),
-                            objective.optional(), objective.type().equals("solace:checkmark")));
+                            progress, objective.count(), objective.optional(), objective.type().equals("solace:checkmark"),
+                            !objective.needs().isEmpty() || children.contains(objective.id()), paused, pausedText));
                 }
             }
         }
@@ -252,6 +259,18 @@ public final class QuestSync {
         return Component.literal(id == null ? "?" : id.getPath().replace('_', ' ').replace('/', ' '));
     }
 
+    /** Default "paused" line: the first need that does not hold. */
+    private static Component waitingFor(QuestState state, Phase phase, Objective objective) {
+        for (String need : objective.needs()) {
+            Objective other = phase.objective(need);
+            if (other != null && state.progress.getOrDefault(need, 0) < other.count()) {
+                return Component.literal("Paused until: ")
+                        .append(other.text() != null ? other.text() : describe(other));
+            }
+        }
+        return Component.literal("Paused");
+    }
+
     /** Fallback wording for an objective without "text". */
     private static Component describe(Objective objective) {
         Target target = objective.target();
@@ -277,6 +296,11 @@ public final class QuestSync {
             case "solace:reputation", "solace:faction_rank" -> Component.literal("Earn standing with ")
                     .append(path(objective.ref()));
             case "solace:checkmark" -> Component.literal("Confirm");
+            case "solace:tame" -> Component.literal("Tame ").append(name(target, "entity"));
+            case "solace:breed" -> Component.literal("Breed ").append(name(target, "entity"));
+            case "solace:shear" -> Component.literal("Shear ").append(name(target, "entity"));
+            case "solace:hatch" -> Component.literal("Hatch ").append(name(target, "entity"));
+            case Quest.GROUP -> Component.literal("Complete " + objective.count() + " of " + objective.of().size());
             default -> Component.literal(objective.id().replace('_', ' '));
         };
     }

@@ -37,6 +37,12 @@ public abstract class Ctx {
 
     public abstract boolean hasAdvancement(ResourceLocation advancement);
 
+    /** The player stands inside the named area (see Areas); false when the area is not set. */
+    public abstract boolean inArea(String area);
+
+    /** An entity matching that NPC binding (its bound entity, for a persistent binding) is within radius. */
+    public abstract boolean nearNpc(ResourceLocation binding, int radius);
+
     /** A condition registered from Java or KubeJS; {@code data} is its JSON as text. */
     public abstract boolean custom(String handler, String data);
 

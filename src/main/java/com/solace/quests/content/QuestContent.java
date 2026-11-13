@@ -15,7 +15,8 @@ import java.util.TreeMap;
 
 /** One immutable snapshot of all loaded quest content. Swapped atomically on reload. */
 public final class QuestContent {
-    public static final List<String> KINDS = List.of("chapters", "quests", "dialogues", "npcs", "factions", "markers");
+    public static final List<String> KINDS = List.of("chapters", "quests", "dialogues", "npcs", "factions", "markers",
+            "loot", "recipe_locks", "trades");
     public static final QuestContent EMPTY = new QuestContent(Map.of(), List.of());
     public static volatile QuestContent current = EMPTY;
 
@@ -35,6 +36,9 @@ public final class QuestContent {
     public final Map<ResourceLocation, NpcBinding> npcs = new TreeMap<>();
     public final Map<ResourceLocation, Faction> factions = new TreeMap<>();
     public final Map<ResourceLocation, Marker> markers = new TreeMap<>();
+    public final Map<ResourceLocation, Locks.QuestLoot> loot = new TreeMap<>();
+    public final Map<ResourceLocation, Locks.RecipeLock> recipeLocks = new TreeMap<>();
+    public final Map<ResourceLocation, Locks.TradeLock> tradeLocks = new TreeMap<>();
     /** Highest priority first. */
     public final List<NpcBinding> bindings = new ArrayList<>();
     public final List<Quest> autoStart = new ArrayList<>();
@@ -61,6 +65,12 @@ public final class QuestContent {
                 bindings.add(binding);
             } else if (entry.definition instanceof Faction faction) {
                 factions.put(faction.id(), faction);
+            } else if (entry.definition instanceof Locks.QuestLoot questLoot) {
+                loot.put(questLoot.id(), questLoot);
+            } else if (entry.definition instanceof Locks.RecipeLock lock) {
+                recipeLocks.put(lock.id(), lock);
+            } else if (entry.definition instanceof Locks.TradeLock lock) {
+                tradeLocks.put(lock.id(), lock);
             }
         }
         entries.forEach((key, entry) -> {
@@ -89,6 +99,9 @@ public final class QuestContent {
             case "dialogues" -> DialogueParser.dialogue(key.id(), in);
             case "npcs" -> DialogueParser.npc(key.id(), in);
             case "factions" -> QuestParser.faction(key.id(), in);
+            case "loot" -> Locks.loot(key.id(), in);
+            case "recipe_locks" -> Locks.recipeLock(key.id(), in);
+            case "trades" -> Locks.tradeLock(key.id(), in);
             default -> QuestParser.markerFile(key.id(), in);
         };
     }

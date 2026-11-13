@@ -50,13 +50,25 @@ public record Quest(ResourceLocation id, ResourceLocation chapter, Component tit
     public record Transition(String to, Condition when, String label, List<Reward> actions) {
     }
 
+    /** Live objective: done while its condition holds, undone when it stops holding. */
+    public static final String WHILE = "solace:while";
+    /** Done when enough of the listed objectives ({@code of}) are done. */
+    public static final String GROUP = "solace:group";
+
+    /** What happens to a started objective when one of its {@code needs} stops holding. */
+    public enum OnLost { KEEP, RESET, FAIL }
+
     /**
      * Flat on purpose: one record for every objective type, unused fields stay null/0.
      * {@code ref} is the dimension, dialogue or NPC binding; {@code name} the entity name or dialogue node.
+     * {@code needs}: objectives of the same phase that must be done for this one to progress.
+     * {@code distinct}: count each entity type / entity / item / block / structure only once (null = off).
+     * {@code of}: the children of a {@link #GROUP}.
      */
     public record Objective(String id, String type, Component text, String icon, int count, boolean optional,
                             boolean hidden, Target target, String name, boolean consume, ResourceLocation ref,
-                            int x, int y, int z, int radius, Condition when) {
+                            int x, int y, int z, int radius, Condition when, List<String> needs, OnLost onLost,
+                            String distinct, List<String> of, Component pausedText) {
     }
 
     /**

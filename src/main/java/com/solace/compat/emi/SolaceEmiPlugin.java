@@ -21,6 +21,9 @@ public class SolaceEmiPlugin implements EmiPlugin {
         List<EmiIngredient> ingredients = List.of(EmiStack.of(ItemRegistry.ALCHEMIST_CAULDRON_BLOCK_ITEM.get()));
         List<Component> pages = List.of(Component.translatable("solace.jei.alchemist_cauldron.info"));
         registry.addRecipe(new EmiInfoRecipe(ingredients, pages, UID));
+        // Recipe locks: recipes this player has not learned yet (re-run when the server sends a change).
+        registry.removeRecipes(recipe -> recipe.getId() != null
+                && com.solace.client.quests.ClientRecipeLocks.locked.contains(recipe.getId()));
         registry.removeRecipes(recipe -> {
             ResourceLocation category = recipe.getCategory().getId();
             return category.getNamespace().equals("irons_spellbooks") && category.getPath().contains("arcane_anvil");

@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  * packet that only names what the player wants; the server decides whether it happens.
  */
 public final class QuestNetwork {
-    private static final String PROTOCOL = "1";
+    private static final String PROTOCOL = "2";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(Solace.MOD_ID, "quests"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -68,6 +68,11 @@ public final class QuestNetwork {
                 .consumerMainThread((packet, context) -> client(context, () -> () -> ClientQuests.meta(packet))).add();
         CHANNEL.messageBuilder(Quests.class, 6).encoder(Quests::encode).decoder(Quests::decode)
                 .consumerMainThread((packet, context) -> client(context, () -> () -> ClientQuests.quests(packet))).add();
+        CHANNEL.messageBuilder(LockedRecipes.class, 7)
+                .encoder((p, b) -> b.writeCollection(p.recipes, FriendlyByteBuf::writeResourceLocation))
+                .decoder(b -> new LockedRecipes(b.readList(FriendlyByteBuf::readResourceLocation)))
+                .consumerMainThread((packet, context) -> client(context,
+                        () -> () -> com.solace.client.quests.ClientRecipeLocks.set(packet.recipes))).add();
     }
 
     private static void client(Supplier<NetworkEvent.Context> context, Supplier<Runnable> action) {
@@ -109,6 +114,14 @@ public final class QuestNetwork {
 
     static void quests(ServerPlayer player, Quests quests) {
         send(player, quests);
+    }
+
+    /** The recipes locked for this player (technique notes they have not learned). */
+    public static void lockedRecipes(ServerPlayer player, List<ResourceLocation> recipes) {
+        send(player, new LockedRecipes(recipes));
+    }
+
+    record LockedRecipes(List<ResourceLocation> recipes) {
     }
 
     public static void forget(UUID player) {

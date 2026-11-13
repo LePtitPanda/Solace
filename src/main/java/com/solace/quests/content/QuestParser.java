@@ -204,6 +204,25 @@ public final class QuestParser {
                 objectives.add(objective);
             }
         }
+        // "needs" and group children must name objectives of this same phase.
+        Set<String> ids = new HashSet<>();
+        objectives.forEach(objective -> ids.add(objective.id()));
+        for (Objective objective : objectives) {
+            for (String need : objective.needs()) {
+                if (need.equals(objective.id())) {
+                    in.err("objectives", "objective \"" + need + "\" needs itself");
+                } else if (!ids.contains(need)) {
+                    in.err("objectives", "objective \"" + objective.id() + "\" needs unknown objective \"" + need
+                            + "\" (it must be in the same phase)");
+                }
+            }
+            for (String child : objective.of()) {
+                if (child.equals(objective.id()) || !ids.contains(child)) {
+                    in.err("objectives", "group \"" + objective.id() + "\" lists unknown objective \"" + child
+                            + "\" (it must be another objective of the same phase)");
+                }
+            }
+        }
         List<Transition> transitions = new ArrayList<>();
         for (In transitionIn : in.objs("transitions")) {
             Condition when = condition(transitionIn, "when");
@@ -229,22 +248,64 @@ public final class QuestParser {
         boolean consume = false;
         ResourceLocation ref = null;
         int x = 0, y = 0, z = 0, radius = 0;
-        switch (type) {
-            case "solace:kill", "solace:interact_entity" -> {
-                target = in.target("entity", "entity_type", true);
-                name = in.str("name", null);
+        List<String> needs = in.has("needs") ? List.copyOf(in.strs("needs")) : List.of();
+        List<String> of = List.of();
+        Set<String> distinctModes = Set.of();
+        String onLostText = in.str("on_lost", "keep");
+        Quest.OnLost onLost = switch (onLostText) {
+            case "keep" -> Quest.OnLost.KEEP;
+            case "reset" -> Quest.OnLost.RESET;
+            case "fail" -> Quest.OnLost.FAIL;
+            default -> {
+                in.err("on_lost", "expected \"keep\", \"reset\" or \"fail\"");
+                yield Quest.OnLost.KEEP;
             }
-            case "solace:break_block", "solace:place_block", "solace:interact_block" ->
-                    target = in.target("block", "block", true);
+        };
+        if (in.has("on_lost") && needs.isEmpty()) {
+            in.warn("on_lost", "has no effect without \"needs\"");
+        }
+        Component pausedText = in.text("paused_text", false);
+        switch (type) {
+            case "solace:kill", "solace:interact_entity", "solace:tame", "solace:breed", "solace:shear",
+                 "solace:hatch" -> {
+                target = in.target("entity", "entity_type", true);
+                if (type.equals("solace:kill") || type.equals("solace:interact_entity")) {
+                    name = in.str("name", null);
+                }
+                distinctModes = Set.of("entity_type", "entity");
+            }
+            case "solace:break_block", "solace:place_block", "solace:interact_block" -> {
+                target = in.target("block", "block", true);
+                distinctModes = Set.of("block");
+            }
             case "solace:item" -> {
-                target = in.target("item", "item", true);
+                target = itemTarget(in);
                 consume = in.bool("consume", false);
             }
             case "solace:deliver" -> {
-                target = in.target("item", "item", true);
+                target = itemTarget(in);
                 ref = in.ref("npc", "npcs", true);
             }
-            case "solace:craft", "solace:smelt", "solace:use_item" -> target = in.target("item", "item", true);
+            case "solace:craft", "solace:smelt", "solace:use_item" -> {
+                target = itemTarget(in);
+                distinctModes = Set.of("item");
+            }
+            case Quest.WHILE -> {
+                if (when == null) {
+                    in.err("when", "a while objective needs \"when\"");
+                }
+                count = 1;
+            }
+            case Quest.GROUP -> {
+                of = List.copyOf(in.strs("of"));
+                if (of.isEmpty()) {
+                    in.err("of", "a group needs the ids of its objectives in \"of\"");
+                }
+                count = in.has("count") ? count : Math.max(1, of.size());
+                if (count > of.size() && !of.isEmpty()) {
+                    in.err("count", "a group of " + of.size() + " cannot need " + count);
+                }
+            }
             case "solace:reach_location" -> {
                 ref = in.id("dimension", true);
                 radius = in.integer("radius", 8, 1);
@@ -262,7 +323,10 @@ public final class QuestParser {
             case "solace:find_structure" -> {
                 target = in.target("structure", "structure", true);
                 Target structure = target;
-                auto = structure == null ? null : ctx -> ctx.inStructure(structure);
+                distinctModes = Set.of("structure");
+                // With distinct "structure" the engine counts separate structures itself (count > 1 allowed).
+                auto = structure == null || "structure".equals(in.str("distinct", null)) ? null
+                        : ctx -> ctx.inStructure(structure);
             }
             case "solace:enter_biome" -> {
                 target = in.target("biome", "biome", true);
@@ -301,7 +365,14 @@ public final class QuestParser {
                 return null;
             }
         }
-        if (Quest.AUTO.contains(type)) {
+        String distinct = in.str("distinct", null);
+        if (distinct != null && !distinctModes.contains(distinct)) {
+            in.err("distinct", distinctModes.isEmpty() ? "not supported by " + type
+                    : "expected one of " + String.join(", ", distinctModes));
+            distinct = null;
+        }
+        boolean structureCount = type.equals("solace:find_structure") && "structure".equals(distinct);
+        if (Quest.AUTO.contains(type) && !structureCount) {
             count = 1;
             if (auto != null && when != null) {
                 Condition gate = when, check = auto;
@@ -310,7 +381,22 @@ public final class QuestParser {
             when = auto != null ? auto : when;
         }
         return new Objective(id, type, text, icon(in), count, optional, hidden, target, name, consume, ref, x, y, z,
-                radius, when);
+                radius, when, needs, onLost, distinct, of, pausedText);
+    }
+
+    /** An item target with an optional "nbt" filter (SNBT that must be contained in the stack's tag). */
+    private static Target itemTarget(In in) {
+        Target target = in.target("item", "item", true);
+        String snbt = in.str("nbt", null);
+        if (target == null || snbt == null) {
+            return target;
+        }
+        try {
+            return target.withNbt(TagParser.parseTag(snbt));
+        } catch (Exception exception) {
+            in.err("nbt", "not valid SNBT: " + exception.getMessage());
+            return target;
+        }
     }
 
     private static int[] pos(In in) {
@@ -428,6 +514,35 @@ public final class QuestParser {
                 JsonElement raw = in.raw("data");
                 data = raw == null ? "null" : raw.toString();
             }
+            case "solace:set_area" -> {
+                name = in.req("area");
+                count = in.integer("radius", 48, 0);
+                on = in.bool("replace", false);
+                String at = in.str("at", "player");
+                JsonObject options = new JsonObject();
+                options.addProperty("at", at);
+                switch (at) {
+                    case "player", "npc" -> {
+                    }
+                    case "structure" -> {
+                        Target structure = in.target("structure", "structure", true);
+                        options.addProperty("structure", structure == null ? "" : structure.toString());
+                    }
+                    default -> in.err("at", "expected \"player\", \"npc\" or \"structure\"");
+                }
+                data = options.toString();
+            }
+            case "solace:remove_area" -> name = in.req("area");
+            case "solace:free_captive" -> {
+                target = in.id("into", false);
+                if (target == null) {
+                    target = new ResourceLocation("minecraft", "villager");
+                }
+                in.known("into", "entity_type", target);
+                ResourceLocation profession = in.id("profession", false);
+                data = profession == null ? null : profession.toString();
+            }
+            case "solace:unlock_recipes", "solace:lock_recipes" -> target = in.ref("lock", "recipe_locks", true);
             case "solace:open_structure_gate", "solace:close_structure_gate" -> {
                 Target structure = in.target("structure", "structure", true);
                 name = structure == null ? "" : structure.toString();
