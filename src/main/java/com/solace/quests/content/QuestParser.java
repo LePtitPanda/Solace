@@ -1,6 +1,9 @@
 package com.solace.quests.content;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.solace.world.gates.StructureGateConfig;
+import net.minecraft.world.level.saveddata.maps.MapDecoration;
 import com.solace.quests.condition.Condition;
 import com.solace.quests.condition.Conditions;
 import com.solace.quests.content.Quest.Objective;
@@ -14,6 +17,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -423,6 +427,46 @@ public final class QuestParser {
                 name = in.req("handler");
                 JsonElement raw = in.raw("data");
                 data = raw == null ? "null" : raw.toString();
+            }
+            case "solace:open_structure_gate", "solace:close_structure_gate" -> {
+                Target structure = in.target("structure", "structure", true);
+                name = structure == null ? "" : structure.toString();
+                if (type.equals("solace:open_structure_gate")) {
+                    data = in.str("mode", null);
+                    if (data != null && StructureGateConfig.Mode.parse(data) == null) {
+                        in.err("mode", "expected \"once\" or \"infinite\"");
+                    }
+                }
+            }
+            case "solace:give_structure_map", "solace:give_structure_compass" -> {
+                Target structure = in.target("structure", "structure", true);
+                name = structure == null ? "" : structure.toString();
+                boolean map = type.equals("solace:give_structure_map");
+                if (!map) {
+                    target = in.id("item", false);
+                    if (target == null) {
+                        target = new ResourceLocation("minecraft", "compass");
+                    }
+                    in.known("item", "item", target);
+                }
+                in.text("name", false);
+                JsonObject options = new JsonObject();
+                for (String key : map ? new String[]{"name", "lore", "decoration", "search_radius"}
+                        : new String[]{"name", "lore", "sound", "search_radius"}) {
+                    if (in.has(key)) {
+                        options.add(key, in.raw(key));
+                    }
+                }
+                in.integer("search_radius", 100, 1);
+                String decoration = map ? in.str("decoration", null) : null;
+                if (decoration != null && !EnumSet.allOf(MapDecoration.Type.class).stream()
+                        .anyMatch(value -> value.name().equalsIgnoreCase(decoration))) {
+                    in.err("decoration", "unknown map decoration \"" + decoration + "\"");
+                }
+                if (!map && in.id("sound", false) == null && in.has("sound")) {
+                    in.err("sound", "not a valid sound id");
+                }
+                data = options.toString();
             }
             default -> {
                 in.err("type", "unknown " + (reward ? "reward" : "action") + " type \"" + type + "\"");

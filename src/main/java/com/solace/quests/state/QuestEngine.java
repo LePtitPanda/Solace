@@ -6,6 +6,9 @@ import com.solace.quests.api.QuestEvent;
 import com.solace.quests.content.Dialogue;
 import com.solace.quests.content.Faction;
 import com.solace.quests.content.Quest;
+import com.solace.world.gates.StructureGateConfig;
+import com.solace.world.gates.StructureGates;
+import com.solace.world.gates.StructureLocators;
 import com.solace.quests.content.Quest.Objective;
 import com.solace.quests.content.Quest.Phase;
 import com.solace.quests.content.Quest.Reward;
@@ -416,6 +419,23 @@ public final class QuestEngine {
                 } else {
                     handler.run(player, effect.data());
                 }
+            }
+            // World-wide and idempotent: the first player to reach this opens it for everyone.
+            case "solace:open_structure_gate" -> {
+                if (StructureGates.open(player.server, effect.name(), StructureGateConfig.Mode.parse(effect.data())) < 0) {
+                    LOGGER.warn("[Solace Quests] {} is not in config/solace-structure-gates.json", effect.name());
+                }
+            }
+            case "solace:close_structure_gate" -> {
+                if (StructureGates.close(player.server, effect.name()) < 0) {
+                    LOGGER.warn("[Solace Quests] {} is not in config/solace-structure-gates.json", effect.name());
+                }
+            }
+            case "solace:give_structure_map" -> StructureLocators.giveMap(player, effect.name(), effect.data());
+            case "solace:give_structure_compass" -> {
+                Item item = ForgeRegistries.ITEMS.getValue(effect.target());
+                StructureLocators.giveCompass(player, effect.name(),
+                        item == null || item == Items.AIR ? Items.COMPASS : item, effect.data());
             }
             default -> LOGGER.warn("[Solace Quests] Unknown effect type {}", effect.type());
         }

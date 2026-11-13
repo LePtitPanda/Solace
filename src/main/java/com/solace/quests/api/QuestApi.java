@@ -7,7 +7,10 @@ import com.solace.quests.state.Factions;
 import com.solace.quests.state.QuestEngine;
 import com.solace.quests.state.QuestLogic;
 import com.solace.quests.state.ServerCtx;
+import com.solace.world.gates.StructureGateConfig;
+import com.solace.world.gates.StructureGates;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Locale;
@@ -101,6 +104,25 @@ public final class QuestApi {
             Factions.add(ctx, definition, amount, true);
             QuestLogic.evaluate(ctx, QuestEngine.events(player));
         }
+    }
+
+    /**
+     * Same switch as {@code /solace gates open} and the solace:open_structure_gate effect. {@code structure}
+     * is an id or "#tag"; {@code mode} "once", "infinite" or null for the config's. Returns how many
+     * gates changed, or -1 if nothing in config/solace-structure-gates.json matches.
+     */
+    public static int openStructureGate(MinecraftServer server, String structure, String mode) {
+        return StructureGates.open(server, structure, StructureGateConfig.Mode.parse(mode));
+    }
+
+    public static int closeStructureGate(MinecraftServer server, String structure) {
+        return StructureGates.close(server, structure);
+    }
+
+    /** "open (once)", "closed ...", or "not gated". */
+    public static String structureGateStatus(MinecraftServer server, String structure) {
+        ResourceLocation id = ResourceLocation.tryParse(structure);
+        return id == null ? "not gated" : StructureGates.describe(server, id);
     }
 
     private static Quest quest(String id) {

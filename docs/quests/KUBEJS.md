@@ -40,6 +40,11 @@ SolaceQuests.getVariable(player, 'gold')
 SolaceQuests.setVariable(player, 'gold', 25)
 SolaceQuests.getReputation(player, 'astralis:wardens')
 SolaceQuests.addReputation(player, 'astralis:wardens', 10)
+
+// Structure gates (see ../structure-gates.md). Same code as /solace gates and the quest effects.
+SolaceQuests.openStructureGate(server, 'irons_spellbooks:evoker_fort', 'once')  // mode null = config default
+SolaceQuests.closeStructureGate(server, '#astralis:host_outposts')
+SolaceQuests.structureGateStatus(server, 'irons_spellbooks:evoker_fort')       // "open (once)", "closed | generated at ..."
 ```
 
 `player` is a server player (`event.player` in server events).

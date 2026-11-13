@@ -1,34 +1,25 @@
 package com.solace.quests.state;
 
-import com.mojang.datafixers.util.Pair;
 import com.solace.quests.content.Dialogue.NpcBinding;
 import com.solace.quests.content.Marker;
 import com.solace.quests.content.Quest;
 import com.solace.quests.content.Quest.Objective;
 import com.solace.quests.content.Quest.Phase;
-import com.solace.quests.content.Target;
 import com.solace.quests.network.QuestNetwork;
 import com.solace.quests.network.Views.MarkerView;
 import com.solace.quests.state.PlayerQuestData.QuestState;
 import com.solace.quests.state.PlayerQuestData.Status;
+import com.solace.world.gates.StructureGates;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.core.HolderSet;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.levelgen.structure.Structure;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -106,14 +97,20 @@ public final class Markers {
             case "structure" -> {
                 String cacheKey = "structure:" + marker.structure() + "@" + ctx.dimension();
                 String cached = ctx.data().positions.get(cacheKey);
+                // "none" remembers the gate version it was searched under: a gate change makes it searchable again.
+                if (cached != null && cached.startsWith("none") && !cached.equals("none " + StructureGates.version())) {
+                    cached = null;
+                }
                 if (cached == null && mayLocate[0]) {
                     mayLocate[0] = false;
-                    BlockPos found = locate(player.serverLevel(), marker.structure(), player.blockPosition());
-                    cached = found == null ? "none" : ctx.dimension() + " " + found.getX() + " 0 " + found.getZ();
+                    BlockPos found = StructureGates.find(player.serverLevel(), marker.structure().toString(),
+                            player.blockPosition(), LOCATE_RADIUS_CHUNKS, false);
+                    cached = found == null ? "none " + StructureGates.version()
+                            : ctx.dimension() + " " + found.getX() + " 0 " + found.getZ();
                     ctx.data().positions.put(cacheKey, cached);
                     ctx.changed();
                 }
-                if (cached != null && !cached.equals("none")) {
+                if (cached != null && !cached.startsWith("none")) {
                     String[] parts = cached.split(" ");
                     out.add(new MarkerView(key, parts[0], Integer.parseInt(parts[1]), MarkerView.NO_Y,
                             Integer.parseInt(parts[3]), label, marker.color(), marker.beam()));
@@ -151,20 +148,5 @@ public final class Markers {
             default -> {
             }
         }
-    }
-
-    private static BlockPos locate(ServerLevel level, Target structure, BlockPos from) {
-        if (structure.tag()) {
-            return level.findNearestMapStructure(TagKey.create(Registries.STRUCTURE, structure.id()), from,
-                    LOCATE_RADIUS_CHUNKS, false);
-        }
-        Optional<Holder.Reference<Structure>> holder = level.registryAccess().registryOrThrow(Registries.STRUCTURE)
-                .getHolder(ResourceKey.create(Registries.STRUCTURE, structure.id()));
-        if (holder.isEmpty()) {
-            return null;
-        }
-        Pair<BlockPos, Holder<Structure>> found = level.getChunkSource().getGenerator()
-                .findNearestMapStructure(level, HolderSet.direct(holder.get()), from, LOCATE_RADIUS_CHUNKS, false);
-        return found == null ? null : found.getFirst();
     }
 }

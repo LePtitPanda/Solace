@@ -129,6 +129,8 @@ dependencies {
     compileOnly files('../mods/fancytoasts-1.5.1-forge-1.20.1.jar')
     compileOnly files('../mods/kubejs-forge-2001.6.5-build.16.jar')
     compileOnly files('../mods/rhino-forge-2001.2.3-build.10.jar')
+    // Structure gates override Structurify's is_disabled (mixins skipped without it)
+    compileOnly files('../mods/structurify-forge-2.0.43+mc1.20.1.jar')
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

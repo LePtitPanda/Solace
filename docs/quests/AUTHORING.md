@@ -217,6 +217,10 @@ still claimed with the rest.
 | `solace:close` | — closes the current dialogue |
 | `solace:add_marker`, `solace:remove_marker` | `marker`: a `markers/` file id |
 | `solace:custom` | `handler`, `data` — see [KUBEJS.md](KUBEJS.md) |
+| `solace:open_structure_gate` | `structure` (id or `#tag`, must be in `config/solace-structure-gates.json`), `mode` (`once` or `infinite`, default: the config's). World-wide and idempotent; a `once` gate whose copy already generated stays closed. See [../structure-gates.md](../structure-gates.md). |
+| `solace:close_structure_gate` | `structure` (id or `#tag`) |
+| `solace:give_structure_map` | `structure` (id or `#tag`), `name` and `lore` (text components; `lore` a list), `decoration` (map decoration type, default `red_x`), `search_radius` (chunks, default 100). Searches off-thread; nothing found → a blank map ("the ink won't settle") that searches again when used. |
+| `solace:give_structure_compass` | `structure` (id or `#tag`), `item` (default `minecraft:compass`), `name`, `lore`, `sound` (optional sound id, hums while held, louder when closer), `search_radius`. Lodestone-style target in NBT; using the item searches again. |
 
 ## Dialogue — `dialogues/**/*.json`
 

@@ -172,6 +172,26 @@ export const EFFECTS: Record<string, Field[]> = {
   'solace:remove_marker': [f('marker', 'Marker', 'ref', { ref: 'markers', required: true })],
   'solace:close': [],
   'solace:custom': [f('handler', 'Handler id', 'string', { required: true }), f('data', 'Data', 'json')],
+  'solace:open_structure_gate': [
+    f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
+    f('mode', 'Mode (empty = config default)', 'select', { options: ['once', 'infinite'] }),
+  ],
+  'solace:close_structure_gate': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true })],
+  'solace:give_structure_map': [
+    f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
+    f('name', 'Map name', 'text'),
+    f('lore', 'Lore (list of text components)', 'json'),
+    f('decoration', 'Map decoration (red_x, mansion, monument, target_x...)', 'string'),
+    f('search_radius', 'Search radius (chunks, default 100)', 'number', { advanced: true }),
+  ],
+  'solace:give_structure_compass': [
+    f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
+    f('item', 'Item (default minecraft:compass)', 'reg', { reg: 'items' }),
+    f('name', 'Item name', 'text'),
+    f('lore', 'Lore (list of text components)', 'json'),
+    f('sound', 'Hum sound while held (louder when close)', 'string'),
+    f('search_radius', 'Search radius (chunks, default 100)', 'number', { advanced: true }),
+  ],
 };
 for (const type of Object.keys(EFFECTS)) {
   EFFECTS[type] = [...EFFECTS[type], ...effectCommon];
