@@ -103,6 +103,7 @@
     "SophisticatedBackpackItemMixin"
   ],
   "client": [
+    "LivingEntityRendererChibiMixin",
     "ImmediatelyFastHudBatchingMixin",
     "JustTrialSpawnersModelWrapMixin",
     "SubtleEffectsBiomeLookupMixin",

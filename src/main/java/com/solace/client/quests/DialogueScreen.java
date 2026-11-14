@@ -6,7 +6,6 @@ import com.solace.quests.network.Views.ChoiceView;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.Entity;
@@ -34,6 +33,7 @@ public class DialogueScreen extends Screen {
     private long shownAt;
     private boolean revealAll;
     private boolean closed;
+    private final ChibiPortrait portrait = new ChibiPortrait();
 
     public DialogueScreen(QuestNetwork.DialogueNode node) {
         super(Component.literal("Dialogue"));
@@ -142,9 +142,7 @@ public class DialogueScreen extends Screen {
         if (node.npcEntity() >= 0 && this.minecraft.level != null) {
             Entity entity = this.minecraft.level.getEntity(node.npcEntity());
             if (entity instanceof LivingEntity living) {
-                int scale = (int) Math.max(14, Math.min(34, 60 / Math.max(0.6F, living.getBbHeight())));
-                InventoryScreen.renderEntityInInventoryFollowsMouse(graphics, left + 38, bottom - 12, scale,
-                        left + 38 - mouseX, bottom - 60 - mouseY, living);
+                portrait.draw(graphics, living, left + 38, (top + bottom) / 2, PANEL_HEIGHT - 12);
             }
         } else if (!node.item().isEmpty()) {
             graphics.pose().pushPose();
@@ -256,6 +254,7 @@ public class DialogueScreen extends Screen {
 
     @Override
     public void removed() {
+        portrait.close();
         // Replaced by another screen (death, inventory...): same as closing.
         if (!closed) {
             closed = true;
