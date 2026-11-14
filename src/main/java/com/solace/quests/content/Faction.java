@@ -5,7 +5,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 
-/** {@code gossip}: standing is read from vanilla villager gossip around the player instead of stored. */
+/** {@code gossip}: one stored world-wide standing that also moves with first-hand vanilla villager gossip. */
 public record Faction(ResourceLocation id, Component name, int color, String icon, int def, int min, int max,
                       List<Rank> ranks, List<Relation> relations, boolean gossip, int radius) {
     /** Applies from {@code at} upward; ranks are sorted by {@code at}. */

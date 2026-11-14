@@ -213,9 +213,6 @@ public final class QuestCommands {
         if (faction == null) {
             return reply(context, false, "", "Unknown faction");
         }
-        if (mode == 1 && faction.gossip()) {
-            return reply(context, false, "", "This faction mirrors villager gossip: use \"rep add\" near villagers");
-        }
         if (mode == 1) {
             Factions.set(ctx, faction, IntegerArgumentType.getInteger(context, "value"));
         } else if (mode == 2) {

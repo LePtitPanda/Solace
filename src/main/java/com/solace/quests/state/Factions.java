@@ -4,21 +4,37 @@ import com.solace.quests.api.QuestEvent;
 import com.solace.quests.content.Faction;
 import com.solace.quests.network.QuestNetwork;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.gossip.GossipType;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
-/** Reputation. Stored per owner, except "villager gossip" factions which mirror vanilla gossip. */
+/**
+ * Reputation, stored per owner. A "villager gossip" faction is one world-wide standing: it moves
+ * with first-hand vanilla gossip (see {@link #onGossip}) and is never re-read from nearby villagers.
+ */
 public final class Factions {
+    /** Set while Solace writes gossip itself, which {@link #add} already counted. */
+    private static boolean writing;
+    private static int gossipTick = -1;
+    /** This tick's gossip change per player, per villager's gossip container. */
+    private static final Map<UUID, Map<Object, Integer>> gossipThisTick = new HashMap<>();
+    /** The part of this tick's change already applied per player. */
+    private static final Map<UUID, Integer> appliedThisTick = new HashMap<>();
+
     private Factions() {
     }
 
-    /** For a gossip faction this is the value last seen near villagers (refreshed by {@link #refreshGossip}). */
     public static int get(ServerCtx ctx, ResourceLocation id) {
         Faction faction = ctx.content().factions.get(id);
         return faction == null ? 0 : ctx.data().reputation.getOrDefault(id, faction.def());
@@ -29,11 +45,10 @@ public final class Factions {
             return;
         }
         if (faction.gossip()) {
+            // Real gossip too, so nearby trade prices and Thief react.
             writeGossip(ctx.player, faction, amount);
-            refreshGossip(ctx);
-        } else {
-            set(ctx, faction, get(ctx, faction.id()) + amount);
         }
+        set(ctx, faction, get(ctx, faction.id()) + amount);
         if (propagate) {
             // One step only: relations of the related faction are not followed.
             for (Faction.Relation relation : faction.relations()) {
@@ -66,6 +81,15 @@ public final class Factions {
      * around the player, so trade prices and the Thief mod react as if the player had earned it.
      */
     private static void writeGossip(ServerPlayer player, Faction faction, int amount) {
+        writing = true;
+        try {
+            writeGossipNearby(player, faction, amount);
+        } finally {
+            writing = false;
+        }
+    }
+
+    private static void writeGossipNearby(ServerPlayer player, Faction faction, int amount) {
         for (Villager villager : nearby(player, faction)) {
             if (amount > 0) {
                 // Vanilla weights: MAJOR_POSITIVE counts 5 per point, MINOR_POSITIVE 1.
@@ -86,21 +110,46 @@ public final class Factions {
                 LivingEntity::isAlive);
     }
 
-    /** Re-reads vanilla gossip for every gossip faction; keeps the last value when no villager is near. */
-    public static void refreshGossip(ServerCtx ctx) {
+    /**
+     * A first-hand gossip change on one villager. One deed is often told to every witness in the
+     * same tick (a killed villager, a Thief crime, a raid won), so per tick only the strongest
+     * villager's change counts, not the sum over villagers.
+     */
+    public static void onGossip(Object container, UUID id, int delta) {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (writing || server == null || !server.isSameThread()) {
+            return;
+        }
+        ServerPlayer player = server.getPlayerList().getPlayer(id);
+        if (player == null) {
+            return;
+        }
+        ServerCtx ctx = QuestEngine.ctx(player);
+        if (ctx.content().factions.values().stream().noneMatch(Faction::gossip)) {
+            return;
+        }
+        if (server.getTickCount() != gossipTick) {
+            gossipTick = server.getTickCount();
+            gossipThisTick.clear();
+            appliedThisTick.clear();
+        }
+        Map<Object, Integer> perVillager = gossipThisTick.computeIfAbsent(id, k -> new IdentityHashMap<>());
+        perVillager.merge(container, delta, Integer::sum);
+        int strongest = 0;
+        for (int value : perVillager.values()) {
+            if (Math.abs(value) > Math.abs(strongest)) {
+                strongest = value;
+            }
+        }
+        int step = strongest - appliedThisTick.getOrDefault(id, 0);
+        appliedThisTick.put(id, strongest);
+        if (step == 0) {
+            return;
+        }
         for (Faction faction : ctx.content().factions.values()) {
-            if (!faction.gossip()) {
-                continue;
+            if (faction.gossip()) {
+                set(ctx, faction, get(ctx, faction.id()) + step);
             }
-            List<Villager> villagers = nearby(ctx.player, faction);
-            if (villagers.isEmpty()) {
-                continue;
-            }
-            int sum = 0;
-            for (Villager villager : villagers) {
-                sum += villager.getPlayerReputation(ctx.player);
-            }
-            set(ctx, faction, Math.round((float) sum / villagers.size()));
         }
     }
 }

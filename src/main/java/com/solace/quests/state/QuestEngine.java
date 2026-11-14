@@ -218,10 +218,6 @@ public final class QuestEngine {
     public static void tick(ServerPlayer player) {
         QuestContent content = QuestContent.current;
         ServerCtx ctx = ctx(player);
-        // Every 5th visit (5 s): mirror vanilla gossip into "villager gossip" factions.
-        if (!content.factions.isEmpty() && (player.tickCount / 20) % 5 == 0) {
-            Factions.refreshGossip(ctx);
-        }
         if (!content.recipeLocks.isEmpty()) {
             com.solace.quests.locks.RecipeLocks.refresh(player);
         }

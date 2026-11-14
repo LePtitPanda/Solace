@@ -459,11 +459,13 @@ The server never fills the result slot for a locked offer, whatever the client s
 | `relations` | none | `{faction, factor}`: a change here also changes that faction by `amount × factor`. One step only; the other faction's own relations are not followed. |
 | `source` | none | `{"type": "solace:villager_gossip", "radius": 48}` — see below. |
 
-**Villager gossip factions.** With `source`, standing is not stored by Solace: it is the average
-vanilla reputation the villagers within `radius` blocks have of the player — the same gossip that
-sets trade prices and that the **Thief** mod builds on, so crimes and gifts count automatically.
-A `solace:reputation` effect on such a faction writes real gossip to those villagers. Away from
-villagers, the last value seen is used; with no villager nearby a reputation effect does nothing.
+**Villager gossip factions.** With `source`, the faction is one standing per player for the whole
+world, stored by Solace like any other. It moves with every first-hand vanilla gossip change —
+trades, cures, hurting or killing villagers, and the **Thief** mod's crimes and gifts. One deed told
+to several witnesses in the same tick counts once (the strongest villager's change); gossip that
+villagers pass to each other, and gossip decay, do not move it. A `solace:reputation` effect adds
+the amount to the standing and also writes real gossip to the villagers within `radius` blocks, so
+their trade prices react. `/sq rep set` works on it too.
 
 ## Markers — inline, or `markers/*.json`
 
