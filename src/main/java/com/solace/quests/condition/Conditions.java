@@ -147,7 +147,8 @@ public final class Conditions {
             }
             case "solace:structure" -> {
                 Target structure = in.target("structure", "structure", true);
-                return structure == null ? null : ctx -> ctx.inStructure(structure);
+                String piece = in.str("piece", null);
+                return structure == null ? null : ctx -> ctx.inStructure(structure, piece);
             }
             case "solace:advancement" -> {
                 ResourceLocation advancement = in.id("advancement", true);

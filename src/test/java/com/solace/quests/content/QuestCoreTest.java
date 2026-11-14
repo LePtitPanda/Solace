@@ -131,7 +131,7 @@ class QuestCoreTest {
         }
 
         @Override
-        public boolean inStructure(Target structure) {
+        public boolean inStructure(Target structure, String piece) {
             return false;
         }
 
@@ -552,6 +552,26 @@ class QuestCoreTest {
         assertEquals(2, progress(ctx, "kinds"));
         PlayerQuestData loaded = PlayerQuestData.load(ctx.data.save());
         assertEquals(java.util.Set.of("minecraft:cow", "minecraft:pig"), loaded.quests.get(id("q")).seen.get("kinds"));
+    }
+
+    @Test
+    void structurePiecesParseAndMatch() {
+        Fake ctx = started("""
+                {"chapter":"t:village","title":"Maze","objectives":[
+                  {"id":"rooms","type":"solace:find_structure","structure":"dungeonnowloading:labyrinth",
+                   "piece":"dungeonnowloading:labyrinth/rooms/*","distinct":"piece","count":10},
+                  {"id":"hall","type":"solace:find_structure","structure":"dungeonnowloading:labyrinth",
+                   "piece":"dungeonnowloading:labyrinth/boss_room"}]}""");
+        List<Quest.Objective> objectives = ctx.content.quests.get(id("q")).phases().get(0).objectives();
+        assertEquals(10, objectives.get(0).count());
+        assertEquals("dungeonnowloading:labyrinth/rooms/*", objectives.get(0).name());
+        assertNull(objectives.get(0).when(), "distinct pieces are counted by the engine");
+        assertNotNull(objectives.get(1).when());
+        assertTrue(com.solace.quests.state.ServerCtx.templateMatches("dungeonnowloading:labyrinth/rooms/maze",
+                "dungeonnowloading:labyrinth/rooms/*"));
+        assertTrue(com.solace.quests.state.ServerCtx.templateMatches("a:b", "*"));
+        assertFalse(com.solace.quests.state.ServerCtx.templateMatches(
+                "dungeonnowloading:labyrinth/boss_room/outer_ring/wall", "dungeonnowloading:labyrinth/boss_room"));
     }
 
     @Test

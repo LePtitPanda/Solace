@@ -130,7 +130,7 @@ it may use `solace:entity` to inspect the entity), and:
 | `needs` | Ids of objectives **in the same phase** that must be done for this one to progress. The book and HUD draw it indented under them and greyed out ("Paused until: …") while they are not done. Also gives an order inside one phase ("craft the camera" before "take a photo"). |
 | `on_lost` | What happens to a started, unfinished objective when one of its needs stops holding (only a `solace:while` can stop holding): `keep` (default), `reset` (back to 0), `fail` (the quest fails, history label `lost:<id>`). |
 | `paused_text` | Text shown instead of the default "Paused until: …". |
-| `distinct` | Count each thing once: `entity_type` or `entity` (kill, interact_entity, tame, breed, shear, hatch), `item` (craft, smelt, use_item), `block` (break, place, interact_block), `structure` (find_structure: separate structures, so `count` can be above 1). |
+| `distinct` | Count each thing once: `entity_type` or `entity` (kill, interact_entity, tame, breed, shear, hatch), `item` (craft, smelt, use_item), `block` (break, place, interact_block), `structure` (find_structure: separate structures, so `count` can be above 1), `piece` (find_structure: separate jigsaw pieces matching `piece`, or any piece). |
 | `nbt` | Item objectives (`item`, `deliver`, `craft`, `smelt`, `use_item`): SNBT that must be contained in the stack's tag. |
 
 **"Kill 6 crows in the village"** — a live objective and one that needs it:
@@ -160,7 +160,7 @@ player is in the area. Mark it `optional` if it should only gate other objective
 | `solace:smelt` | `item` | the player takes it out of a furnace |
 | `solace:use_item` | `item` | the player uses it (eats, drinks, right-clicks) |
 | `solace:reach_location` | `dimension`, `pos` `[x,y,z]`, `radius` (default 8) | the player is within `radius` blocks |
-| `solace:find_structure` | `structure` (id or `#tag`) | the player stands inside a piece of that structure |
+| `solace:find_structure` | `structure` (id or `#tag`), `piece` | the player stands inside a piece of that structure; with `piece`, inside a jigsaw piece whose template matches: a template id (`dungeonnowloading:labyrinth/chamber_of_honour`), a prefix ending in `*` (`dungeonnowloading:labyrinth/rooms/*`) or `*` |
 | `solace:enter_dimension` | `dimension` | the player is in that dimension |
 | `solace:enter_biome` | `biome` (id or `#tag`) | the player is in that biome |
 | `solace:dialogue_node` | `dialogue`, `node` | that dialogue node is reached |
@@ -205,7 +205,7 @@ Used by chapter `unlock`, quest `visible_when`, objective `when`, transition `wh
 | `solace:near_npc` | `npc` (binding id), `radius` (default 8): an entity of that binding (its bound entity, for `first_met`) is that close |
 | `solace:dimension` | `dimension` |
 | `solace:biome` | `biome` (id or `#tag`) |
-| `solace:structure` | `structure` (id or `#tag`) — the player stands inside it |
+| `solace:structure` | `structure` (id or `#tag`), `piece` (as for `find_structure`) — the player stands inside it (that piece) |
 | `solace:time` | `from`, `to` in day ticks 0–23999; `from` > `to` wraps past midnight |
 | `solace:advancement` | `advancement` |
 | `solace:entity` | `name_contains`, `profession` (villager profession id), `nbt` (SNBT that must be contained in the entity's data). Only true where an entity is in context: NPC bindings, dialogue, kill/interact objectives. |

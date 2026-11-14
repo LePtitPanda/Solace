@@ -97,18 +97,8 @@ public final class ServerCtx extends Ctx {
     }
 
     @Override
-    public boolean inStructure(Target structure) {
-        ServerLevel level = player.serverLevel();
-        BlockPos pos = player.blockPosition();
-        if (!level.isLoaded(pos)) {
-            return false;
-        }
-        if (structure.tag()) {
-            return level.structureManager()
-                    .getStructureWithPieceAt(pos, TagKey.create(Registries.STRUCTURE, structure.id())).isValid();
-        }
-        Structure exact = level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(structure.id());
-        return exact != null && level.structureManager().getStructureWithPieceAt(pos, exact).isValid();
+    public boolean inStructure(Target structure, String piece) {
+        return structureStart(structure, piece, false) != null;
     }
 
     @Override
@@ -129,7 +119,12 @@ public final class ServerCtx extends Ctx {
     }
 
     /** "dimension x z" of the start of the structure the player stands in, or null. */
-    public String structureStart(Target structure) {
+    /**
+     * Identity of the structure the player stands in ("dimension chunkX chunkZ"), or null. With {@code piece},
+     * the player must also stand inside one of its jigsaw pieces whose template matches; {@code perPiece} adds
+     * that piece's corner to the identity, so each piece counts once.
+     */
+    public String structureStart(Target structure, String piece, boolean perPiece) {
         ServerLevel level = player.serverLevel();
         BlockPos pos = player.blockPosition();
         if (!level.isLoaded(pos)) {
@@ -143,8 +138,36 @@ public final class ServerCtx extends Ctx {
             Structure exact = level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(structure.id());
             start = exact == null ? null : level.structureManager().getStructureWithPieceAt(pos, exact);
         }
-        return start == null || !start.isValid() ? null
-                : dimension() + " " + start.getChunkPos().x + " " + start.getChunkPos().z;
+        if (start == null || !start.isValid()) {
+            return null;
+        }
+        String id = dimension() + " " + start.getChunkPos().x + " " + start.getChunkPos().z;
+        if (piece == null) {
+            return id;
+        }
+        for (net.minecraft.world.level.levelgen.structure.StructurePiece part : start.getPieces()) {
+            if (part.getBoundingBox().isInside(pos) && pieceMatches(part, piece)) {
+                return perPiece ? id + " " + part.getBoundingBox().minX() + " " + part.getBoundingBox().minY()
+                        + " " + part.getBoundingBox().minZ() : id;
+            }
+        }
+        return null;
+    }
+
+    /** {@code pattern}: a template id, an id prefix ending in "*", or "*" for any piece. */
+    static boolean pieceMatches(net.minecraft.world.level.levelgen.structure.StructurePiece part, String pattern) {
+        if (!(part instanceof net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece pool)
+                || !(pool.getElement() instanceof net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement single)) {
+            return false;
+        }
+        String template = ((com.solace.mixin.SinglePoolElementAccessor) single).solace$getTemplate().left()
+                .map(ResourceLocation::toString).orElse(null);
+        return template != null && templateMatches(template, pattern);
+    }
+
+    public static boolean templateMatches(String template, String pattern) {
+        return pattern.endsWith("*") ? template.startsWith(pattern.substring(0, pattern.length() - 1))
+                : template.equals(pattern);
     }
 
     @Override

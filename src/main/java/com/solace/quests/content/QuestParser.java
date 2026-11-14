@@ -323,10 +323,13 @@ public final class QuestParser {
             case "solace:find_structure" -> {
                 target = in.target("structure", "structure", true);
                 Target structure = target;
-                distinctModes = Set.of("structure");
-                // With distinct "structure" the engine counts separate structures itself (count > 1 allowed).
-                auto = structure == null || "structure".equals(in.str("distinct", null)) ? null
-                        : ctx -> ctx.inStructure(structure);
+                // "piece": only inside a jigsaw piece whose template matches (id, "prefix*" or "*").
+                name = in.str("piece", null);
+                String piece = name;
+                distinctModes = Set.of("structure", "piece");
+                // With distinct the engine counts separate structures / pieces itself (count > 1 allowed).
+                auto = structure == null || in.str("distinct", null) != null ? null
+                        : ctx -> ctx.inStructure(structure, piece);
             }
             case "solace:enter_biome" -> {
                 target = in.target("biome", "biome", true);
@@ -371,7 +374,7 @@ public final class QuestParser {
                     : "expected one of " + String.join(", ", distinctModes));
             distinct = null;
         }
-        boolean structureCount = type.equals("solace:find_structure") && "structure".equals(distinct);
+        boolean structureCount = type.equals("solace:find_structure") && distinct != null;
         if (Quest.AUTO.contains(type) && !structureCount) {
             count = 1;
             if (auto != null && when != null) {

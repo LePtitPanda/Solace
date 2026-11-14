@@ -33,7 +33,8 @@ public abstract class Ctx {
 
     public abstract boolean inBiome(Target biome);
 
-    public abstract boolean inStructure(Target structure);
+    /** Inside that structure; with {@code piece}, inside one of its jigsaw pieces whose template matches. */
+    public abstract boolean inStructure(Target structure, String piece);
 
     public abstract boolean hasAdvancement(ResourceLocation advancement);
 

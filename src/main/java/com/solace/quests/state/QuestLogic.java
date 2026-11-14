@@ -411,7 +411,7 @@ public final class QuestLogic {
             }
         }
         for (Objective objective : phase.objectives()) {
-            // A find_structure with distinct "structure" is counted by the engine, not latched here.
+            // A find_structure with distinct is counted by the engine, not latched here.
             if (Quest.AUTO.contains(objective.type()) && objective.when() != null && objective.distinct() == null
                     && state.progress.getOrDefault(objective.id(), 0) < 1 && needsMet(state, phase, objective)
                     && objective.when().test(ctx)) {

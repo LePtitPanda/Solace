@@ -250,8 +250,10 @@ public final class QuestEngine {
         }
         for (Active entry : active(ctx, "solace:find_structure")) {
             Objective objective = entry.objective();
-            if ("structure".equals(objective.distinct()) && whenPasses(ctx, entry)) {
-                String start = ctx.structureStart(objective.target());
+            if (objective.distinct() != null && whenPasses(ctx, entry)) {
+                boolean perPiece = "piece".equals(objective.distinct());
+                String start = ctx.structureStart(objective.target(),
+                        objective.name() != null ? objective.name() : perPiece ? "*" : null, perPiece);
                 if (start != null) {
                     distinct(ctx, entry, start, events);
                 }

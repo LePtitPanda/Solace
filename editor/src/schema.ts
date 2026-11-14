@@ -88,7 +88,8 @@ export const CONDITIONS: Record<string, Field[]> = {
   'solace:near_npc': [f('npc', 'NPC', 'ref', { ref: 'npcs', required: true }), f('radius', 'Within (blocks, default 8)', 'number')],
   'solace:dimension': [f('dimension', 'Dimension', 'reg', { reg: 'dimensions', required: true })],
   'solace:biome': [f('biome', 'Biome or #tag', 'reg', { reg: 'biomes', required: true })],
-  'solace:structure': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true })],
+  'solace:structure': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
+    f('piece', 'Jigsaw piece template (id, prefix*, or *)', 'text', { advanced: true })],
   'solace:time': [f('from', 'From (day tick 0-23999)', 'number'), f('to', 'To', 'number')],
   'solace:advancement': [f('advancement', 'Advancement', 'reg', { reg: 'advancements', required: true })],
   'solace:entity': [
@@ -111,7 +112,7 @@ const objectiveCommon: Field[] = [
   f('needs', 'Needs (objective ids of this phase)', 'strings', { advanced: true, help: 'Only progresses while these are done. Drawn indented under them.' }),
   f('on_lost', 'When a need stops holding', 'select', { options: ['keep', 'reset', 'fail'], advanced: true, help: 'keep (default), reset its progress, or fail the quest' }),
   f('paused_text', 'Text while paused', 'text', { advanced: true }),
-  f('distinct', 'Count each only once', 'select', { options: ['entity_type', 'entity', 'item', 'block', 'structure'], advanced: true }),
+  f('distinct', 'Count each only once', 'select', { options: ['entity_type', 'entity', 'item', 'block', 'structure', 'piece'], advanced: true }),
 ];
 
 export const OBJECTIVES: Record<string, Field[]> = {
@@ -136,7 +137,8 @@ export const OBJECTIVES: Record<string, Field[]> = {
     f('pos', 'Position', 'pos', { required: true }),
     f('radius', 'Radius', 'number'),
   ],
-  'solace:find_structure': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true })],
+  'solace:find_structure': [f('structure', 'Structure or #tag', 'reg', { reg: 'structures', required: true }),
+    f('piece', 'Jigsaw piece template (id, prefix*, or *)', 'text', { advanced: true })],
   'solace:enter_dimension': [f('dimension', 'Dimension', 'reg', { reg: 'dimensions', required: true })],
   'solace:enter_biome': [f('biome', 'Biome or #tag', 'reg', { reg: 'biomes', required: true })],
   'solace:dialogue_node': [f('dialogue', 'Dialogue', 'ref', { ref: 'dialogues', required: true }), f('node', 'Node id', 'string', { required: true })],
