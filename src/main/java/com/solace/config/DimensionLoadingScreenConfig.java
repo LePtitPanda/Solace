@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 /**
@@ -29,7 +28,12 @@ import org.slf4j.Logger;
 public final class DimensionLoadingScreenConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("solace-loading-screens.json");
+    private static final Path CONFIG_PATH = SolaceConfigPaths.resolve("loading-screens.json");
+    private static final String LEGACY_ICON_FOLDER = "config/solace-loading-screens/";
+
+    static {
+        SolaceConfigPaths.resolve("loading-screens"); // the icon folder moves with the config
+    }
 
     private static Map<ResourceLocation, Entry> entries = Map.of();
     private static FileTime loadedTimestamp;
@@ -133,7 +137,7 @@ public final class DimensionLoadingScreenConfig {
         public String background = "config/fancymenu/assets/firstframe.jpg";
         public String backgroundTint = "#9E061014";
         public String cornerAnimation = "config/fancymenu/assets/loader2.gif";
-        public String blockTexture = "config/solace-loading-screens/overworld-icon.png";
+        public String blockTexture = "config/solace/loading-screens/overworld-icon.png";
         public int cornerAnimationSize = 72;
         public String dimensionLabel = "DIMENSION";
         public String dimensionTitle = "OVERWORLD";
@@ -158,7 +162,7 @@ public final class DimensionLoadingScreenConfig {
 
         private static Entry nether() {
             Entry entry = new Entry();
-            entry.blockTexture = "config/solace-loading-screens/nether-icon.png";
+            entry.blockTexture = "config/solace/loading-screens/nether-icon.png";
             entry.dimensionTitle = "THE NETHER";
             entry.description = "A burning underworld of ancient fortresses, molten seas, and hostile ground. Prepare before crossing the threshold.";
             entry.tips = new ArrayList<>(List.of(
@@ -176,7 +180,7 @@ public final class DimensionLoadingScreenConfig {
 
         private static Entry end() {
             Entry entry = new Entry();
-            entry.blockTexture = "config/solace-loading-screens/end-icon.png";
+            entry.blockTexture = "config/solace/loading-screens/end-icon.png";
             entry.dimensionTitle = "THE END";
             entry.description = "An endless void scattered with pale islands, lost cities, and the echo of a dragon. Watch every step.";
             entry.tips = new ArrayList<>(List.of(
@@ -196,7 +200,7 @@ public final class DimensionLoadingScreenConfig {
             background = valueOr(background, "");
             backgroundTint = colorOr(backgroundTint, "#A6000000");
             cornerAnimation = valueOr(cornerAnimation, "");
-            blockTexture = valueOr(blockTexture, "");
+            blockTexture = valueOr(blockTexture, "").replace(LEGACY_ICON_FOLDER, "config/solace/loading-screens/");
             cornerAnimationSize = Math.max(32, Math.min(160, cornerAnimationSize));
             dimensionLabel = valueOr(dimensionLabel, "DIMENSION");
             dimensionTitle = valueOr(dimensionTitle, dimension.getPath().replace('_', ' ').toUpperCase());

@@ -1,12 +1,12 @@
 package com.solace.world.gates;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonParseException;
 import com.google.gson.annotations.SerializedName;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -19,13 +19,13 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * config/solace-structure-gates.json: which structures are gated and their default mode. No structure
+ * config/solace/structure-gates.json: which structures are gated and their default mode. No structure
  * id lives in Java; the shipped default is an empty list and the modpack's copy holds the real one.
  */
 public final class StructureGateConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    static final Path PATH = FMLPaths.CONFIGDIR.get().resolve("solace-structure-gates.json");
+    static final Path PATH = SolaceConfigPaths.resolve("structure-gates.json");
 
     public enum Mode {
         ONCE, INFINITE;

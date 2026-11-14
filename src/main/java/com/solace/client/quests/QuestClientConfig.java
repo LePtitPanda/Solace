@@ -1,20 +1,20 @@
 package com.solace.client.quests;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.logging.LogUtils;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-/** config/solace-quests-client.json. Missing or broken file = defaults. */
+/** config/solace/quests-client.json. Missing or broken file = defaults. */
 public final class QuestClientConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path PATH = FMLPaths.CONFIGDIR.get().resolve("solace-quests-client.json");
+    private static final Path PATH = SolaceConfigPaths.resolve("quests-client.json");
     private static QuestClientConfig instance;
 
     /** Show the tracker on the HUD (also toggled by its keybind). */

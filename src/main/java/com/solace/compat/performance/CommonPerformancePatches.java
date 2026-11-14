@@ -1,7 +1,7 @@
 package com.solace.compat.performance;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
 
 import java.io.Reader;
@@ -27,7 +27,7 @@ public final class CommonPerformancePatches {
     }
 
     private static Settings readSettings() {
-        Path path = FMLPaths.CONFIGDIR.get().resolve("solace-performance.json");
+        Path path = SolaceConfigPaths.resolve("performance.json");
         if (Files.isRegularFile(path)) {
             try (Reader input = Files.newBufferedReader(path)) {
                 Settings settings = new Gson().fromJson(input, Settings.class);

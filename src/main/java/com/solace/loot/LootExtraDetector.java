@@ -1,5 +1,6 @@
 package com.solace.loot;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.JsonObject;
 import com.mojang.logging.LogUtils;
 import com.solace.performance.ServerWorkScheduler;
@@ -195,7 +196,8 @@ public final class LootExtraDetector {
         if (Files.isDirectory(config)) {
             try (var files = Files.walk(config)) {
                 files.filter(Files::isRegularFile)
-                        .filter(path -> !path.getFileName().toString().startsWith("solace-loot-"))
+                        .filter(path -> !(path.getParent().equals(SolaceConfigPaths.dir())
+                                && path.getFileName().toString().startsWith("loot-")))
                         .filter(LootExtraDetector::isRelevantConfig)
                         .sorted()
                         .forEach(path -> {

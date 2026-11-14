@@ -1,5 +1,6 @@
 package com.solace.spawn;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -14,7 +15,6 @@ import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.MobSpawnSettings;
 import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
@@ -34,7 +34,7 @@ import java.util.Set;
 final class OverworldSpawnConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new Gson();
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("solace-overworld-spawns.json");
+    private static final Path CONFIG_PATH = SolaceConfigPaths.resolve("overworld-spawns.json");
     private static final int WEIGHT_SCALE = 1_000;
 
     private OverworldSpawnConfig() {

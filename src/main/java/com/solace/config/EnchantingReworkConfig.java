@@ -13,13 +13,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 public final class EnchantingReworkConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("solace-enchanting-rework.json");
+    private static final Path CONFIG_PATH = SolaceConfigPaths.resolve("enchanting-rework.json");
 
     private static ConfigData data;
 

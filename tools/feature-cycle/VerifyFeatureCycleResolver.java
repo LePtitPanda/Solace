@@ -267,8 +267,9 @@ public final class VerifyFeatureCycleResolver {
     public static void main(String[] args) throws Exception {
         if (args.length > 0 && args[0].equals("--config")) {
             FMLPaths.loadAbsolutePaths(Path.of(".").toAbsolutePath());
-            Path config = FMLPaths.CONFIGDIR.get().resolve("solace-performance.json");
+            Path config = FMLPaths.CONFIGDIR.get().resolve("solace").resolve("performance.json");
             String json = new String(java.util.Base64.getDecoder().decode(args[1]), java.nio.charset.StandardCharsets.UTF_8);
+            Files.createDirectories(config.getParent());
             Files.writeString(config, json);
             boolean expected = Boolean.parseBoolean(args[2]);
             check(CommonPerformancePatches.featureCycleResolver() == expected, "Wrong startup gate");

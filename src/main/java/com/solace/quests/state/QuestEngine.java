@@ -475,12 +475,12 @@ public final class QuestEngine {
             // World-wide and idempotent: the first player to reach this opens it for everyone.
             case "solace:open_structure_gate" -> {
                 if (StructureGates.open(player.server, effect.name(), StructureGateConfig.Mode.parse(effect.data())) < 0) {
-                    LOGGER.warn("[Solace Quests] {} is not in config/solace-structure-gates.json", effect.name());
+                    LOGGER.warn("[Solace Quests] {} is not in config/solace/structure-gates.json", effect.name());
                 }
             }
             case "solace:close_structure_gate" -> {
                 if (StructureGates.close(player.server, effect.name()) < 0) {
-                    LOGGER.warn("[Solace Quests] {} is not in config/solace-structure-gates.json", effect.name());
+                    LOGGER.warn("[Solace Quests] {} is not in config/solace/structure-gates.json", effect.name());
                 }
             }
             case "solace:give_structure_map" -> StructureLocators.giveMap(player, effect.name(), effect.data());

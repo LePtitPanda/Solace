@@ -109,7 +109,7 @@ public final class QuestApi {
     /**
      * Same switch as {@code /solace gates open} and the solace:open_structure_gate effect. {@code structure}
      * is an id or "#tag"; {@code mode} "once", "infinite" or null for the config's. Returns how many
-     * gates changed, or -1 if nothing in config/solace-structure-gates.json matches.
+     * gates changed, or -1 if nothing in config/solace/structure-gates.json matches.
      */
     public static int openStructureGate(MinecraftServer server, String structure, String mode) {
         return StructureGates.open(server, structure, StructureGateConfig.Mode.parse(mode));

@@ -64,7 +64,7 @@ final class StructureGateCommands {
         Map<ResourceLocation, Entry> gated = StructureGates.gated();
         CommandSourceStack source = context.getSource();
         if (gated.isEmpty()) {
-            source.sendSuccess(() -> Component.literal("No structure is gated (config/solace-structure-gates.json)."),
+            source.sendSuccess(() -> Component.literal("No structure is gated (config/solace/structure-gates.json)."),
                     false);
             return 0;
         }

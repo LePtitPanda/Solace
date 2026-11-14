@@ -1,5 +1,6 @@
 package com.solace.loot;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -16,7 +17,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.resources.Resource;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.InputStream;
@@ -36,7 +36,7 @@ import java.util.concurrent.CompletableFuture;
 public final class LootStructureIndex {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path PATH = FMLPaths.CONFIGDIR.get().resolve("solace-loot-structure-index.json");
+    private static final Path PATH = SolaceConfigPaths.resolve("loot-structure-index.json");
     private static volatile Map<ResourceLocation, List<ResourceLocation>> index = load();
     private static volatile boolean ready = index != null;
     private static volatile boolean building;

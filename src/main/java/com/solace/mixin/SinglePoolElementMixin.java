@@ -25,11 +25,7 @@ public abstract class SinglePoolElementMixin {
             CallbackInfoReturnable<List<StructureTemplate.StructureBlockInfo>> cir
     ) {
         if (!BlockPos.ZERO.equals(position)) {
-            JigsawVillageBuildingTool.enterParentElement(
-                    (StructurePoolElement) (Object) this,
-                    position,
-                    structureTemplateManager
-            );
+            JigsawVillageBuildingTool.enterParentElement((StructurePoolElement) (Object) this, position);
         }
     }
 }

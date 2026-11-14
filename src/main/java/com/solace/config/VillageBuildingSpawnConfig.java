@@ -16,13 +16,12 @@ import java.util.List;
 import java.util.Map;
 import com.google.gson.annotations.SerializedName;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 public final class VillageBuildingSpawnConfig {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("solace-village-buildings.json");
+    private static final Path CONFIG_PATH = SolaceConfigPaths.resolve("village-buildings.json");
     private static final List<ResourceLocation> DEFAULT_CUSTOM_BUILDINGS = List.of(
             id("villagersplus", "village/plains/plains_alchemist"),
             id("villagersplus", "village/plains/plains_horticulturist"),
@@ -72,17 +71,22 @@ public final class VillageBuildingSpawnConfig {
         return Collections.unmodifiableList(entries);
     }
 
+    /** Controlled buildings in placement priority: every ONCE entry, then every RANGE entry, each in file order. */
     public static synchronized List<ResourceLocation> customBuildingIds() {
         ConfigData config = load();
-        List<ResourceLocation> customIds = new ArrayList<>();
+        List<ResourceLocation> onceIds = new ArrayList<>();
+        List<ResourceLocation> rangeIds = new ArrayList<>();
         for (Map.Entry<String, Entry> entry : config.entries.entrySet()) {
             ResourceLocation id = parseId(entry.getKey());
             Entry rule = sanitize(entry.getValue(), id);
-            if (rule.mode == Mode.ONCE || rule.mode == Mode.RANGE) {
-                customIds.add(id);
+            if (rule.mode == Mode.ONCE) {
+                onceIds.add(id);
+            } else if (rule.mode == Mode.RANGE) {
+                rangeIds.add(id);
             }
         }
-        return Collections.unmodifiableList(customIds);
+        onceIds.addAll(rangeIds);
+        return Collections.unmodifiableList(onceIds);
     }
 
     public static List<ResourceLocation> defaultCustomBuildings() {

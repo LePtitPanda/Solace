@@ -19,14 +19,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.level.levelgen.structure.PoolElementStructurePiece;
 import net.minecraft.world.level.levelgen.structure.pools.SinglePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructurePoolElement;
 import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import org.slf4j.Logger;
 
 public final class JigsawVillageBuildingTool {
@@ -140,17 +138,21 @@ public final class JigsawVillageBuildingTool {
             return allowedCandidates;
         }
 
-        ResourceLocation priorityId = session.selectPriorityCandidate(requiredCandidates);
+        // Fixed priority, not round-robin: a village has fewer house slots than the config's minimums add up to,
+        // so the buildings listed first (ONCE before RANGE) must win the slots and only the last-listed ones miss.
+        ResourceLocation priorityId = null;
         List<StructurePoolElement> priorityFirstList = new ArrayList<>(allowedCandidates.size() + requiredCandidates.size());
-        if (priorityId != null) {
-            priorityFirstList.add(requiredCandidates.get(priorityId));
-            session.recordPriority(priorityId);
-        }
-        for (Map.Entry<ResourceLocation, StructurePoolElement> entry : session.orderRequiredCandidates(requiredCandidates)) {
-            if (!entry.getKey().equals(priorityId)) {
-                priorityFirstList.add(entry.getValue());
+        for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
+            StructurePoolElement required = requiredCandidates.get(target);
+            if (required == null) {
+                continue;
             }
-            session.recordOffered(entry.getKey());
+            if (priorityId == null) {
+                priorityId = target;
+                session.recordPriority(target);
+            }
+            priorityFirstList.add(required);
+            session.recordOffered(target);
         }
         for (StructurePoolElement candidate : allowedCandidates) {
             Optional<ResourceLocation> candidateId = templateId(candidate);
@@ -203,11 +205,7 @@ public final class JigsawVillageBuildingTool {
         return selected;
     }
 
-    public static void enterParentElement(
-            StructurePoolElement parentElement,
-            BlockPos position,
-            StructureTemplateManager structureTemplateManager
-    ) {
+    public static void enterParentElement(StructurePoolElement parentElement, BlockPos position) {
         Optional<ResourceLocation> parentId = templateId(parentElement);
         if (parentId.isEmpty()) {
             return;
@@ -215,15 +213,13 @@ public final class JigsawVillageBuildingTool {
 
         ResourceLocation id = parentId.get();
         if (isPlainsVillageStart(id)) {
-            activateSession(position, id, structureTemplateManager);
+            activateSession(position, id);
             return;
         }
 
         if (isPlainsVillagePiece(id)) {
             if (ACTIVE_SESSION.get() == null) {
-                activateSession(position, id, structureTemplateManager);
-            } else {
-                ACTIVE_SESSION.get().setStructureTemplateManager(structureTemplateManager);
+                activateSession(position, id);
             }
             return;
         }
@@ -358,24 +354,15 @@ public final class JigsawVillageBuildingTool {
     }
 
     private static Session activateSession(BlockPos startPosition, ResourceLocation startTemplate) {
-        return activateSession(startPosition, startTemplate, null);
-    }
-
-    private static Session activateSession(
-            BlockPos startPosition,
-            ResourceLocation startTemplate,
-            StructureTemplateManager structureTemplateManager
-    ) {
         Session activeSession = ACTIVE_SESSION.get();
         if (activeSession != null && activeSession.matchesStart(startPosition, startTemplate)) {
-            activeSession.setStructureTemplateManager(structureTemplateManager);
             return activeSession;
         }
         if (activeSession != null) {
             activeSession.logSummary();
         }
 
-        Session session = new Session(startPosition, startTemplate, structureTemplateManager);
+        Session session = new Session(startPosition, startTemplate);
         ACTIVE_SESSION.set(session);
         LOGGER.info("[Solace] Tracking plains village jigsaw at {} from {} with {} controlled building rules",
                 session.startPos, session.startTemplate, VillageBuildingSpawnConfig.customBuildingIds().size());
@@ -424,19 +411,12 @@ public final class JigsawVillageBuildingTool {
         private final Map<ResourceLocation, Integer> suppressedCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> offeredCounts = new LinkedHashMap<>();
         private final Map<ResourceLocation, Integer> priorityCounts = new LinkedHashMap<>();
-        private final Map<ResourceLocation, Integer> footprintAreas = new LinkedHashMap<>();
         private final Set<PiecePlacement> recordedPieces = new LinkedHashSet<>();
-        private StructureTemplateManager structureTemplateManager;
         private String lastLoggedCustomSignal = "";
 
-        private Session(
-                BlockPos startPos,
-                ResourceLocation startTemplate,
-                StructureTemplateManager structureTemplateManager
-        ) {
+        private Session(BlockPos startPos, ResourceLocation startTemplate) {
             this.startPos = startPos.immutable();
             this.startTemplate = startTemplate;
-            this.structureTemplateManager = structureTemplateManager;
         }
 
         private void record(StructurePoolElement element, BlockPos position, BoundingBox boundingBox) {
@@ -536,68 +516,6 @@ public final class JigsawVillageBuildingTool {
             }
 
             return nonUniqueFallback;
-        }
-
-        private ResourceLocation selectPriorityCandidate(Map<ResourceLocation, StructurePoolElement> candidates) {
-            ResourceLocation selected = null;
-            int selectedPriorities = Integer.MAX_VALUE;
-            int selectedArea = Integer.MIN_VALUE;
-            for (ResourceLocation target : VillageBuildingSpawnConfig.customBuildingIds()) {
-                StructurePoolElement candidate = candidates.get(target);
-                if (!needsMinimum(target) || candidate == null) {
-                    continue;
-                }
-
-                int priorities = priorityCounts.getOrDefault(target, 0);
-                int area = footprintArea(target, candidate);
-                if (selected == null
-                        || priorities < selectedPriorities
-                        || (priorities == selectedPriorities && area > selectedArea)) {
-                    selected = target;
-                    selectedPriorities = priorities;
-                    selectedArea = area;
-                }
-            }
-            return selected;
-        }
-
-        private List<Map.Entry<ResourceLocation, StructurePoolElement>> orderRequiredCandidates(
-                Map<ResourceLocation, StructurePoolElement> candidates
-        ) {
-            List<Map.Entry<ResourceLocation, StructurePoolElement>> ordered = new ArrayList<>(candidates.entrySet());
-            ordered.sort((left, right) -> Integer.compare(
-                    footprintArea(right.getKey(), right.getValue()),
-                    footprintArea(left.getKey(), left.getValue())
-            ));
-            return ordered;
-        }
-
-        private int footprintArea(ResourceLocation id, StructurePoolElement element) {
-            Integer cached = footprintAreas.get(id);
-            if (cached != null) {
-                return cached;
-            }
-            if (structureTemplateManager == null) {
-                return 0;
-            }
-
-            try {
-                BoundingBox box = element.getBoundingBox(structureTemplateManager, BlockPos.ZERO, Rotation.NONE);
-                int area = box.getXSpan() * box.getZSpan();
-                footprintAreas.put(id, area);
-                return area;
-            } catch (RuntimeException exception) {
-                footprintAreas.put(id, 0);
-                return 0;
-            }
-        }
-
-        private void setStructureTemplateManager(
-                StructureTemplateManager structureTemplateManager
-        ) {
-            if (structureTemplateManager != null) {
-                this.structureTemplateManager = structureTemplateManager;
-            }
         }
 
         private boolean isReplaceableHouse(ResourceLocation id) {

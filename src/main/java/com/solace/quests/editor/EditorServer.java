@@ -1,5 +1,6 @@
 package com.solace.quests.editor;
 
+import com.solace.config.SolaceConfigPaths;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -77,7 +78,7 @@ public final class EditorServer {
         MinecraftServer server = source.getServer();
         if (server.isDedicatedServer() && !allowDedicated()) {
             source.sendFailure(Component.literal("The quest editor is disabled on dedicated servers. Set "
-                    + "\"editorAllowDedicated\": true in config/solace-quests.json to allow it."));
+                    + "\"editorAllowDedicated\": true in config/solace/quests.json to allow it."));
             return 0;
         }
         try {
@@ -145,7 +146,7 @@ public final class EditorServer {
     }
 
     private static boolean allowDedicated() {
-        Path config = FMLPaths.CONFIGDIR.get().resolve("solace-quests.json");
+        Path config = SolaceConfigPaths.resolve("quests.json");
         try {
             return Files.isRegularFile(config) && JsonParser.parseString(Files.readString(config)).getAsJsonObject()
                     .get("editorAllowDedicated").getAsBoolean();

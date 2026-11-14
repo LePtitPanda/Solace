@@ -1,6 +1,6 @@
 # Server tick fixes
 
-These patches use `solace-performance.json` (`PerformanceConfig`). Each switch defaults
+These patches use `config/solace/performance.json` (`PerformanceConfig`). Each switch defaults
 to `true`, respects the global `enabled` switch, and requires a restart. The exact
 common patches apply on integrated and dedicated servers independently of
 `singleplayerOnly`:
