@@ -394,7 +394,7 @@ mob drops, block drops), on top of the table and its modifiers.
 ## Recipe locks — `recipe_locks/*.json`
 
 Technique notes. A lock's recipes give no result in the crafting grid (vanilla table and
-inventory, FastWorkbench) and are hidden in JEI and EMI, for each player until they learn it.
+inventory, FastWorkbench, the Sophisticated crafting upgrade, the AE2 crafting terminal) and are hidden in JEI and EMI, for each player until they learn it.
 
 ```json
 { "outputs": ["create:shaft", "create:cogwheel", "#create:gearboxes"],
@@ -512,6 +512,11 @@ npc list | unbind <binding> | bind <binding> <entity> | free <entity> [into]
 claim <quest>                            (players) claim rewards
 check <quest> <objective>                (players) tick a checkmark objective
 ```
+
+Gamerule `captainsGiveBadOmen` (default `false`): while off, killing a patrol captain gives no Bad Omen
+and leaves an existing one alone. `/effect give … minecraft:bad_omen` still works, so a quest can give it
+first and later turn captains on with
+`{"type": "solace:command", "command": "gamerule captainsGiveBadOmen true"}`.
 
 ## In game
 

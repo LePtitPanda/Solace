@@ -36,6 +36,11 @@ public class Solace {
 
     public static final String MOD_ID = "solace";
     private static final Logger LOGGER = LogManager.getLogger();
+    /** Off in a new world: killing a patrol captain gives no Bad Omen until a quest turns this on. */
+    public static final net.minecraft.world.level.GameRules.Key<net.minecraft.world.level.GameRules.BooleanValue>
+            CAPTAINS_GIVE_BAD_OMEN = net.minecraft.world.level.GameRules.register("captainsGiveBadOmen",
+            net.minecraft.world.level.GameRules.Category.MOBS,
+            net.minecraft.world.level.GameRules.BooleanValue.create(false));
 
     public Solace() {
         LOGGER.info("[Solace] Mod Constructor Called");

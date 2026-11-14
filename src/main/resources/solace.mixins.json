@@ -8,6 +8,10 @@
   "mixins": [
     "FeatureSorterCycleMixin",
     "GossipContainerReputationMixin",
+    "RaiderBadOmenMixin",
+    "BackpackCraftingRecipeLockMixin",
+    "Ae2CraftingTermRecipeLockMixin",
+    "Ae2CraftingTermSlotRecipeLockMixin",
     "chunkguards.GroundPathNavigationChunkGuardMixin",
     "chunkguards.SleepInBedChunkGuardMixin",
     "chunkguards.RemoveBlockGoalChunkGuardMixin",

@@ -52,6 +52,12 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.endsWith(".FastBenchRecipeLockMixin")) {
             return hasClass("dev/shadowsoffire/fastbench/util/FastBenchUtil.class");
         }
+        if (mixinClassName.contains(".Ae2CraftingTerm")) {
+            return hasClass("appeng/menu/me/items/CraftingTermMenu.class");
+        }
+        if (mixinClassName.endsWith(".BackpackCraftingRecipeLockMixin")) {
+            return hasClass("net/p3pp3rf1y/sophisticatedcore/upgrades/crafting/CraftingUpgradeContainer.class");
+        }
         if (mixinClassName.contains(".Structurify")) {
             return hasClass("com/faboslav/structurify/common/Structurify.class");
         }
