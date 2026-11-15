@@ -521,8 +521,9 @@ first and later turn captains on with
 Dream dimension `solace:dream`: one shared dimension for every dream. A black superflat floor
 (`solace:dream_floor`, one layer at y 0, so stand at y 1). Black sky with no sun, clouds or fog, and nether-style light.
 Health, hunger and Xaero's minimap are hidden there. For survival players, the floor can't be broken, other blocks
-break with no drops, and no blocks or buckets can be placed. Creative players are exempt from those three rules. Send a player there with
-`{"type": "solace:command", "command": "execute in solace:dream run tp @p 0 1 0"}`.
+break with no drops, and no blocks or buckets can be placed. Creative players are exempt from those three rules. Players
+take no damage there (except `/kill` and the void). `/dream [players]` (permission 2) sends players to 0 1 0 in the dream,
+so a quest can use `{"type": "solace:command", "command": "dream @p"}`.
 
 ## In game
 

@@ -1,7 +1,18 @@
 package com.solace.world;
 
 import com.solace.Solace;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import java.util.Collection;
+import java.util.List;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.Container;
@@ -66,6 +77,34 @@ public final class DreamDimension {
     @SubscribeEvent
     public static void onBucket(FillBucketEvent event) {
         if (!event.getEntity().isCreative() && isDream(event.getLevel())) event.setCanceled(true);
+    }
+
+    // /kill and the void still work: they bypass invulnerability.
+    @SubscribeEvent
+    public static void onAttack(LivingAttackEvent event) {
+        if (event.getEntity() instanceof Player player && isDream(player.level())
+                && !event.getSource().is(DamageTypeTags.BYPASSES_INVULNERABILITY)) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onRegisterCommands(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("dream").requires(source -> source.hasPermission(2))
+                .executes(context -> send(context.getSource(), List.of(context.getSource().getPlayerOrException())))
+                .then(Commands.argument("targets", EntityArgument.players())
+                        .executes(context -> send(context.getSource(), EntityArgument.getPlayers(context, "targets")))));
+    }
+
+    private static int send(CommandSourceStack source, Collection<ServerPlayer> players) {
+        ServerLevel dream = source.getServer().getLevel(LEVEL);
+        if (dream == null) {
+            source.sendFailure(Component.literal("The dream dimension is not loaded."));
+            return 0;
+        }
+        for (ServerPlayer player : players) player.teleportTo(dream, 0.5, 1, 0.5, player.getYRot(), player.getXRot());
+        source.sendSuccess(() -> Component.literal("Sent " + players.size() + " player(s) to the dream."), true);
+        return players.size();
     }
 
     @SubscribeEvent
