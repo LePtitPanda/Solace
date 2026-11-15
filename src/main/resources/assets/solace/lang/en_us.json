@@ -26,5 +26,7 @@
   "block.solace.algal_sand_terrain_slab": "Algal Sand Slab",
   "key.categories.solace": "Solace",
   "key.solace.quests.book": "Open Quest Book",
-  "key.solace.quests.hud": "Toggle Quest Tracker"
+  "key.solace.quests.hud": "Toggle Quest Tracker",
+  "block.solace.dream_floor": "Dream Floor",
+  "biome.solace.dream": "Dream"
 }

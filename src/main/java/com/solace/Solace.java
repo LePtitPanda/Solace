@@ -52,6 +52,8 @@ public class Solace {
         com.solace.world.gates.StructureGates.init();
         MinecraftForge.EVENT_BUS.register(CommonEvents.class);
         MinecraftForge.EVENT_BUS.register(OverworldSpawnManager.class);
+        com.solace.world.DreamDimension.init(FMLJavaModLoadingContext.get().getModEventBus());
+        MinecraftForge.EVENT_BUS.register(com.solace.world.DreamDimension.class);
         updateCraftPresenceConfig();
     }
 

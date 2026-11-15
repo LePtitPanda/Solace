@@ -1,0 +1,13 @@
+{
+  "type": "solace:dream",
+  "generator": {
+    "type": "minecraft:flat",
+    "settings": {
+      "biome": "solace:dream",
+      "layers": [{ "block": "solace:dream_floor", "height": 1 }],
+      "lakes": false,
+      "features": false,
+      "structure_overrides": []
+    }
+  }
+}

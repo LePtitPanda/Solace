@@ -11,5 +11,6 @@ public class SolaceJadePlugin implements IWailaPlugin {
     @Override
     public void registerClient(IWailaClientRegistration registration) {
         registration.registerBlockComponent(new AlchemistCauldronJadeProvider(), AlchemistCauldronBlock.class);
+        registration.hideTarget(com.solace.world.DreamDimension.FLOOR.get());
     }
 }
