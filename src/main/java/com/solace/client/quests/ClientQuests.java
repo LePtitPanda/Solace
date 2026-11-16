@@ -74,7 +74,7 @@ public final class ClientQuests {
     private static boolean fancyBroken;
 
     public static void toast(QuestNetwork.Toast toast) {
-        if (QuestClientConfig.get().toasts) {
+        if (QuestClientConfig.get().toasts && !com.solace.client.IntroHoldClient.muting()) {
             // A finished quest goes to Fancy Toasts when that mod is installed.
             if (toast.kind().equals("completed") && !fancyBroken && ModList.get().isLoaded("fancytoasts")) {
                 try {

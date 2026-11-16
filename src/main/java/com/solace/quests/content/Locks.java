@@ -9,7 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Content kinds that are not quests: quest loot, recipe locks and trade locks. */
+/** Content kinds that are not quests: quest loot, recipe locks, trade locks and block locks. */
 public final class Locks {
     private Locks() {
     }
@@ -40,11 +40,21 @@ public final class Locks {
      * player until {@code unlockWhen} holds. {@code when} picks the merchant (solace:entity sees it).
      */
     public record TradeLock(ResourceLocation id, Target entity, Condition when, boolean all, List<Offer> offers,
-                            Condition unlockWhen, boolean hide) {
+                            Condition unlockWhen, boolean hide, boolean refuse,
+                            net.minecraft.network.chat.Component message) {
     }
 
     /** Null fields match anything. */
     public record Offer(Target result, Target cost) {
+    }
+
+    /**
+     * {@code block_locks/*.json}: right-clicking a matching block does nothing for a player until
+     * {@code unlockWhen} holds (items in hand still work). {@code when} narrows which placements are locked
+     * (it sees the player, so e.g. solace:structure). {@code message} is shown on the action bar.
+     */
+    public record BlockLock(ResourceLocation id, Target block, Condition when, Condition unlockWhen,
+                            Component message) {
     }
 
     static QuestLoot loot(ResourceLocation id, In in) {
@@ -131,8 +141,8 @@ public final class Locks {
             }
         }
         String mode = in.str("mode", "disable");
-        if (!mode.equals("disable") && !mode.equals("hide")) {
-            in.err("mode", "expected \"disable\" or \"hide\"");
+        if (!mode.equals("disable") && !mode.equals("hide") && !mode.equals("refuse")) {
+            in.err("mode", "expected \"disable\", \"hide\" or \"refuse\"");
         }
         Condition unlock = QuestParser.condition(in, "unlock_when");
         if (unlock == null) {
@@ -140,7 +150,20 @@ public final class Locks {
         }
         TradeLock lock = new TradeLock(id, entity == null ? new Target(false,
                 new ResourceLocation("minecraft", "villager")) : entity, QuestParser.condition(in, "when"), all,
-                List.copyOf(offers), unlock == null ? ctx -> false : unlock, mode.equals("hide"));
+                List.copyOf(offers), unlock == null ? ctx -> false : unlock, mode.equals("hide"), mode.equals("refuse"),
+                in.text("message", false));
+        in.done();
+        return lock;
+    }
+
+    static BlockLock blockLock(ResourceLocation id, In in) {
+        Target block = in.target("block", "block", true);
+        Condition unlock = QuestParser.condition(in, "unlock_when");
+        if (unlock == null) {
+            in.err("unlock_when", "missing required field");
+        }
+        BlockLock lock = new BlockLock(id, block, QuestParser.condition(in, "when"),
+                unlock == null ? ctx -> false : unlock, in.text("message", false));
         in.done();
         return lock;
     }

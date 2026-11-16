@@ -7,6 +7,7 @@ import com.solace.item.LootTableEditorItem;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
+import net.minecraftforge.common.ForgeSpawnEggItem;
 import net.minecraftforge.event.BuildCreativeModeTabContentsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -33,11 +34,19 @@ public final class SolaceItems {
             () -> new LootTableEditorItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
+    public static final RegistryObject<Item> GUILDMASTER_SPAWN_EGG = ITEMS.register(
+            "guildmaster_spawn_egg",
+            () -> new ForgeSpawnEggItem(SolaceEntities.GUILDMASTER, 0x5E3B26, 0xC9A227, new Item.Properties())
+    );
+
     @SubscribeEvent
     public static void addCreativeTabItems(BuildCreativeModeTabContentsEvent event) {
         if (event.getTabKey() == CreativeModeTabs.TOOLS_AND_UTILITIES) {
             event.accept(WOODEN_HAMMER);
             event.accept(LOOT_TABLE_EDITOR);
+        }
+        if (event.getTabKey() == CreativeModeTabs.SPAWN_EGGS) {
+            event.accept(GUILDMASTER_SPAWN_EGG);
         }
     }
 

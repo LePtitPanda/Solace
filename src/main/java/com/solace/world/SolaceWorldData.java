@@ -11,117 +11,66 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+/** Solace's per-world data: the home village and the players already placed in it. */
 public class SolaceWorldData extends SavedData {
-    private static final String INTRO_COMPLETED_KEY = "BreezyVillageIntroCompleted";
-    private static final String INTRO_COMPLETED_PLAYERS_KEY = "BreezyVillageIntroCompletedPlayers";
-    private static final String INTRO_VILLAGE_FOUND_KEY = "BreezyVillageIntroVillageFound";
-    private static final String INTRO_VILLAGE_X_KEY = "BreezyVillageIntroVillageX";
-    private static final String INTRO_VILLAGE_Y_KEY = "BreezyVillageIntroVillageY";
-    private static final String INTRO_VILLAGE_Z_KEY = "BreezyVillageIntroVillageZ";
-    private static final String INTRO_VILLAGE_LOCATOR_VERSION_KEY = "BreezyVillageIntroVillageLocatorVersion";
-    private static final String INTRO_ROUTE_PRELOADED_KEY = "BreezyVillageIntroRoutePreloaded";
-    private static final String INTRO_ROUTE_PRELOAD_VERSION_KEY = "BreezyVillageIntroRoutePreloadVersion";
+    // Keys keep their old (balloon intro) names so existing worlds keep their home village and placed players.
+    private static final String PLACED_PLAYERS_KEY = "BreezyVillageIntroCompletedPlayers";
+    private static final String VILLAGE_FOUND_KEY = "BreezyVillageIntroVillageFound";
+    private static final String VILLAGE_X_KEY = "BreezyVillageIntroVillageX";
+    private static final String VILLAGE_Y_KEY = "BreezyVillageIntroVillageY";
+    private static final String VILLAGE_Z_KEY = "BreezyVillageIntroVillageZ";
+    private static final String LOCATOR_VERSION_KEY = "BreezyVillageIntroVillageLocatorVersion";
 
-    private final Set<UUID> breezyVillageIntroCompletedPlayers = new HashSet<>();
-    private boolean breezyVillageIntroVillageFound;
-    private BlockPos breezyVillageIntroVillagePos;
-    private int breezyVillageIntroVillageLocatorVersion;
-    private boolean breezyVillageIntroRoutePreloaded;
-    private int breezyVillageIntroRoutePreloadVersion;
+    private final Set<UUID> placedPlayers = new HashSet<>();
+    private BlockPos homeVillage;
+    private int locatorVersion;
 
     public static SolaceWorldData load(CompoundTag tag) {
         SolaceWorldData data = new SolaceWorldData();
-        ListTag completedPlayers = tag.getList(INTRO_COMPLETED_PLAYERS_KEY, Tag.TAG_STRING);
-        for (int i = 0; i < completedPlayers.size(); i++) {
+        ListTag players = tag.getList(PLACED_PLAYERS_KEY, Tag.TAG_STRING);
+        for (int i = 0; i < players.size(); i++) {
             try {
-                data.breezyVillageIntroCompletedPlayers.add(UUID.fromString(completedPlayers.getString(i)));
+                data.placedPlayers.add(UUID.fromString(players.getString(i)));
             } catch (IllegalArgumentException ignored) {
             }
         }
-        data.breezyVillageIntroVillageFound = tag.getBoolean(INTRO_VILLAGE_FOUND_KEY);
-        data.breezyVillageIntroVillageLocatorVersion = tag.getInt(INTRO_VILLAGE_LOCATOR_VERSION_KEY);
-        data.breezyVillageIntroRoutePreloaded = tag.getBoolean(INTRO_ROUTE_PRELOADED_KEY);
-        data.breezyVillageIntroRoutePreloadVersion = tag.getInt(INTRO_ROUTE_PRELOAD_VERSION_KEY);
-        if (data.breezyVillageIntroVillageFound) {
-            data.breezyVillageIntroVillagePos = new BlockPos(
-                    tag.getInt(INTRO_VILLAGE_X_KEY),
-                    tag.getInt(INTRO_VILLAGE_Y_KEY),
-                    tag.getInt(INTRO_VILLAGE_Z_KEY)
-            );
+        if (tag.getBoolean(VILLAGE_FOUND_KEY)) {
+            data.homeVillage = new BlockPos(tag.getInt(VILLAGE_X_KEY), tag.getInt(VILLAGE_Y_KEY), tag.getInt(VILLAGE_Z_KEY));
+            data.locatorVersion = tag.getInt(LOCATOR_VERSION_KEY);
         }
         return data;
     }
 
-    public boolean hasPlayerCompletedBreezyVillageIntro(UUID playerId) {
-        return breezyVillageIntroCompletedPlayers.contains(playerId);
+    public boolean isPlaced(UUID player) {
+        return placedPlayers.contains(player);
     }
 
-    public void setPlayerCompletedBreezyVillageIntro(UUID playerId) {
-        if (breezyVillageIntroCompletedPlayers.add(playerId)) {
-            setDirty();
-        }
+    public void setPlaced(UUID player) {
+        if (placedPlayers.add(player)) setDirty();
     }
 
-    public boolean hasBreezyVillageIntroVillagePos() {
-        return breezyVillageIntroVillageFound && breezyVillageIntroVillagePos != null;
+    /** The home village, if it was found by a locator at least this version; else null. */
+    public BlockPos homeVillage(int minLocatorVersion) {
+        return homeVillage != null && locatorVersion >= minLocatorVersion ? homeVillage : null;
     }
 
-    public boolean hasBreezyVillageIntroVillagePos(int requiredLocatorVersion) {
-        return hasBreezyVillageIntroVillagePos()
-                && breezyVillageIntroVillageLocatorVersion >= requiredLocatorVersion;
-    }
-
-    public BlockPos getBreezyVillageIntroVillagePos() {
-        return breezyVillageIntroVillagePos;
-    }
-
-    public void setBreezyVillageIntroVillagePos(BlockPos pos) {
-        setBreezyVillageIntroVillagePos(pos, breezyVillageIntroVillageLocatorVersion);
-    }
-
-    public void setBreezyVillageIntroVillagePos(BlockPos pos, int locatorVersion) {
-        boolean locationChanged = !java.util.Objects.equals(this.breezyVillageIntroVillagePos, pos)
-                || this.breezyVillageIntroVillageLocatorVersion != locatorVersion;
-        this.breezyVillageIntroVillageFound = pos != null;
-        this.breezyVillageIntroVillagePos = pos;
-        this.breezyVillageIntroVillageLocatorVersion = pos == null ? 0 : locatorVersion;
-        if (locationChanged) {
-            // A route marker is only valid for the exact village produced by
-            // the corresponding locator implementation.
-            this.breezyVillageIntroRoutePreloaded = false;
-            this.breezyVillageIntroRoutePreloadVersion = 0;
-        }
+    public void setHomeVillage(BlockPos pos, int locatorVersion) {
+        this.homeVillage = pos;
+        this.locatorVersion = pos == null ? 0 : locatorVersion;
         setDirty();
-    }
-
-    public boolean isBreezyVillageIntroRoutePreloaded(int requiredVersion) {
-        return breezyVillageIntroRoutePreloaded && breezyVillageIntroRoutePreloadVersion >= requiredVersion;
-    }
-
-    public void setBreezyVillageIntroRoutePreloaded(int version) {
-        if (!this.breezyVillageIntroRoutePreloaded || this.breezyVillageIntroRoutePreloadVersion != version) {
-            this.breezyVillageIntroRoutePreloaded = true;
-            this.breezyVillageIntroRoutePreloadVersion = version;
-            setDirty();
-        }
     }
 
     @Override
     public CompoundTag save(CompoundTag tag) {
-        tag.remove(INTRO_COMPLETED_KEY);
-        ListTag completedPlayers = new ListTag();
-        for (UUID playerId : breezyVillageIntroCompletedPlayers) {
-            completedPlayers.add(StringTag.valueOf(playerId.toString()));
-        }
-        tag.put(INTRO_COMPLETED_PLAYERS_KEY, completedPlayers);
-        tag.putBoolean(INTRO_VILLAGE_FOUND_KEY, breezyVillageIntroVillageFound);
-        tag.putInt(INTRO_VILLAGE_LOCATOR_VERSION_KEY, breezyVillageIntroVillageLocatorVersion);
-        tag.putBoolean(INTRO_ROUTE_PRELOADED_KEY, breezyVillageIntroRoutePreloaded);
-        tag.putInt(INTRO_ROUTE_PRELOAD_VERSION_KEY, breezyVillageIntroRoutePreloadVersion);
-        if (breezyVillageIntroVillageFound && breezyVillageIntroVillagePos != null) {
-            tag.putInt(INTRO_VILLAGE_X_KEY, breezyVillageIntroVillagePos.getX());
-            tag.putInt(INTRO_VILLAGE_Y_KEY, breezyVillageIntroVillagePos.getY());
-            tag.putInt(INTRO_VILLAGE_Z_KEY, breezyVillageIntroVillagePos.getZ());
+        ListTag players = new ListTag();
+        for (UUID player : placedPlayers) players.add(StringTag.valueOf(player.toString()));
+        tag.put(PLACED_PLAYERS_KEY, players);
+        tag.putBoolean(VILLAGE_FOUND_KEY, homeVillage != null);
+        tag.putInt(LOCATOR_VERSION_KEY, locatorVersion);
+        if (homeVillage != null) {
+            tag.putInt(VILLAGE_X_KEY, homeVillage.getX());
+            tag.putInt(VILLAGE_Y_KEY, homeVillage.getY());
+            tag.putInt(VILLAGE_Z_KEY, homeVillage.getZ());
         }
         return tag;
     }

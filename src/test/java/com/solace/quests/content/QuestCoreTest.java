@@ -338,6 +338,17 @@ class QuestCoreTest {
         assertTrue(broken.quests.isEmpty());
     }
 
+    /** The instance's own quest content (../config/solace/quests) parses without errors. Skipped outside the pack. */
+    @Test
+    void instanceQuestContentHasNoErrors() {
+        Path pack = Path.of("../config/solace/quests");
+        org.junit.jupiter.api.Assumptions.assumeTrue(java.nio.file.Files.isDirectory(pack));
+        QuestContent content = QuestContent.build(
+                QuestContentLoader.read(ResourceManager.Empty.INSTANCE, pack), QuestContent.EMPTY, null);
+        content.problems.forEach(problem -> System.out.println("[pack] " + problem));
+        assertEquals(List.of(), content.problems.stream().filter(Problem::error).toList());
+    }
+
     @Test
     void dialogueRejectsUnknownNodesAndReferences() {
         String dialogue = """
@@ -587,6 +598,21 @@ class QuestCoreTest {
     }
 
     @Test
+    void villageDefendersRank() {
+        String villagers = """
+                {"name":"Villagers","ranks":[{"id":"hated","name":"Hated","at":-400},
+                  {"id":"unwelcome","name":"Unwelcome","at":-200},{"id":"distrusted","name":"Distrusted","at":-60}],
+                 "source":{"type":"solace:villager_gossip","defenders_attack_at":"unwelcome"}}""";
+        QuestContent content = QuestContent.build(files("factions", "villagers", villagers,
+                "factions", "bad", villagers.replace("\"unwelcome\"}", "\"nope\"}")), QuestContent.EMPTY, null);
+        Faction faction = content.factions.get(id("villagers"));
+        assertEquals("unwelcome", faction.defendersAttackAt());
+        assertEquals(-60, faction.defendersSafeFrom(), "hostile below the start of Distrusted");
+        assertTrue(content.problems.stream().anyMatch(problem -> problem.error()
+                && problem.path().contains("defenders_attack_at")), content.problems.toString());
+    }
+
+    @Test
     void locksAndLootParse() {
         QuestContent content = QuestContent.build(files(
                 "recipe_locks", "rotation", """
@@ -596,9 +622,18 @@ class QuestCoreTest {
                         {"offers":"all","mode":"hide","unlock_when":{"type":"solace:flag","flag":"trusted"}}""",
                 "loot", "shift_board", """
                         {"tables":["minecraft:chests/*"],"once":true,
-                         "items":[{"item":"minecraft:paper","min":1,"max":2,"chance":0.5}]}"""),
+                         "items":[{"item":"minecraft:paper","min":1,"max":2,"chance":0.5}]}""",
+                "block_locks", "notice_board", """
+                        {"block":"#minecraft:signs","message":"Notices for villagers only.",
+                         "unlock_when":{"type":"solace:flag","flag":"c1.trading_open"}}""",
+                "block_locks", "no_unlock", """
+                        {"block":"minecraft:lectern"}"""),
                 QuestContent.EMPTY, null);
-        assertEquals(0, content.errorCount(), content.problems.toString());
+        List<Problem> errors = content.problems.stream().filter(Problem::error).toList();
+        assertEquals(1, errors.size(), errors.toString());
+        assertTrue(errors.get(0).path().contains("unlock_when"), errors.toString());
+        assertTrue(content.blockLocks.get(id("notice_board")).block().tag());
+        assertTrue(content.blockLocks.get(id("notice_board")).message() != null);
         assertTrue(content.tradeLocks.get(id("distrusted")).all());
         assertEquals(2, content.recipeLocks.get(id("rotation")).outputs().size());
         assertEquals(2, content.loot.get(id("shift_board")).items().get(0).max());

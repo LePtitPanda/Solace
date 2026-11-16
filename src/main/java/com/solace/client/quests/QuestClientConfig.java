@@ -22,6 +22,8 @@ public final class QuestClientConfig {
     /** Tracker position as fractions of the free screen space: 0 = left/top, 1 = right/bottom. Set by dragging in the mod's config screen. */
     public double hudX = 1.0;
     public double hudY = 0.33;
+    /** Width of the quest book chapter list, in GUI pixels. */
+    public int bookSidebar = 180;
     public boolean toasts = true;
     /** Arrow and distance to the tracked quest's marker in the HUD tracker. */
     public boolean compass = true;

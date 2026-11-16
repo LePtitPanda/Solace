@@ -371,13 +371,14 @@ public final class QuestEngine {
                 table.getRandomItems(params).forEach(stack -> ItemHandlerHelper.giveItemToPlayer(player, stack));
             }
             case "solace:command" -> {
-                // Runs as the server, never as the player. "@p" becomes the UUID (a valid entity
-                // argument), not the name, so a crafted player name cannot inject command text.
+                // Runs with the effect's permission level, executed by the player: "@p" becomes "@s", which
+                // player-only arguments (dream, title, playsound) accept where a UUID is refused. No player
+                // text ever enters the command.
                 CommandSourceStack source = player.server.createCommandSourceStack()
-                        .withPosition(player.position()).withLevel(player.serverLevel())
+                        .withEntity(player).withPosition(player.position()).withLevel(player.serverLevel())
+                        .withRotation(player.getRotationVector())
                         .withPermission(effect.count()).withSuppressedOutput();
-                player.server.getCommands().performPrefixedCommand(source,
-                        effect.name().replaceAll("@p\\b", player.getStringUUID()));
+                player.server.getCommands().performPrefixedCommand(source, effect.name().replaceAll("@p\\b", "@s"));
             }
             case "solace:flag" -> {
                 if (effect.on()) {

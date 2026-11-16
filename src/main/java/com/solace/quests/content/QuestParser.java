@@ -362,7 +362,10 @@ public final class QuestParser {
             }
             case "solace:checkmark" -> {
             }
-            case "solace:custom" -> in.skip("handler", "data");
+            case "solace:custom" -> {
+                name = in.str("handler", null);
+                in.skip("data");
+            }
             default -> {
                 in.err("type", "unknown objective type \"" + type + "\"");
                 return null;
@@ -687,6 +690,7 @@ public final class QuestParser {
         }
         boolean gossip = false;
         int radius = 48;
+        String defendersAttackAt = null;
         In source = in.obj("source");
         if (source != null) {
             gossip = source.req("type").equals("solace:villager_gossip");
@@ -694,6 +698,12 @@ public final class QuestParser {
                 source.err("type", "the only source type is \"solace:villager_gossip\"");
             }
             radius = source.integer("radius", 48, 1);
+            String attackAt = source.str("defenders_attack_at", null);
+            if (attackAt != null && ranks.stream().noneMatch(rank -> rank.id().equals(attackAt))) {
+                source.err("defenders_attack_at", "no rank \"" + attackAt + "\" in this faction");
+            } else {
+                defendersAttackAt = attackAt;
+            }
             source.done();
         }
         int min = in.integer("min", -1000, Integer.MIN_VALUE);
@@ -703,7 +713,7 @@ public final class QuestParser {
         }
         Faction faction = new Faction(id, in.text("name", true), color, icon(in),
                 in.integer("default", 0, Integer.MIN_VALUE), min, max, List.copyOf(ranks), List.copyOf(relations),
-                gossip, radius);
+                gossip, radius, defendersAttackAt);
         in.done();
         return faction;
     }

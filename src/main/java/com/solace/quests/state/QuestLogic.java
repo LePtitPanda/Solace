@@ -40,7 +40,7 @@ public final class QuestLogic {
         }
     }
 
-    public static final int MAX_TRACKED = 5;
+    public static final int MAX_TRACKED = 2;
     private static final int MAX_CHAIN = 32;
     private static int viewDepth;
 
@@ -182,8 +182,9 @@ public final class QuestLogic {
         state.claimed.clear();
         state.startedAt = ctx.gameTime();
         state.log(ctx.gameTime(), state.phase, via);
-        if (data.tracked.size() < MAX_TRACKED && !data.tracked.contains(quest.id())) {
+        if (!data.tracked.contains(quest.id())) {
             data.tracked.add(quest.id());
+            while (data.tracked.size() > MAX_TRACKED) data.tracked.remove(0); // newest pushes out the oldest
         }
         ctx.changed();
         events.started(quest);
@@ -513,8 +514,8 @@ public final class QuestLogic {
 
     public static boolean track(Ctx ctx, ResourceLocation questId, boolean on) {
         List<ResourceLocation> tracked = ctx.data().tracked;
-        boolean changed = on ? !tracked.contains(questId) && tracked.size() < MAX_TRACKED && tracked.add(questId)
-                : tracked.remove(questId);
+        boolean changed = on ? !tracked.contains(questId) && tracked.add(questId) : tracked.remove(questId);
+        while (tracked.size() > MAX_TRACKED) tracked.remove(0); // newest pushes out the oldest
         if (changed) {
             ctx.changed();
         }

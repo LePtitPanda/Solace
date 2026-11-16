@@ -4,7 +4,7 @@ import { graph, GraphEdge, GraphNode } from './graph';
 import {
   blank, CHAPTER, CHOICE, DIALOGUE_NODE, FACTION, Kind, KIND_LABEL, KINDS, MARKER_TARGETS, NPC, OBJECTIVES, PHASE, QUEST,
   RANK, RELATION, TRANSITION,
-  LOOT, RECIPE_LOCK, TRADE_LOCK,
+  LOOT, RECIPE_LOCK, TRADE_LOCK, BLOCK_LOCK,
 } from './schema';
 import { connect, Entry, entry, idsOf, key, onChange, openFiles, openFolder, reloadGame, remove, save, saveAll, state, validate } from './store';
 
@@ -51,7 +51,7 @@ function touch(e: Entry) {
   clearTimeout(lightTimer);
   lightTimer = window.setTimeout(light, 120);
   clearTimeout(validateTimer);
-  validateTimer = window.setTimeout(() => validate(e).catch(fail), 700);
+  validateTimer = window.setTimeout(() => validate(e).then(light, fail), 700);
 }
 
 function light() {
@@ -536,7 +536,8 @@ function factionForm(e: Entry): HTMLElement[] {
         () => { t(); }, 'Add relation')),
     section('Source',
       h('label', { class: 'check' }, gossip, h('span', {}, 'Mirror vanilla villager gossip (works with the Thief mod)')),
-      json.source ? fields(json.source, [{ key: 'radius', label: 'Villagers within (blocks)', kind: 'number' }], t) : null),
+      json.source ? fields(json.source, [{ key: 'radius', label: 'Villagers within (blocks)', kind: 'number' },
+        { key: 'defenders_attack_at', label: 'Golems and guards attack at this rank or below (rank id)', kind: 'string' }], t) : null),
   ];
 }
 
@@ -573,6 +574,9 @@ function renderInspector() {
       break;
     case 'trades':
       body = [section('Trade lock', fields(e.json, TRADE_LOCK, t))];
+      break;
+    case 'block_locks':
+      body = [section('Block lock', fields(e.json, BLOCK_LOCK, t))];
       break;
     default:
       body = [section('Marker', typed(e.json, 'target', MARKER_TARGETS, t))];

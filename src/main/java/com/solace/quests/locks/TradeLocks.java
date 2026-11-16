@@ -42,9 +42,29 @@ public final class TradeLocks {
                     || lock.unlockWhen().test(ctx)) {
                 continue;
             }
-            state = Math.max(state, lock.hide() ? 2 : 1);
+            state = Math.max(state, lock.hide() || lock.refuse() ? 2 : 1);
         }
         return state;
+    }
+
+    /**
+     * A "refuse" lock that applies to this merchant for this player: the merchant does not trade at all (its offers
+     * are ignored). Returns the lock, or null when the merchant trades as usual.
+     */
+    public static TradeLock refusal(ServerPlayer player, Entity merchant) {
+        QuestContent content = QuestContent.current;
+        if (content.tradeLocks.isEmpty() || !(merchant instanceof Merchant)) {
+            return null;
+        }
+        ServerCtx ctx = QuestEngine.ctx(player);
+        ctx.entity = merchant;
+        for (TradeLock lock : content.tradeLocks.values()) {
+            if (lock.refuse() && lock.entity().matches(merchant) && (lock.when() == null || lock.when().test(ctx))
+                    && !lock.unlockWhen().test(ctx)) {
+                return lock;
+            }
+        }
+        return null;
     }
 
     private static boolean matches(Offer match, MerchantOffer offer) {

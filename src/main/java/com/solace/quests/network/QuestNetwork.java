@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  * packet that only names what the player wants; the server decides whether it happens.
  */
 public final class QuestNetwork {
-    private static final String PROTOCOL = "2";
+    private static final String PROTOCOL = "3";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(Solace.MOD_ID, "quests"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -42,7 +42,7 @@ public final class QuestNetwork {
             .simpleChannel();
 
     public static final int CLAIM = 0, TRACK = 1, CHECK = 2, ABANDON = 3, DIALOGUE_CHOICE = 4, DIALOGUE_ADVANCE = 5,
-            DIALOGUE_CLOSE = 6;
+            DIALOGUE_CLOSE = 6, INTRO_READY = 7;
 
     /** Token bucket per player: 20 intents burst, 10 per second refill. Excess is dropped. */
     private static final Map<UUID, double[]> BUCKETS = new HashMap<>();
@@ -77,6 +77,10 @@ public final class QuestNetwork {
                         b.readList(FriendlyByteBuf::readResourceLocation)))
                 .consumerMainThread((packet, context) -> client(context,
                         () -> () -> com.solace.client.quests.ClientRecipeLocks.set(packet.recipes, packet.items))).add();
+        CHANNEL.messageBuilder(IntroHold.class, 8).encoder((p, b) -> b.writeBoolean(p.hold))
+                .decoder(b -> new IntroHold(b.readBoolean()))
+                .consumerMainThread((packet, context) -> client(context,
+                        () -> () -> com.solace.client.IntroHoldClient.set(packet.hold))).add();
     }
 
     private static void client(Supplier<NetworkEvent.Context> context, Supplier<Runnable> action) {
@@ -128,6 +132,14 @@ public final class QuestNetwork {
     record LockedRecipes(List<ResourceLocation> recipes, List<ResourceLocation> items) {
     }
 
+    /** Hold (or release) the player's first-join loading screen. */
+    public static void introHold(ServerPlayer player, boolean hold) {
+        send(player, new IntroHold(hold));
+    }
+
+    record IntroHold(boolean hold) {
+    }
+
     public static void forget(UUID player) {
         BUCKETS.remove(player);
     }
@@ -171,6 +183,7 @@ public final class QuestNetwork {
                 case DIALOGUE_CHOICE -> DialogueManager.choose(player, a, b, c);
                 case DIALOGUE_ADVANCE -> DialogueManager.advance(player, a, b);
                 case DIALOGUE_CLOSE -> DialogueManager.close(player, a);
+                case INTRO_READY -> com.solace.world.IntroHold.ready(player);
                 default -> {
                     ResourceLocation questId = ResourceLocation.tryParse(id);
                     Quest quest = questId == null ? null : QuestContent.current.quests.get(questId);

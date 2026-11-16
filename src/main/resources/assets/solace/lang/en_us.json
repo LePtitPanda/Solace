@@ -28,5 +28,7 @@
   "key.solace.quests.book": "Open Quest Book",
   "key.solace.quests.hud": "Toggle Quest Tracker",
   "block.solace.dream_floor": "Dream Floor",
-  "biome.solace.dream": "Dream"
+  "biome.solace.dream": "Dream",
+  "entity.solace.guildmaster": "Guildmaster",
+  "item.solace.guildmaster_spawn_egg": "Guildmaster Spawn Egg"
 }

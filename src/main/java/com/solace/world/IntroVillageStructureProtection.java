@@ -6,7 +6,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.biome.BiomeSource;
 
 /**
- * Publishes the verified Breezy intro village to structure-generation threads.
+ * Publishes the home village to structure-generation threads.
  *
  * <p>The biome-source identity limits the check to the loaded Overworld whose
  * village was resolved. If the target has not been established yet, structure

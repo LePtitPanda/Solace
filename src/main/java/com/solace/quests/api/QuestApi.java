@@ -48,6 +48,14 @@ public final class QuestApi {
         EFFECTS.put(id, handler);
     }
 
+    /**
+     * Adds progress to every active {"type": "solace:custom", "handler": handler} objective of the player, whatever
+     * quest it is in. This is how Java hooks feed custom objectives without knowing quest ids.
+     */
+    public static void fire(ServerPlayer player, String handler, int amount) {
+        QuestEngine.objective(player, "solace:custom", objective -> handler.equals(objective.name()), amount, null);
+    }
+
     /** Adds progress to an objective of the quest's current phase; this is how "solace:custom" objectives advance. */
     public static boolean progress(ServerPlayer player, String quest, String objective, int amount) {
         Quest definition = quest(quest);

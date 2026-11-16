@@ -36,12 +36,13 @@ import static com.solace.client.gui.WorldCreationThemeRenderer.TEXT;
 public class QuestBookScreen extends Screen {
     private enum Tab { QUESTS, FACTIONS }
 
-    private static final int LEFT = 150;
+    private static final int MIN_LEFT = 120, MAX_LEFT = 320;
     private static final int RIGHT = 210;
     private static final int TOP = 36;
     private static final int GRID = 46;
     private static final int NODE = 26;
-    private static final int[] STATUS_COLOR = {0xFF3A3A55, TEXT, GOLD, 0xFFFFE9A8, GOLD_DIM, 0xFFAA4444};
+    // In progress is blue, completed is green: easy to tell apart at a glance.
+    private static final int[] STATUS_COLOR = {0xFF3A3A55, TEXT, 0xFF5AB4FF, 0xFFFFE9A8, 0xFF62C462, 0xFFAA4444};
     private static final String[] STATUS_NAME = {"Locked", "Available", "In progress", "Rewards ready", "Completed",
             "Failed"};
 
@@ -54,6 +55,12 @@ public class QuestBookScreen extends Screen {
     private double scroll;
     private double detailScroll;
     private boolean dragging;
+    private boolean resizing;
+
+    /** Width of the chapter list; dragged with its right edge and kept in the client config. */
+    private static int left() {
+        return Mth.clamp(QuestClientConfig.get().bookSidebar, MIN_LEFT, MAX_LEFT);
+    }
     private String builtFor = "";
     /** Screen rows of clickable things drawn this frame: x0, y0, x1, y1 and what a click does. */
     private final List<Hit> hits = new ArrayList<>();
@@ -167,7 +174,7 @@ public class QuestBookScreen extends Screen {
     }
 
     private int nodeX(QuestView quest) {
-        return (int) ((LEFT + canvasRight()) / 2.0 + panX + quest.x() * GRID * zoom);
+        return (int) ((left() + canvasRight()) / 2.0 + panX + quest.x() * GRID * zoom);
     }
 
     private int nodeY(QuestView quest) {
@@ -198,8 +205,8 @@ public class QuestBookScreen extends Screen {
         int y = TOP + 6;
         for (ChapterView view : ClientQuests.chapters) {
             boolean active = current != null && view.id().equals(current.id());
-            boolean hovered = mouseX >= 6 && mouseX < LEFT - 6 && mouseY >= y && mouseY < y + 22;
-            graphics.fill(6, y, LEFT - 6, y + 22, active ? 0xF01A1508 : hovered ? 0xC0141428 : 0x900C0C1C);
+            boolean hovered = mouseX >= 6 && mouseX < left() - 6 && mouseY >= y && mouseY < y + 22;
+            graphics.fill(6, y, left() - 6, y + 22, active ? 0xF01A1508 : hovered ? 0xC0141428 : 0x900C0C1C);
             graphics.fill(6, y, 8, y + 22, active ? GOLD : GOLD_DIM);
             int textX = ClientQuests.icon(graphics, view.icon(), 12, y + 3) ? 32 : 14;
             int total = 0, done = 0;
@@ -211,11 +218,11 @@ public class QuestBookScreen extends Screen {
             }
             String count = done + "/" + total;
             String title = this.font.plainSubstrByWidth(view.title().getString(),
-                    LEFT - 12 - textX - this.font.width(count) - 6);
+                    left() - 12 - textX - this.font.width(count) - 6);
             graphics.drawString(this.font, title, textX, y + 7, active ? GOLD : TEXT, false);
-            graphics.drawString(this.font, count, LEFT - 10 - this.font.width(count), y + 7, MUTED, false);
+            graphics.drawString(this.font, count, left() - 10 - this.font.width(count), y + 7, MUTED, false);
             ResourceLocation id = view.id();
-            hits.add(new Hit(6, y, LEFT - 6, y + 22, () -> {
+            hits.add(new Hit(6, y, left() - 6, y + 22, () -> {
                 chapter = id;
                 selected = null;
                 panX = panY = 0;
@@ -225,7 +232,7 @@ public class QuestBookScreen extends Screen {
         }
         if (current != null) {
             int textY = y + 8;
-            for (FormattedCharSequence line : this.font.split(current.description(), LEFT - 20)) {
+            for (FormattedCharSequence line : this.font.split(current.description(), left() - 20)) {
                 graphics.drawString(this.font, line, 10, textY, MUTED, false);
                 textY += 10;
             }
@@ -233,8 +240,9 @@ public class QuestBookScreen extends Screen {
     }
 
     private void renderCanvas(GuiGraphics graphics, int mouseX, int mouseY) {
-        int left = LEFT, right = canvasRight(), top = TOP, bottom = this.height - 10;
+        int left = left(), right = canvasRight(), top = TOP, bottom = this.height - 10;
         graphics.fill(left, top, right, bottom, 0x70070712);
+        graphics.fill(left - 2, top + 4, left - 1, bottom - 4, resizing ? GOLD : GOLD_DIM); // sidebar drag edge
         WorldCreationThemeRenderer.renderBracketPanel(graphics, left, top, right - left, bottom - top, GOLD_DIM);
         graphics.enableScissor(left + 2, top + 2, right - 2, bottom - 2);
         List<QuestView> quests = new ArrayList<>();
@@ -253,8 +261,11 @@ public class QuestBookScreen extends Screen {
                 boolean done = required.status() == QuestView.COMPLETED || required.status() == QuestView.CLAIMABLE;
                 int color = done ? GOLD_DIM : 0xFF2A2A44;
                 int x0 = nodeX(required), y0 = nodeY(required), x1 = nodeX(quest), y1 = nodeY(quest);
-                graphics.fill(Math.min(x0, x1), y0, Math.max(x0, x1) + 1, y0 + 1, color);
-                graphics.fill(x1, Math.min(y0, y1), x1 + 1, Math.max(y0, y1) + 1, color);
+                // Bend halfway between the columns, so a branch never runs through the nodes of another column.
+                int mx = x0 == x1 ? x0 : x0 + (x1 > x0 ? 1 : -1) * (int) (GRID * zoom / 2);
+                graphics.fill(Math.min(x0, mx), y0, Math.max(x0, mx) + 1, y0 + 1, color);
+                graphics.fill(mx, Math.min(y0, y1), mx + 1, Math.max(y0, y1) + 1, color);
+                graphics.fill(Math.min(mx, x1), y1, Math.max(mx, x1) + 1, y1 + 1, color);
             }
         }
         int half = (int) (NODE * zoom / 2);
@@ -278,6 +289,11 @@ public class QuestBookScreen extends Screen {
                 graphics.drawString(this.font, "?", 5, 4, color, false);
             }
             graphics.pose().popPose();
+            if (quest.status() == QuestView.COMPLETED) {
+                // A check in the corner: finished, not just started.
+                graphics.fill(x + half - 8, y - half, x + half, y - half + 8, 0xFF62C462);
+                graphics.drawString(this.font, "\u2714", x + half - 7, y - half, 0xFF0C2A0C, false);
+            }
             if (over) {
                 hovered = quest;
             }
@@ -408,18 +424,30 @@ public class QuestBookScreen extends Screen {
                 return true;
             }
         }
-        dragging = tab == Tab.QUESTS && mouseX > LEFT && mouseX < canvasRight() && mouseY > TOP;
+        resizing = tab == Tab.QUESTS && mouseY > TOP && Math.abs(mouseX - left()) <= 4;
+        if (resizing) {
+            return true;
+        }
+        dragging = tab == Tab.QUESTS && mouseX > left() && mouseX < canvasRight() && mouseY > TOP;
         return dragging;
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
         dragging = false;
+        if (resizing) {
+            resizing = false;
+            QuestClientConfig.get().save();
+        }
         return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (resizing) {
+            QuestClientConfig.get().bookSidebar = Mth.clamp((int) mouseX, MIN_LEFT, MAX_LEFT);
+            return true;
+        }
         if (dragging) {
             panX += dragX;
             panY += dragY;
@@ -434,7 +462,7 @@ public class QuestBookScreen extends Screen {
             scroll -= delta * 22;
         } else if (detailsOpen() && mouseX >= this.width - RIGHT) {
             detailScroll -= delta * 22;
-        } else if (mouseX > LEFT) {
+        } else if (mouseX > left()) {
             zoom = Mth.clamp(zoom + delta * 0.15, 0.5, 2.0);
         }
         return true;

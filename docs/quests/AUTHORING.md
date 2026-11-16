@@ -15,7 +15,7 @@ Related: [EDITOR.md](EDITOR.md) (web editor), [KUBEJS.md](KUBEJS.md) (scripting)
 | Loose: `config/solace/quests/<namespace>/<kind>/…` | `<namespace>:village/first_steps` |
 
 `<kind>` is one of `chapters`, `quests`, `dialogues`, `npcs`, `factions`, `markers`, `loot`,
-`recipe_locks`, `trades`. The id always
+`recipe_locks`, `trades`, `block_locks`. The id always
 comes from the location; an `id` field is ignored with a warning.
 
 **Loose files win** over a datapack file with the same id. A loose file containing only
@@ -175,7 +175,7 @@ player is in the area. Mark it `optional` if it should only gate other objective
 | `solace:shear` | `entity` | the player right-clicks it with shears while it can be sheared (any IForgeShearable) |
 | `solace:hatch` | `entity` | a baby of it appears within 16 blocks of the player without being bred (egg blocks, thrown eggs, mod eggs) |
 | `solace:checkmark` | — | the player clicks it in the quest book (or `/sq check <quest> <objective>`) |
-| `solace:custom` | — | a script or mod calls `SolaceQuests.progress(...)`; see [KUBEJS.md](KUBEJS.md) |
+| `solace:custom` | `handler` (optional) | a script or mod calls `SolaceQuests.progress(...)` (see [KUBEJS.md](KUBEJS.md)), or, with `handler`, a built-in hook fires it for every active objective with that handler: `target_hit_20` / `_30` / `_40` (the player's arrow hits a target block at least that far away), `dummy_hit`, `dummy_crit` (melee on a Dummmmmmy target dummy), `shield_block` (a hostile's attack blocked), `sheep_led_home` (a sheep on the player's lead brought within 32 blocks of the home village), `gift_given` (Thief gift), `combat_roll` (Combat Roll), `spell_inscribed`, `sound_hit` (Iron's Spellbooks, Sound school damage) |
 
 Example with an entity check — only zombies with a custom-data tag count:
 
@@ -235,7 +235,7 @@ still claimed with the rest.
 | `solace:take_item` | `item`, `count`, `optional`. On a dialogue choice: unless `optional`, the choice is refused when the player lacks the items. |
 | `solace:xp` | `points` or `levels` |
 | `solace:loot_table` | `table` |
-| `solace:command` | `command`, `permission_level` (0–4, default 2). Runs as the server at the player's position; `@p` is replaced by the player's UUID. |
+| `solace:command` | `command`, `permission_level` (0–4, default 2). Runs with that permission level, executed by the player at his position: `@s` is the player and `@p` is replaced by `@s`. |
 | `solace:flag` (alias `solace:set_flag`) | `flag`, `value` (default true) |
 | `solace:variable` (alias `solace:set_variable`) | `name`, `op` (`set` or `add`, default `set`), `value` |
 | `solace:reputation` | `faction`, `amount` (may be negative) |
@@ -394,7 +394,7 @@ mob drops, block drops), on top of the table and its modifiers.
 ## Recipe locks — `recipe_locks/*.json`
 
 Technique notes. A lock's recipes give no result in the crafting grid (vanilla table and
-inventory, FastWorkbench, the Sophisticated crafting upgrade, the AE2 crafting terminal) and are hidden in JEI and EMI, for each player until they learn it.
+inventory, FastWorkbench, the AE2 crafting terminal) and are hidden in JEI and EMI, for each player until they learn it.
 
 ```json
 { "outputs": ["create:shaft", "create:cogwheel", "#create:gearboxes"],
@@ -430,10 +430,28 @@ Learned = the player has the flag `recipes:<lock id>` (also set by `solace:unloc
 | `entity` | `minecraft:villager` | merchant entity or `#tag` |
 | `when` | none | which merchants (`solace:entity` sees the merchant) |
 | `offers` | required | `"all"` or a list of `{result, cost}` (item or `#tag`; either may be left out) |
-| `mode` | `disable` | `disable`: shown out of stock; `hide`: not shown |
+| `mode` | `disable` | `disable`: shown out of stock; `hide`: not shown; `refuse`: the merchant does not trade at all (no trading window; a villager shakes its head). `offers` is ignored for `refuse`. |
+| `message` | none | `refuse` only: text shown on the action bar when the player tries to trade |
 | `unlock_when` | required | condition on the player (the merchant is in context) |
 
 The server never fills the result slot for a locked offer, whatever the client sends.
+
+## Block locks — `block_locks/*.json`
+
+```json
+{ "block": "bountiful:bountyboard", "message": "Notices for villagers only.",
+  "unlock_when": { "type": "solace:flag", "flag": "c1.trading_open" } }
+```
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `block` | required | block id or `#tag` |
+| `when` | none | which placements are locked; a condition on the player (e.g. `solace:structure` to lock only inside a village) |
+| `unlock_when` | required | condition on the player |
+| `message` | none | text shown on the action bar when the player tries |
+
+While locked, right-clicking the block does nothing for that player (the item in hand still works, so
+blocks can be placed against it) and it does not count for `solace:interact_block`. Breaking is not locked.
 
 ## Faction — `factions/*.json`
 
@@ -457,7 +475,7 @@ The server never fills the result slot for a locked offer, whatever the client s
 | `min`, `max` | −1000, 1000 | Standing is clamped to this range. |
 | `ranks` | required | `{id, name, at}`. A rank applies from `at` upward. Order in the file does not matter. |
 | `relations` | none | `{faction, factor}`: a change here also changes that faction by `amount × factor`. One step only; the other faction's own relations are not followed. |
-| `source` | none | `{"type": "solace:villager_gossip", "radius": 48}` — see below. |
+| `source` | none | `{"type": "solace:villager_gossip", "radius": 48, "defenders_attack_at": "unwelcome"}` — see below. |
 
 **Villager gossip factions.** With `source`, the faction is one standing per player for the whole
 world, stored by Solace like any other. It moves with every first-hand vanilla gossip change —
@@ -466,6 +484,14 @@ to several witnesses in the same tick counts once (the strongest villager's chan
 villagers pass to each other, and gossip decay, do not move it. A `solace:reputation` effect adds
 the amount to the standing and also writes real gossip to the villagers within `radius` blocks, so
 their trade prices react. `/sq rep set` works on it too.
+
+**Village defenders.** With `"defenders_attack_at": "<rank id>"` on a gossip source, the entities in
+`#solace:village_defenders` (iron golems, Guard Villagers guards, Takes a Pillage clay golems) only go for a
+player who is at that rank or below, who hurt them, or who they saw hurt a villager or another defender
+(they may chase him for 10 s). Thief crimes and per-villager gossip no longer set them on anyone. Idle
+defenders within 16 blocks that can see a player at that rank attack him. A player killed by a defender while
+at that rank or below has his standing raised to the start of the rank above it. Without the field,
+defenders behave as in vanilla.
 
 ## Markers — inline, or `markers/*.json`
 
@@ -524,6 +550,15 @@ Health, hunger and Xaero's minimap are hidden there. For survival players, the f
 break with no drops, and no blocks or buckets can be placed. Creative players are exempt from those three rules. Players
 take no damage there (except `/kill` and the void). `/dream [players]` (permission 2) sends players to 0 1 0 in the dream,
 so a quest can use `{"type": "solace:command", "command": "dream @p"}`.
+
+Village buildings: `/solace at_building <building> [on <block>] [run <command>]` (permission 2). `<building>` is
+a jigsaw template id, e.g. a `ONCE` building from `village-buildings.json`. It is looked up in the home village
+(the village nearest world spawn, found once at world load; a player joining for the first time is placed on the gray sleeping bag in the prison under its `plains_meeting_point_2` centre, which becomes his respawn point), else in the village at the command's position, by reading the village's
+own structure pieces. Without `run` it prints where the building is. With `run` it runs the command positioned
+there, like `execute positioned`: at the matching block inside the building with `on` (a block predicate, e.g.
+`#minecraft:beds`), else at the building's floor centre. If the building or block is not found, the command
+fails and nothing runs. Example: `{"type": "solace:command", "command":
+"solace at_building minecraft:village/plains/town_centers/plains_meeting_point_2 on comforts:sleeping_bag_gray run tp @s ~ ~0.6 ~"}`.
 
 ## In game
 

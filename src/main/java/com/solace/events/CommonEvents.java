@@ -1,6 +1,9 @@
 package com.solace.events;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import com.mojang.logging.LogUtils;
 import com.solace.compat.GulingSentinelProofSupport;
 import com.solace.compat.IntegratedApiLocatorShutdownSupport;
@@ -12,13 +15,15 @@ import com.solace.loot.LootExtraDetector;
 import com.solace.performance.ServerWorkScheduler;
 import com.solace.performance.VMinusIngredientFilterCache;
 import com.solace.spawn.OverworldSpawnManager;
-import com.solace.world.BalloonIntroManager;
+import com.solace.world.HomeVillage;
 import com.solace.world.IntroVillageStructureProtection;
 import com.solace.world.JigsawVillageBuildingTool;
-import com.solace.world.SolaceIntroBalloonAccess;
 import com.solace.world.VillageBarrelGolemLimiter;
+import com.solace.world.VillageBuildingLocator;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.ResourceLocationArgument;
+import net.minecraft.commands.arguments.blocks.BlockPredicateArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -29,13 +34,13 @@ import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.StructureManager;
+import net.minecraft.world.level.block.state.pattern.BlockInWorld;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec2;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.AddReloadListenerEvent;
-import net.minecraftforge.event.entity.EntityMountEvent;
 import net.minecraftforge.event.entity.EntityJoinLevelEvent;
-import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
@@ -48,13 +53,10 @@ import net.minecraftforge.fml.ModList;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
 
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 
 public final class CommonEvents {
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Set<UUID> DEATH_DISMOUNT_BYPASS = ConcurrentHashMap.newKeySet();
     private static final ResourceLocation MOON_ID = ResourceLocation.fromNamespaceAndPath("ad_astra", "moon");
     private static final ResourceLocation GULING_SENTINEL_ID = ResourceLocation.fromNamespaceAndPath("eeeabsmobs", "guling_sentinel");
 
@@ -65,7 +67,7 @@ public final class CommonEvents {
     public static void onLevelLoad(LevelEvent.Load event) {
         if (event.getLevel() instanceof ServerLevel level) {
             ServerWorkScheduler.registerLevel(level);
-            BalloonIntroManager.precomputeIntroVillage(level);
+            HomeVillage.onOverworldLoad(level);
         }
     }
 
@@ -114,25 +116,6 @@ public final class CommonEvents {
     }
 
     @SubscribeEvent
-    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) {
-            return;
-        }
-
-        Entity vehicle = player.getVehicle();
-        if (!(vehicle instanceof SolaceIntroBalloonAccess access) || !access.solace$isIntroBalloon() || access.solace$hasLanded()) {
-            return;
-        }
-
-        BalloonIntroManager.refreshIntroSafetySpawn(player, vehicle);
-        boolean wasLanded = access.solace$hasLanded();
-        access.solace$tickLandingMovementCheck();
-        if (!wasLanded && access.solace$hasLanded()) {
-            BalloonIntroManager.completeIntroLanding(player, vehicle);
-        }
-    }
-
-    @SubscribeEvent
     public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
         InstrumentCockroachBandSupport.tryGiveInstrumentToMob(event);
     }
@@ -163,46 +146,9 @@ public final class CommonEvents {
     }
 
     @SubscribeEvent
-    public static void onEntityMount(EntityMountEvent event) {
-        if (!event.isDismounting()) {
-            return;
-        }
-
-        Entity mounted = event.getEntityBeingMounted();
-        Entity rider = event.getEntityMounting();
-        if (rider instanceof ServerPlayer player && DEATH_DISMOUNT_BYPASS.contains(player.getUUID())) {
-            return;
-        }
-
-        if (mounted instanceof SolaceIntroBalloonAccess access && access.solace$isIntroBalloon() && !access.solace$hasLanded()) {
-            event.setCanceled(true);
-        }
-    }
-
-    @SubscribeEvent
-    public static void onLivingDeath(LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
-            return;
-        }
-
-        Entity vehicle = player.getVehicle();
-        if (!(vehicle instanceof SolaceIntroBalloonAccess access) || !access.solace$isIntroBalloon() || access.solace$hasLanded()) {
-            return;
-        }
-
-        DEATH_DISMOUNT_BYPASS.add(player.getUUID());
-        try {
-            player.stopRiding();
-        } finally {
-            DEATH_DISMOUNT_BYPASS.remove(player.getUUID());
-        }
-        vehicle.discard();
-    }
-
-    @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            BalloonIntroManager.requestIntro(player);
+            HomeVillage.placeNewPlayer(player);
         }
     }
 
@@ -210,12 +156,22 @@ public final class CommonEvents {
     public static void onRegisterCommands(RegisterCommandsEvent event) {
         CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         dispatcher.register(Commands.literal("solace")
-                .then(Commands.literal("stop_balloon")
-                        .executes(context -> stopIntroBalloon(context.getSource())))
                 .then(Commands.literal("what_building")
                         .executes(context -> whatBuilding(context.getSource())))
                 .then(Commands.literal("village_buildings")
                         .executes(context -> listVillageBuildings(context.getSource())))
+                .then(Commands.literal("at_building")
+                        .requires(source -> source.hasPermission(2))
+                        .then(Commands.argument("building", ResourceLocationArgument.id())
+                                .executes(context -> reportBuilding(context, null))
+                                .then(Commands.literal("run")
+                                        .redirect(dispatcher.getRoot(), context -> atBuilding(context, null)))
+                                .then(Commands.literal("on")
+                                        .then(Commands.argument("block", BlockPredicateArgument.blockPredicate(event.getBuildContext()))
+                                                .executes(context -> reportBuilding(context, BlockPredicateArgument.getBlockPredicate(context, "block")))
+                                                .then(Commands.literal("run")
+                                                        .redirect(dispatcher.getRoot(), context -> atBuilding(context,
+                                                                BlockPredicateArgument.getBlockPredicate(context, "block"))))))))
                 .then(Commands.literal("performance")
                         .executes(context -> showPerformanceStatus(context.getSource()))
                         .then(Commands.literal("reload")
@@ -263,32 +219,6 @@ public final class CommonEvents {
         return showSpawnStatus(source);
     }
 
-    private static int stopIntroBalloon(CommandSourceStack source) {
-        ServerPlayer player;
-        try {
-            player = source.getPlayerOrException();
-        } catch (Exception e) {
-            source.sendFailure(Component.literal("Only players can stop an intro balloon."));
-            return 0;
-        }
-
-        if (!player.isCreative()) {
-            source.sendFailure(Component.literal("You must be in creative mode to stop the intro balloon."));
-            return 0;
-        }
-
-        Entity vehicle = player.getVehicle();
-        if (!(vehicle instanceof SolaceIntroBalloonAccess access) || !access.solace$isIntroBalloon() || access.solace$hasLanded()) {
-            source.sendFailure(Component.literal("You are not riding an active intro balloon."));
-            return 0;
-        }
-
-        access.solace$markLanded();
-        BalloonIntroManager.completeIntroLanding(player, vehicle);
-        source.sendSuccess(() -> Component.literal("Stopped the intro balloon."), false);
-        return 1;
-    }
-
     private static int showVillageJigsaws(CommandSourceStack source) {
         source.sendSuccess(() -> Component.literal("Configured plains village building rules: " + JigsawVillageBuildingTool.describeUniqueTargets()), false);
 
@@ -330,6 +260,55 @@ public final class CommonEvents {
             }
         }
         return result;
+    }
+
+    private static final SimpleCommandExceptionType NO_BUILDING = new SimpleCommandExceptionType(
+            Component.literal("That building (or that block in it) is not in the home village or the village here."));
+
+    private record BuildingSpot(ServerLevel level, BlockPos pos) {
+    }
+
+    /**
+     * Where a building is: in the home village first, else in the village at the command's position.
+     * With a block predicate, the matching block inside the building (e.g. #minecraft:beds); otherwise the
+     * building's floor centre.
+     */
+    private static BuildingSpot buildingSpot(CommandContext<CommandSourceStack> context,
+                                             Predicate<BlockInWorld> block) throws CommandSyntaxException {
+        ResourceLocation building = ResourceLocationArgument.getId(context, "building");
+        CommandSourceStack source = context.getSource();
+        ServerLevel overworld = source.getServer().overworld();
+        BlockPos home = HomeVillage.homeVillage(overworld);
+        ServerLevel level = overworld;
+        BoundingBox box = home == null ? null : VillageBuildingLocator.find(overworld, home, building);
+        if (box == null) {
+            level = source.getLevel();
+            box = VillageBuildingLocator.find(level, BlockPos.containing(source.getPosition()), building);
+        }
+        if (box == null) {
+            throw NO_BUILDING.create();
+        }
+        BlockPos pos = block == null ? new BlockPos(box.getCenter().getX(), box.minY(), box.getCenter().getZ())
+                : VillageBuildingLocator.findBlock(level, box, block);
+        if (pos == null) {
+            throw NO_BUILDING.create();
+        }
+        return new BuildingSpot(level, pos);
+    }
+
+    /** "/solace at_building <building> [on <block>] run <command>": runs the command positioned there. */
+    private static CommandSourceStack atBuilding(CommandContext<CommandSourceStack> context,
+                                                 Predicate<BlockInWorld> block) throws CommandSyntaxException {
+        BuildingSpot spot = buildingSpot(context, block);
+        return context.getSource().withLevel(spot.level()).withPosition(Vec3.atBottomCenterOf(spot.pos()));
+    }
+
+    private static int reportBuilding(CommandContext<CommandSourceStack> context,
+                                      Predicate<BlockInWorld> block) throws CommandSyntaxException {
+        BlockPos pos = buildingSpot(context, block).pos();
+        context.getSource().sendSuccess(() -> Component.literal(ResourceLocationArgument.getId(context, "building")
+                + " at " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
+        return 1;
     }
 
     private static int whatBuilding(CommandSourceStack source) {

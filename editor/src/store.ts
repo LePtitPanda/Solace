@@ -179,7 +179,7 @@ export async function validate(e: Entry) {
   const [namespace, path] = e.id.split(':');
   const result = await api('POST', `content/${e.kind}/${namespace}/${path}`, e.json);
   state.problems = state.problems.filter((p) => !(p.kind === e.kind && p.id === e.id)).concat(result.problems);
-  notify();
+  // no notify(): it re-renders the inspector and kills focus in the field being typed in; the caller refreshes.
 }
 
 function place(segments: string[]): { kind: Kind; id: string; layout: 'loose' | 'datapack'; prefix: string[] } | null {

@@ -1,13 +1,16 @@
 package com.solace.quests;
 
 import com.solace.quests.compat.ThiefCompat;
+import com.solace.quests.content.Locks;
 import com.solace.quests.content.QuestContentLoader;
 import com.solace.quests.dialogue.DialogueManager;
 import com.solace.quests.editor.EditorServer;
+import com.solace.quests.locks.BlockLocks;
 import com.solace.quests.network.QuestNetwork;
 import com.solace.quests.network.QuestSync;
 import com.solace.quests.state.Markers;
 import com.solace.quests.state.QuestEngine;
+import com.solace.quests.state.VillageDefenders;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -26,6 +29,7 @@ import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
 import net.minecraftforge.event.server.ServerStoppedEvent;
+import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
@@ -66,6 +70,8 @@ public final class SolaceQuests {
     public static void init() {
         QuestNetwork.register();
         MinecraftForge.EVENT_BUS.register(SolaceQuests.class);
+        MinecraftForge.EVENT_BUS.register(VillageDefenders.class);
+        com.solace.quests.hooks.CustomObjectiveHooks.register();
         if (ModList.get().isLoaded("thief")) {
             ThiefCompat.register();
         }
@@ -204,11 +210,29 @@ public final class SolaceQuests {
         }
     }
 
+    /** Block locks: HIGHEST so the block's own use (and other mods' handlers) never runs while locked. */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public static void onLockedBlockInteract(PlayerInteractEvent.RightClickBlock event) {
+        if (!(event.getEntity() instanceof ServerPlayer player) || !real(player)) {
+            return;
+        }
+        Locks.BlockLock lock = BlockLocks.locked(player, event.getLevel().getBlockState(event.getPos()));
+        if (lock != null) {
+            event.setUseBlock(Event.Result.DENY);
+            if (lock.message() != null && event.getHand() == InteractionHand.MAIN_HAND) {
+                player.displayClientMessage(lock.message(), true);
+            }
+        }
+    }
+
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onBlockInteract(PlayerInteractEvent.RightClickBlock event) {
         if (event.getEntity() instanceof ServerPlayer player && real(player)
                 && event.getHand() == InteractionHand.MAIN_HAND) {
             BlockState state = event.getLevel().getBlockState(event.getPos());
+            if (event.getUseBlock() == Event.Result.DENY) {
+                return; // a locked block is not "interacted with"
+            }
             QuestEngine.objective(player, "solace:interact_block", objective -> objective.target().matches(state), 1,
                     null, mode -> blockKey(mode, state));
         }
@@ -239,6 +263,20 @@ public final class SolaceQuests {
         if (DialogueManager.interact(player, event.getTarget())) {
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
+            return;
+        }
+        // A "refuse" trade lock: no trading window at all. A villager shakes its head.
+        var refusal = com.solace.quests.locks.TradeLocks.refusal(player, event.getTarget());
+        if (refusal != null) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            if (event.getTarget() instanceof net.minecraft.world.entity.npc.Villager villager) {
+                villager.setUnhappyCounter(40);
+                villager.playSound(net.minecraft.sounds.SoundEvents.VILLAGER_NO, 1.0F, villager.getVoicePitch());
+            }
+            if (refusal.message() != null) {
+                player.displayClientMessage(refusal.message(), true);
+            }
         }
     }
 

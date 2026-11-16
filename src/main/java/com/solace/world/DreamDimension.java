@@ -107,10 +107,53 @@ public final class DreamDimension {
         return players.size();
     }
 
+    /** Nothing in a dream is real: vanilla right-clicks on its entities do nothing (Solace dialogues still open). */
+    @SubscribeEvent
+    public static void onEntityInteract(net.minecraftforge.event.entity.player.PlayerInteractEvent.EntityInteract event) {
+        // Both sides: the client must not predict vanilla's item swap either. The click packet is sent before this
+        // event on the client, so Solace still receives it and opens the dialogue.
+        if (isDream(event.getLevel())) {
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+        }
+    }
+
+    /**
+     * Entities tagged {@code dream_anchor} stay near where they appeared: a gentle pull back when they drift more
+     * than 5 blocks sideways or 3 blocks up (allays otherwise wander off and climb).
+     */
+    @SubscribeEvent
+    public static void onLevelTick(TickEvent.LevelTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level) || !isDream(level)
+                || level.getGameTime() % 5 != 0) return;
+        for (net.minecraft.world.entity.Entity entity : level.getAllEntities()) {
+            if (!entity.getTags().contains("dream_anchor")) continue;
+            net.minecraft.nbt.CompoundTag data = entity.getPersistentData();
+            if (!data.contains("solace_anchor_x")) {
+                data.putDouble("solace_anchor_x", entity.getX());
+                data.putDouble("solace_anchor_y", entity.getY());
+                data.putDouble("solace_anchor_z", entity.getZ());
+            }
+            net.minecraft.world.phys.Vec3 anchor = new net.minecraft.world.phys.Vec3(data.getDouble("solace_anchor_x"), data.getDouble("solace_anchor_y"), data.getDouble("solace_anchor_z"));
+            net.minecraft.world.phys.Vec3 off = anchor.subtract(entity.position());
+            if (off.x * off.x + off.z * off.z > 25 || off.y < -3 || off.y > 1.5) {
+                entity.setDeltaMovement(off.normalize().scale(0.15));
+                entity.hurtMarked = true;
+            }
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         Player player = event.player;
         if (event.phase != TickEvent.Phase.END || player.level().isClientSide || player.tickCount % 5 != 0) return;
+        // Nothing in a dream may end in the void, and it has an edge: anyone below the floor or more than
+        // 100 blocks out goes back to the dream's start.
+        if (isDream(player.level()) && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+                && (player.getY() < -8 || player.getX() * player.getX() + player.getZ() * player.getZ() > 100 * 100)) {
+            serverPlayer.teleportTo(serverPlayer.serverLevel(), 0.5, 1, 0.5, player.getYRot(), player.getXRot());
+            player.resetFallDistance();
+        }
         MobEffect noMinimap = ForgeRegistries.MOB_EFFECTS.getValue(NO_MINIMAP);
         if (noMinimap == null) return;
         MobEffectInstance current = player.getEffect(noMinimap);

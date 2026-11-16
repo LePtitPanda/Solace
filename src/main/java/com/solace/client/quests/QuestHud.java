@@ -45,13 +45,31 @@ public final class QuestHud {
             if (!quest.tracked() || quest.status() != QuestView.ACTIVE) {
                 continue;
             }
-            int height = 14 + quest.objectives().size() * 10;
+            MarkerView marker = config.compass ? nearest(quest, dimension, minecraft.player.position()) : null;
+            // Long titles and objectives wrap onto more lines instead of being cut.
+            List<FormattedCharSequence> title = font.split(quest.title(), WIDTH - (marker != null ? 60 : 12));
+            List<List<FormattedCharSequence>> lines = new java.util.ArrayList<>();
+            List<String> counts = new java.util.ArrayList<>();
+            int objectiveLines = 0;
+            for (ObjectiveView objective : quest.objectives()) {
+                boolean done = objective.progress() >= objective.count();
+                String count = objective.count() > 1 ? objective.progress() + "/" + objective.count() : done ? "done" : "";
+                int indent = objective.indent() ? 6 : 0;
+                // A paused objective shows why it waits instead of what it asks.
+                Component line = objective.paused() ? objective.pausedText() : objective.text();
+                List<FormattedCharSequence> text = font.split(line, WIDTH - 20 - indent - font.width(count) - 4);
+                lines.add(text);
+                counts.add(count);
+                objectiveLines += Math.max(1, text.size());
+            }
+            int titleHeight = 4 + Math.max(1, title.size()) * 10;
+            int height = titleHeight + objectiveLines * 10 + quest.objectives().size() * 2;
             graphics.fill(x, y, x + WIDTH, y + height, 0x900C0C1C);
             graphics.fill(x, y, x + 2, y + height, WorldCreationThemeRenderer.GOLD);
-            String title = font.plainSubstrByWidth(quest.title().getString(), WIDTH - 60);
-            graphics.drawString(font, title, x + 6, y + 3, WorldCreationThemeRenderer.GOLD, false);
+            for (int i = 0; i < title.size(); i++) {
+                graphics.drawString(font, title.get(i), x + 6, y + 3 + i * 10, WorldCreationThemeRenderer.GOLD, false);
+            }
 
-            MarkerView marker = config.compass ? nearest(quest, dimension, minecraft.player.position()) : null;
             if (marker != null) {
                 double dx = marker.x() + 0.5 - minecraft.player.getX();
                 double dz = marker.z() + 0.5 - minecraft.player.getZ();
@@ -69,21 +87,24 @@ public final class QuestHud {
                 graphics.fill(-3, -2, 3, -1, WorldCreationThemeRenderer.GOLD);
                 pose.popPose();
             }
-            int lineY = y + 14;
-            for (ObjectiveView objective : quest.objectives()) {
+            int lineY = y + titleHeight;
+            for (int o = 0; o < quest.objectives().size(); o++) {
+                ObjectiveView objective = quest.objectives().get(o);
                 boolean done = objective.progress() >= objective.count();
-                String count = objective.count() > 1 ? objective.progress() + "/" + objective.count() : done ? "done" : "";
                 int indent = objective.indent() ? 6 : 0;
-                // A paused objective shows why it waits instead of what it asks.
-                Component line = objective.paused() ? objective.pausedText() : objective.text();
-                List<FormattedCharSequence> text = font.split(line, WIDTH - 14 - indent - font.width(count) - 4);
                 int color = done ? WorldCreationThemeRenderer.GOLD_DIM
                         : objective.paused() ? 0xFF808080 : WorldCreationThemeRenderer.TEXT;
-                if (!text.isEmpty()) {
-                    graphics.drawString(font, text.get(0), x + 8 + indent, lineY, color, false);
-                }
+                String count = counts.get(o);
                 graphics.drawString(font, count, x + WIDTH - 4 - font.width(count), lineY, color, false);
-                lineY += 10;
+                List<FormattedCharSequence> text = lines.get(o);
+                // One bullet per objective; its wrapped lines sit indented under it, with a gap before the next.
+                graphics.drawString(font, "\u2022", x + 8 + indent, lineY, color, false);
+                for (FormattedCharSequence part : text) {
+                    graphics.drawString(font, part, x + 14 + indent, lineY, color, false);
+                    lineY += 10;
+                }
+                if (text.isEmpty()) lineY += 10;
+                lineY += 2;
             }
             y += height + 4;
         }

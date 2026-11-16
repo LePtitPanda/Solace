@@ -32,7 +32,7 @@ export interface Field {
 
 const f = (key: string, label: string, kind: FieldKind, extra: Partial<Field> = {}): Field => ({ key, label, kind, ...extra });
 
-export const KINDS = ['chapters', 'quests', 'dialogues', 'npcs', 'factions', 'markers', 'loot', 'recipe_locks', 'trades'] as const;
+export const KINDS = ['chapters', 'quests', 'dialogues', 'npcs', 'factions', 'markers', 'loot', 'recipe_locks', 'trades', 'block_locks'] as const;
 export type Kind = (typeof KINDS)[number];
 export const KIND_LABEL: Record<Kind, string> = {
   chapters: 'Chapters',
@@ -44,6 +44,7 @@ export const KIND_LABEL: Record<Kind, string> = {
   loot: 'Quest loot',
   recipe_locks: 'Recipe locks',
   trades: 'Trade locks',
+  block_locks: 'Block locks',
 };
 
 const OPS = ['==', '!=', '<', '<=', '>', '>='];
@@ -346,6 +347,13 @@ export const TRADE_LOCK: Field[] = [
   f('unlock_when', 'Unlocked when', 'condition', { required: true }),
 ];
 
+export const BLOCK_LOCK: Field[] = [
+  f('block', 'Block', 'reg', { reg: 'blocks', required: true, help: 'Block id or #tag' }),
+  f('when', 'Only where', 'condition', { help: 'Sees the player (e.g. solace:structure)' }),
+  f('unlock_when', 'Unlocked when', 'condition', { required: true }),
+  f('message', 'Message when locked (action bar)', 'text'),
+];
+
 export const FACTION: Field[] = [
   f('name', 'Name', 'text', { required: true }),
   f('color', 'Colour (#RRGGBB)', 'string'),
@@ -378,5 +386,7 @@ export function blank(kind: Kind, firstChapter: string): any {
       return { outputs: [] };
     case 'trades':
       return { offers: 'all', unlock_when: { type: 'solace:flag', flag: 'trusted' } };
+    case 'block_locks':
+      return { block: 'minecraft:lectern', unlock_when: { type: 'solace:flag', flag: 'trusted' } };
   }
 }
