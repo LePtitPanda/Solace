@@ -138,6 +138,9 @@ public final class ServerCtx extends Ctx {
             Structure exact = level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(structure.id());
             start = exact == null ? null : level.structureManager().getStructureWithPieceAt(pos, exact);
         }
+        if ((start == null || !start.isValid()) && structure.id().getPath().contains("village")) {
+            start = com.solace.world.VillageBuildingLocator.homeStartAt(level, pos);
+        }
         if (start == null || !start.isValid()) {
             return null;
         }

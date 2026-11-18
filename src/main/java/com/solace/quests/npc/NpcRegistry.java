@@ -150,6 +150,16 @@ public final class NpcRegistry extends SavedData {
         setDirty();
     }
 
+    /** Only the last known position of the bound entity (cheap; markers call it every second). */
+    public void seen(String binding, Entity entity) {
+        Entry entry = entries.get(binding);
+        if (entry != null && entity.getUUID().equals(entry.uuid) && !entity.blockPosition().equals(entry.pos)) {
+            entry.dimension = entity.level().dimension().location().toString();
+            entry.pos = entity.blockPosition();
+            setDirty();
+        }
+    }
+
     /** Applies snapshot keys to a live entity, keeping its own position, UUID and everything else. */
     private static void restore(Entity entity, CompoundTag snapshot) {
         CompoundTag full = entity.saveWithoutId(new CompoundTag());
@@ -200,7 +210,7 @@ public final class NpcRegistry extends SavedData {
         }
         to.getPersistentData().putString(IDENTITY, identity);
         NpcBinding binding = binding(identity);
-        if (binding == null || !binding.entity().matches(to)) {
+        if (binding == null || binding.entity() == null || !binding.entity().matches(to)) {
             return;
         }
         boolean jobless = to instanceof Villager villager
@@ -260,6 +270,9 @@ public final class NpcRegistry extends SavedData {
 
     /** The nearest entity within {@code radius} that matches the binding (and its bound entity, if any). */
     public static Entity nearest(ServerCtx ctx, NpcBinding binding, double radius) {
+        if (binding.entity() == null) {
+            return null;
+        }
         Object outer = ctx.entity;
         Entity nearest = null;
         try {

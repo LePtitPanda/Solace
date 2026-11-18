@@ -14,7 +14,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 
 /**
- * First-hand gossip (trades, cures, hurting or killing villagers, Thief crimes and gifts) goes
+ * First-hand gossip (trades, cures, hurting or killing villagers, crimes) goes
  * through add/remove; villager-to-villager sharing and decay do not. Solace turns each change into
  * a step of the player's one world-wide villager standing.
  */

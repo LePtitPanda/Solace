@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  * packet that only names what the player wants; the server decides whether it happens.
  */
 public final class QuestNetwork {
-    private static final String PROTOCOL = "3";
+    private static final String PROTOCOL = "4";
     private static final SimpleChannel CHANNEL = NetworkRegistry.ChannelBuilder
             .named(new ResourceLocation(Solace.MOD_ID, "quests"))
             .networkProtocolVersion(() -> PROTOCOL)
@@ -81,6 +81,14 @@ public final class QuestNetwork {
                 .decoder(b -> new IntroHold(b.readBoolean()))
                 .consumerMainThread((packet, context) -> client(context,
                         () -> () -> com.solace.client.IntroHoldClient.set(packet.hold))).add();
+        CHANNEL.messageBuilder(PonderUnlocks.class, 9)
+                .encoder((p, b) -> {
+                    b.writeBoolean(p.all);
+                    b.writeCollection(p.items, FriendlyByteBuf::writeResourceLocation);
+                })
+                .decoder(b -> new PonderUnlocks(b.readBoolean(), b.readList(FriendlyByteBuf::readResourceLocation)))
+                .consumerMainThread((packet, context) -> client(context,
+                        () -> () -> com.solace.client.quests.ClientPonderUnlocks.set(packet.all, packet.items))).add();
     }
 
     private static void client(Supplier<NetworkEvent.Context> context, Supplier<Runnable> action) {
@@ -130,6 +138,14 @@ public final class QuestNetwork {
     }
 
     record LockedRecipes(List<ResourceLocation> recipes, List<ResourceLocation> items) {
+    }
+
+    /** The items whose ponders this player may open ({@code all}: every ponder). */
+    public static void ponderUnlocks(ServerPlayer player, boolean all, List<ResourceLocation> items) {
+        send(player, new PonderUnlocks(all, items));
+    }
+
+    record PonderUnlocks(boolean all, List<ResourceLocation> items) {
     }
 
     /** Hold (or release) the player's first-join loading screen. */

@@ -118,6 +118,32 @@ public final class Locks {
         return lock;
     }
 
+    /**
+     * {@code knowledge/*.json}: a knowledge book. Reading it (solace:knowledge_book with {knowledge:"&lt;id&gt;"}, or the
+     * flag "knowledge:&lt;id&gt;") opens the ponders of {@code ponders} (item ids or #item tags). Other ponders stay closed.
+     */
+    public record Knowledge(ResourceLocation id, Component name, List<Target> ponders) {
+    }
+
+    static Knowledge knowledge(ResourceLocation id, In in) {
+        List<Target> ponders = new ArrayList<>();
+        for (String text : in.strs("ponders")) {
+            boolean tag = text.startsWith("#");
+            ResourceLocation item = ResourceLocation.tryParse(tag ? text.substring(1) : text);
+            if (item == null) {
+                in.err("ponders", "not a valid id: \"" + text + "\"");
+            } else {
+                ponders.add(new Target(tag, item));
+            }
+        }
+        if (ponders.isEmpty()) {
+            in.err("ponders", "a knowledge entry needs \"ponders\"");
+        }
+        Knowledge knowledge = new Knowledge(id, in.text("name", true), List.copyOf(ponders));
+        in.done();
+        return knowledge;
+    }
+
     static TradeLock tradeLock(ResourceLocation id, In in) {
         Target entity = in.target("entity", "entity_type", false);
         boolean all = false;

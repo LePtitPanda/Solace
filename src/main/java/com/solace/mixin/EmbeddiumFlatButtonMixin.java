@@ -25,7 +25,7 @@ public abstract class EmbeddiumFlatButtonMixin {
     @ModifyConstant(method = "m_88315_", constant = @Constant(intValue = -3179338), remap = false)
     private int solace$useGoldSelectionIndicator(int original) {
         return WorldCreationThemeRenderer.isEmbeddiumVideoScreen(Minecraft.getInstance().screen)
-                ? WorldCreationThemeRenderer.GOLD
+                ? WorldCreationThemeRenderer.LIGHT
                 : original;
     }
 }

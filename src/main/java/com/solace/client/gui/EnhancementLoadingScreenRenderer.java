@@ -31,15 +31,15 @@ public final class EnhancementLoadingScreenRenderer {
         int dots = (int) (elapsed / 400L % 4L);
         String text = base + ".".repeat(dots);
         graphics.drawCenteredString(font, Component.literal(text), centerX, centerY + 8,
-                0xB8DDDDEE);
+                0xB8E0E0E0);
 
         int barWidth = 100;
         int barX = centerX - barWidth / 2;
         int barY = centerY + 25;
         float progress = (elapsed % 2200L) / 2200.0F;
         progress = 1.0F - (1.0F - progress) * (1.0F - progress);
-        graphics.fill(barX, barY, barX + barWidth, barY + 3, 0x596A4E18);
+        SolaceArt.slot(graphics::fill, barX - 1, barY - 1, barWidth + 2, 5, SolaceArt.SLOT);
         graphics.fill(barX, barY, barX + Math.max(1, Math.round(barWidth * Mth.clamp(progress, 0.0F, 1.0F))),
-                barY + 3, 0xB3D4A843);
+                barY + 3, SolaceArt.LINE);
     }
 }

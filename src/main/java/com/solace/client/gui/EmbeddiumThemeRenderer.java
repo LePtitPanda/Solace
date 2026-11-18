@@ -14,11 +14,11 @@ public final class EmbeddiumThemeRenderer {
 
     private static FlatButtonWidget.Style createStyle() {
         FlatButtonWidget.Style style = new FlatButtonWidget.Style();
-        style.bgHovered = 0xE66A4E18;
-        style.bgDefault = 0xD90C0C1C;
-        style.bgDisabled = 0x9907070F;
+        style.bgHovered = 0xE6242424;
+        style.bgDefault = 0xD90A0A0A;
+        style.bgDisabled = 0x99050505;
         style.textDefault = WorldCreationThemeRenderer.TEXT;
-        style.textDisabled = 0x88444455;
+        style.textDisabled = 0x884A4A4A;
         return style;
     }
 }

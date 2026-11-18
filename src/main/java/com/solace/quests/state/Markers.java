@@ -116,20 +116,49 @@ public final class Markers {
                             Integer.parseInt(parts[3]), label, marker.color(), marker.beam()));
                 }
             }
+            case "building" -> {
+                // A building of the home village, found once and remembered.
+                String cacheKey = "building:" + marker.building();
+                String cached = ctx.data().positions.get(cacheKey);
+                if (cached == null && mayLocate[0]) {
+                    mayLocate[0] = false;
+                    net.minecraft.server.level.ServerLevel overworld = player.server.overworld();
+                    BlockPos home = com.solace.world.HomeVillage.homeVillage(overworld);
+                    var box = home == null ? null : com.solace.world.VillageBuildingLocator.find(overworld, home, marker.building());
+                    if (box != null) {
+                        BlockPos c = box.getCenter();
+                        cached = "minecraft:overworld " + c.getX() + " " + c.getY() + " " + c.getZ();
+                        ctx.data().positions.put(cacheKey, cached);
+                        ctx.changed();
+                    }
+                }
+                if (cached != null) {
+                    String[] parts = cached.split(" ");
+                    out.add(new MarkerView(key, parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),
+                            Integer.parseInt(parts[3]), label, marker.color(), marker.beam()));
+                }
+            }
             case "npc" -> {
                 NpcBinding binding = ctx.content().npcs.get(marker.npc());
                 if (binding == null) {
                     return;
                 }
-                // The nearest loaded match (the bound one, for a first_met binding), otherwise where the
-                // bound NPC was last seen, otherwise where the player last talked to this NPC.
-                Entity nearest = com.solace.quests.npc.NpcRegistry.nearest(ctx, binding, 64);
+                // A bound first_met NPC is followed wherever it is loaded (it may wander out of the area);
+                // otherwise the nearest loaded match, otherwise where it was last seen or talked to.
+                // An unbound first_met binding (its NPC died) shows no stale spot: only a new candidate.
+                com.solace.quests.npc.NpcRegistry registry = com.solace.quests.npc.NpcRegistry.get(player.server);
+                boolean bound = binding.firstMet() && registry.bound(binding.id()) != null;
+                Entity nearest = bound ? registry.entity(player.server, binding.id()) : null;
                 if (nearest != null) {
-                    out.add(new MarkerView(key, ctx.dimension(), nearest.getBlockX(), nearest.getBlockY(),
-                            nearest.getBlockZ(), label, marker.color(), marker.beam()));
+                    registry.seen(binding.id().toString(), nearest);
                 } else {
-                    String seen = binding.firstMet()
-                            ? com.solace.quests.npc.NpcRegistry.get(player.server).lastSeen(binding.id()) : null;
+                    nearest = com.solace.quests.npc.NpcRegistry.nearest(ctx, binding, binding.firstMet() && !bound ? 128 : 64);
+                }
+                if (nearest != null) {
+                    out.add(new MarkerView(key, nearest.level().dimension().location().toString(), nearest.getBlockX(),
+                            nearest.getBlockY(), nearest.getBlockZ(), label, marker.color(), marker.beam()));
+                } else if (!binding.firstMet() || bound) {
+                    String seen = bound ? registry.lastSeen(binding.id()) : null;
                     seen = seen != null ? seen : ctx.data().positions.get("npc:" + marker.npc());
                     if (seen != null) {
                         String[] parts = seen.split(" ");

@@ -135,7 +135,7 @@ public final class DimensionLoadingScreenConfig {
 
     public static final class Entry {
         public String background = "config/fancymenu/assets/firstframe.jpg";
-        public String backgroundTint = "#9E061014";
+        public String backgroundTint = "#C8000000";
         public String cornerAnimation = "config/fancymenu/assets/loader2.gif";
         public String blockTexture = "config/solace/loading-screens/overworld-icon.png";
         public int cornerAnimationSize = 72;
@@ -148,13 +148,13 @@ public final class DimensionLoadingScreenConfig {
                 "Explore off the beaten path. Astralis rewards curious travelers.",
                 "Waystones and marked landmarks make long expeditions much safer."
         ));
-        public String accentColor = "#59D6A3";
-        public String dimensionLabelColor = "#65DDAA";
-        public String tipLabelColor = "#65DDAA";
-        public String primaryTextColor = "#EFF5F3";
-        public String secondaryTextColor = "#BBC6C3";
-        public String panelColor = "#E60C0C1C";
-        public String lineColor = "#59D6A3";
+        public String accentColor = "#D7D7D7";
+        public String dimensionLabelColor = "#8A8A8A";
+        public String tipLabelColor = "#8A8A8A";
+        public String primaryTextColor = "#E0E0E0";
+        public String secondaryTextColor = "#A8A8A8";
+        public String panelColor = "#E60A0A0A";
+        public String lineColor = "#404040";
 
         private static Entry overworld() {
             return new Entry();
@@ -170,11 +170,6 @@ public final class DimensionLoadingScreenConfig {
                     "Mark your portal coordinates before exploring the Nether.",
                     "Fire resistance can turn a disastrous fall into a narrow escape."
             ));
-            entry.accentColor = "#E87258";
-            entry.dimensionLabelColor = "#F08A68";
-            entry.tipLabelColor = "#F08A68";
-            entry.lineColor = entry.accentColor;
-            entry.backgroundTint = "#A62A0706";
             return entry;
         }
 
@@ -188,17 +183,12 @@ public final class DimensionLoadingScreenConfig {
                     "Carved pumpkins keep Endermen calm, but they also narrow your vision.",
                     "Keep spare blocks within reach; the void does not forgive hesitation."
             ));
-            entry.accentColor = "#B999E8";
-            entry.dimensionLabelColor = "#CBB1F2";
-            entry.tipLabelColor = "#CBB1F2";
-            entry.lineColor = entry.accentColor;
-            entry.backgroundTint = "#A6170D28";
             return entry;
         }
 
         private void sanitize(ResourceLocation dimension) {
             background = valueOr(background, "");
-            backgroundTint = colorOr(backgroundTint, "#A6000000");
+            backgroundTint = colorOr(backgroundTint, "#C8000000");
             cornerAnimation = valueOr(cornerAnimation, "");
             blockTexture = valueOr(blockTexture, "").replace(LEGACY_ICON_FOLDER, "config/solace/loading-screens/");
             cornerAnimationSize = Math.max(32, Math.min(160, cornerAnimationSize));
@@ -214,12 +204,12 @@ public final class DimensionLoadingScreenConfig {
                     tips.add("Adventure awaits.");
                 }
             }
-            accentColor = colorOr(accentColor, "#59D6A3");
+            accentColor = colorOr(accentColor, "#D7D7D7");
             dimensionLabelColor = colorOr(dimensionLabelColor, accentColor);
             tipLabelColor = colorOr(tipLabelColor, accentColor);
             primaryTextColor = colorOr(primaryTextColor, "#FFFFFF");
-            secondaryTextColor = colorOr(secondaryTextColor, "#C4CCCA");
-            panelColor = colorOr(panelColor, "#E60C0C1C");
+            secondaryTextColor = colorOr(secondaryTextColor, "#A8A8A8");
+            panelColor = colorOr(panelColor, "#E60A0A0A");
             lineColor = colorOr(lineColor, accentColor);
         }
 
@@ -235,11 +225,11 @@ public final class DimensionLoadingScreenConfig {
         }
 
         public int backgroundTint() {
-            return parseColor(backgroundTint, 0xA6000000);
+            return parseColor(backgroundTint, 0xC8000000);
         }
 
         public int accentColor() {
-            return parseColor(accentColor, 0xFF59D6A3);
+            return parseColor(accentColor, 0xFFD7D7D7);
         }
 
         public int dimensionLabelColor() {
@@ -255,11 +245,11 @@ public final class DimensionLoadingScreenConfig {
         }
 
         public int secondaryTextColor() {
-            return parseColor(secondaryTextColor, 0xFFC4CCCA);
+            return parseColor(secondaryTextColor, 0xFFA8A8A8);
         }
 
         public int panelColor() {
-            return parseColor(panelColor, 0xE60C0C1C);
+            return parseColor(panelColor, 0xE60A0A0A);
         }
 
         public int lineColor() {

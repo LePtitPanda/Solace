@@ -83,7 +83,6 @@ dependencies {
     compileOnly files('../mods/minecells-1.9.2.jar')
     compileOnly files('../mods/justtrialspawners-1.20.1-1.3.0.jar')
     compileOnly files('../mods/The_Undergarden-1.20.1-0.8.14.jar')
-    compileOnly files('../mods/difficulty_enhancement-0.1.jar')
     compileOnly files('../mods/terrain_slabs-forge-3.1.1.jar')
     compileOnly files('../mods/sodiumoptionsmodcompat-forge-1.0.0-1.20.1.jar')
     compileOnly files('../mods/modernworldcreation_forge_2.0.2_MC_1.20.1.jar')
@@ -124,8 +123,9 @@ dependencies {
     compileOnly files('../mods/moremobvariants-forge+1.20.1-1.3.0.1.jar')
     compileOnly files('../mods/ImmediatelyFast-Forge-1.5.5+1.20.4.jar')
     // Solace Quests optional integrations
-    compileOnly files('../mods/thief-1.20.1-1.2.2-forge.jar')
     compileOnly files('../mods/betterinventory-forge-1.20.1-2.1.1.jar')
+    compileOnly files('../mods/diet-forge-2.1.1+1.20.1.jar')
+    compileOnly files('../mods/sleeprework-FORGE-1.20.1-1.1.0.jar')
     compileOnly files('../mods/combatroll-forge-1.3.3+1.20.1.jar')
     compileOnly files('../mods/xaerominimap-forge-1.20.1-26.6.0.jar')
     compileOnly files('../mods/fancytoasts-1.5.1-forge-1.20.1.jar')

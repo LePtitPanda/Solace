@@ -1,7 +1,6 @@
 package com.solace.client.gui;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import com.mojang.blaze3d.vertex.PoseStack;
 import java.util.function.IntSupplier;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
@@ -14,9 +13,9 @@ import net.minecraft.util.Mth;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * A confirm button that must be held, like Difficulty Enhancement's confirm. It is
- * drawn entirely in the current accent color, and a fill sweeps across while the
- * mouse button, Enter or Space is held.
+ * A confirm button that must be held, like Difficulty Enhancement's confirm. It is a primary
+ * button whose flourish center takes the current accent color; a soft fill sweeps across
+ * while the mouse button, Enter or Space is held.
  */
 public class SolaceHoldButton extends AbstractButton {
     /** Difficulty Enhancement's normalConfirmTime is 35 ticks. */
@@ -77,47 +76,26 @@ public class SolaceHoldButton extends AbstractButton {
         boolean lit = isHovered() || holdStart >= 0L;
         hover = lit ? Math.min(1.0F, hover + delta * 8.0F) : Math.max(0.0F, hover - delta * 8.0F);
 
-        int color = 0xFF000000 | (accent.getAsInt() & 0xFFFFFF);
-        int rgb = color & 0xFFFFFF;
         int x = getX();
         int y = getY();
         int w = getWidth();
         int h = getHeight();
 
-        PoseStack pose = graphics.pose();
-        float scale = 1.0F + hover * 0.018F;
-        float cx = x + w / 2.0F;
-        float cy = y + h / 2.0F;
-        pose.pushPose();
-        pose.translate(cx, cy, 0.0F);
-        pose.scale(scale, scale, 1.0F);
-        pose.translate(-cx, -cy, 0.0F);
-
-        graphics.fill(x, y, x + w, y + h, active ? 0xE60C0C1C : 0xB607070F);
-        if (progress > 0.0F) {
-            int fill = Math.round(w * progress);
-            graphics.fill(x, y, x + fill, y + h, 0x48000000 | rgb);
-            graphics.fill(x, y + h - 2, x + fill, y + h, color);
-        }
-        if (hover > 0.02F) {
-            int alpha = Math.round(150.0F * hover);
-            int border = alpha << 24 | rgb;
-            graphics.fill(x - 1, y - 1, x + w + 1, y, border);
-            graphics.fill(x - 1, y + h, x + w + 1, y + h + 1, border);
-            graphics.fill(x - 1, y, x, y + h, border);
-            graphics.fill(x + w, y, x + w + 1, y + h, border);
-        }
-        int rail = 3 + Math.round(5.0F * hover);
-        graphics.fill(x, y, x + rail, y + h, active ? color : 0xFF3A321F);
+        // A primary button. Progress is monochrome; the accent only tints the flourish's
+        // center, so the button still hints at the current selection.
+        float glow = Math.max(hover, progress);
+        SolaceArt.Tones tones = WorldCreationThemeRenderer.tones(active, glow)
+                .withRivet(active ? 0xFF000000 | accent.getAsInt() : SolaceArt.LINE);
+        SolaceArt.Sink sink = graphics::fill;
+        graphics.fill(x + 2, y + 2, x + w - 2, y + h - 2, active ? 0xE60A0A0A : 0xC0050505);
+        SolaceArt.progress(sink, x, y, w, h, progress);
+        SolaceArt.primaryFrame(sink, x, y, w, h, tones);
 
         Font font = Minecraft.getInstance().font;
-        int textColor = active
-                ? SolaceChoiceCard.lerpArgb(Math.max(hover, progress), WorldCreationThemeRenderer.MUTED,
-                        WorldCreationThemeRenderer.TEXT)
-                : 0xFF444455;
-        String text = font.plainSubstrByWidth(getMessage().getString(), Math.max(1, w - rail - 12));
-        graphics.drawCenteredString(font, text, x + w / 2 + rail / 2, y + (h - font.lineHeight) / 2 + 1, textColor);
-        pose.popPose();
+        int textColor = active ? SolaceChoiceCard.lerpArgb(glow, 0xFFC8C8C8, WorldCreationThemeRenderer.TITLE)
+                : 0xFF4A4A4A;
+        String text = font.plainSubstrByWidth(getMessage().getString(), Math.max(1, w - 30));
+        graphics.drawCenteredString(font, text, x + w / 2, y + (h - font.lineHeight) / 2 + 1, textColor);
     }
 
     private void updateHold(int mouseX, int mouseY) {

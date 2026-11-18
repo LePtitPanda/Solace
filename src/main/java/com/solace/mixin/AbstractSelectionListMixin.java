@@ -1,5 +1,6 @@
 package com.solace.mixin;
 
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -48,7 +49,7 @@ public abstract class AbstractSelectionListMixin {
             }
             boolean spansScreen = this.x0 <= screen.width / 12 && this.x1 >= screen.width * 11 / 12;
             if (!spansScreen) {
-                graphics.fill(this.x0, this.y0, this.x1, this.y1, 0xA60C0C1C);
+                graphics.fill(this.x0, this.y0, this.x1, this.y1, 0xA60A0A0A);
             }
             this.renderBackground = false;
             this.renderTopAndBottom = false;
@@ -67,19 +68,15 @@ public abstract class AbstractSelectionListMixin {
         int right = Math.min(left + rowWidth, this.getScrollbarPosition() - 3);
         right = Math.max(left + 4, right);
         String className = screen.getClass().getName();
-        if (className.equals("net.minecraft.client.gui.screens.worldselection.SelectWorldScreen")
-                || className.equals("net.minecraft.client.gui.screens.packs.PackSelectionScreen")) {
-            graphics.fill(left - 2, top - 2, right, top + rowHeight + 2, 0xB3352A1A);
-            graphics.fill(left - 2, top - 2, left + 1, top + rowHeight + 2,
-                    WorldCreationThemeRenderer.GOLD);
-            graphics.fill(left + 1, top + rowHeight, right, top + rowHeight + 2,
-                    WorldCreationThemeRenderer.GOLD_DIM);
-            ci.cancel();
-            return;
-        }
-        graphics.fill(left, top - 2, right, top + rowHeight + 2, WorldCreationThemeRenderer.GOLD);
-        graphics.fill(left + 1, top - 1, right - 1, top + rowHeight + 1,
-                WorldCreationThemeRenderer.PANEL);
+        // Selected row: a lit frame around the row.
+        int inset = className.equals("net.minecraft.client.gui.screens.worldselection.SelectWorldScreen")
+                || className.equals("net.minecraft.client.gui.screens.packs.PackSelectionScreen") ? 2 : 0;
+        int x0 = left - inset;
+        int y0 = top - 2;
+        int x1 = right;
+        int y1 = top + rowHeight + 2;
+        graphics.fill(x0 + 2, y0 + 2, x1 - 2, y1 - 2, 0xB3242424);
+        SolaceArt.frame(graphics::fill, x0, y0, x1 - x0, y1 - y0, SolaceArt.Tones.HOVER);
         ci.cancel();
     }
 }

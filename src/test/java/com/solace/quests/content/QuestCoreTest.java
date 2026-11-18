@@ -602,12 +602,14 @@ class QuestCoreTest {
         String villagers = """
                 {"name":"Villagers","ranks":[{"id":"hated","name":"Hated","at":-400},
                   {"id":"unwelcome","name":"Unwelcome","at":-200},{"id":"distrusted","name":"Distrusted","at":-60}],
-                 "source":{"type":"solace:villager_gossip","defenders_attack_at":"unwelcome"}}""";
+                 "source":{"type":"solace:villager_gossip","defenders_attack_at":"unwelcome","golems_attack_at":"hated","defender_kill_standing":-60}}""";
         QuestContent content = QuestContent.build(files("factions", "villagers", villagers,
-                "factions", "bad", villagers.replace("\"unwelcome\"}", "\"nope\"}")), QuestContent.EMPTY, null);
+                "factions", "bad", villagers.replace("\"unwelcome\",\"golems", "\"nope\",\"golems")), QuestContent.EMPTY, null);
         Faction faction = content.factions.get(id("villagers"));
         assertEquals("unwelcome", faction.defendersAttackAt());
         assertEquals(-60, faction.defendersSafeFrom(), "hostile below the start of Distrusted");
+        assertEquals(-200, faction.golemsSafeFrom(), "golems only below the start of Unwelcome");
+        assertEquals(-60, faction.killStanding());
         assertTrue(content.problems.stream().anyMatch(problem -> problem.error()
                 && problem.path().contains("defenders_attack_at")), content.problems.toString());
     }

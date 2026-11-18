@@ -1,5 +1,6 @@
 package com.solace.client.quests;
 
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -38,13 +39,12 @@ public class QuestHudConfigScreen extends Screen {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         renderBackground(graphics);
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, 12, WorldCreationThemeRenderer.GOLD);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, 12, WorldCreationThemeRenderer.TITLE);
         graphics.drawCenteredString(this.font, "Drag the box to move the quest tracker.", this.width / 2, 26,
                 WorldCreationThemeRenderer.MUTED);
         int x = QuestHud.x(config, this.width), y = QuestHud.y(config, this.height);
-        graphics.fill(x, y, x + QuestHud.WIDTH, y + HEIGHT, 0xC00C0C1C);
-        graphics.fill(x, y, x + 2, y + HEIGHT, WorldCreationThemeRenderer.GOLD);
-        graphics.drawString(this.font, "Quest title", x + 6, y + 3, WorldCreationThemeRenderer.GOLD, false);
+        SolaceArt.panel(graphics::fill, x, y, QuestHud.WIDTH, HEIGHT, 0xC00A0A0A, SolaceArt.Tones.NORMAL, SolaceArt.PANEL_PLAIN);
+        graphics.drawString(this.font, "Quest title", x + 6, y + 3, WorldCreationThemeRenderer.TITLE, false);
         graphics.drawString(this.font, "First objective", x + 8, y + 14, WorldCreationThemeRenderer.TEXT, false);
         graphics.drawString(this.font, "Second objective", x + 8, y + 24, WorldCreationThemeRenderer.TEXT, false);
         super.render(graphics, mouseX, mouseY, partialTick);

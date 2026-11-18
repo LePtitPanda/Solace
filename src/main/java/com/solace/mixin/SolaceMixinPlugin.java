@@ -55,6 +55,9 @@ public final class SolaceMixinPlugin implements IMixinConfigPlugin {
         if (mixinClassName.contains(".Ae2CraftingTerm")) {
             return hasClass("appeng/menu/me/items/CraftingTermMenu.class");
         }
+        if (mixinClassName.endsWith(".BetterInventoryScreenMixin")) {
+            return hasClass("dev/fallingcloud/betterinventory/client/screen/BetterInventoryScreen.class");
+        }
         if (mixinClassName.endsWith(".BetterInventoryBackpackMixin")) {
             return hasClass("dev/fallingcloud/betterinventory/item/BackpackItem.class");
         }

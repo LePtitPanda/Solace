@@ -18,7 +18,8 @@ public record Quest(ResourceLocation id, ResourceLocation chapter, Component tit
                     boolean optional, boolean hidden, int hiddenDeps, int hiddenObjectives,
                     boolean autoStart, boolean repeatable, int cooldownSeconds,
                     boolean autoClaim, int timeLimitSeconds, boolean retry, boolean abandonable,
-                    Condition visibleWhen, List<Marker> markers, List<Phase> phases, List<Reward> rewards) {
+                    Condition visibleWhen, List<Marker> markers, List<Phase> phases, List<Reward> rewards,
+                    boolean toasts) {
     public static final String COMPLETE = "@complete";
     public static final String FAIL = "@fail";
     /** Objective types that complete by themselves when their (generated) condition holds. */

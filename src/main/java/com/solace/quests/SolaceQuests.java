@@ -1,6 +1,5 @@
 package com.solace.quests;
 
-import com.solace.quests.compat.ThiefCompat;
 import com.solace.quests.content.Locks;
 import com.solace.quests.content.QuestContentLoader;
 import com.solace.quests.dialogue.DialogueManager;
@@ -72,9 +71,6 @@ public final class SolaceQuests {
         MinecraftForge.EVENT_BUS.register(SolaceQuests.class);
         MinecraftForge.EVENT_BUS.register(VillageDefenders.class);
         com.solace.quests.hooks.CustomObjectiveHooks.register();
-        if (ModList.get().isLoaded("thief")) {
-            ThiefCompat.register();
-        }
     }
 
     @SubscribeEvent
@@ -166,6 +162,10 @@ public final class SolaceQuests {
         if (!event.getLevel().isClientSide() && reason != null && reason.shouldDestroy()
                 && entity.getServer() != null && NpcRegistry.identity(entity) != null) {
             NpcRegistry.get(entity.getServer()).removed(entity);
+        } else if (!event.getLevel().isClientSide() && reason == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                && entity.getServer() != null && NpcRegistry.identity(entity) != null) {
+            // Where a quest NPC was when its chunk unloaded: what its marker shows until it loads again.
+            NpcRegistry.get(entity.getServer()).seen(NpcRegistry.identity(entity), entity);
         }
         BRED.remove(entity.getUUID());
     }
@@ -235,6 +235,10 @@ public final class SolaceQuests {
             }
             QuestEngine.objective(player, "solace:interact_block", objective -> objective.target().matches(state), 1,
                     null, mode -> blockKey(mode, state));
+            if (!player.isShiftKeyDown() && DialogueManager.interactBlock(player, state)) {
+                event.setCanceled(true);
+                event.setCancellationResult(InteractionResult.SUCCESS);
+            }
         }
     }
 
@@ -328,6 +332,21 @@ public final class SolaceQuests {
         }
     }
 
+    /** The click that opened a dialogue must not also use the held item (eat it). */
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onUseWhileTalking(PlayerInteractEvent.RightClickItem event) {
+        if (event.getEntity() instanceof ServerPlayer player && DialogueManager.talking(player)) {
+            event.setCanceled(true);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public static void onStartUseWhileTalking(LivingEntityUseItemEvent.Start event) {
+        if (event.getEntity() instanceof ServerPlayer player && DialogueManager.talking(player)) {
+            event.setCanceled(true);
+        }
+    }
+
     /** Instant-use items count on right-click; the ones with a use time are handled above. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
     public static void onUse(PlayerInteractEvent.RightClickItem event) {
@@ -392,6 +411,7 @@ public final class SolaceQuests {
         QuestNetwork.forget(id);
         Markers.forget(id);
         com.solace.quests.locks.RecipeLocks.forget(id);
+        com.solace.quests.locks.PonderLocks.forget(id);
         com.solace.quests.locks.TradeLocks.forget(id);
     }
 

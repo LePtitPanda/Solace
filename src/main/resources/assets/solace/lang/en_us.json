@@ -30,5 +30,8 @@
   "block.solace.dream_floor": "Dream Floor",
   "biome.solace.dream": "Dream",
   "entity.solace.guildmaster": "Guildmaster",
-  "item.solace.guildmaster_spawn_egg": "Guildmaster Spawn Egg"
+  "item.solace.guildmaster_spawn_egg": "Guildmaster Spawn Egg",
+  "item.solace.knowledge_book": "Knowledge Book",
+  "item.solace.knowledge_book.desc": "Read it to learn how these things work.",
+  "effect.solace.shackled": "Shackled"
 }

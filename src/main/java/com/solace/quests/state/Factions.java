@@ -3,6 +3,8 @@ package com.solace.quests.state;
 import com.solace.quests.api.QuestEvent;
 import com.solace.quests.content.Faction;
 import com.solace.quests.network.QuestNetwork;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -45,7 +47,7 @@ public final class Factions {
             return;
         }
         if (faction.gossip()) {
-            // Real gossip too, so nearby trade prices and Thief react.
+            // Real gossip too, so nearby trade prices react.
             writeGossip(ctx.player, faction, amount);
         }
         set(ctx, faction, get(ctx, faction.id()) + amount);
@@ -68,6 +70,10 @@ public final class Factions {
         }
         ctx.data().reputation.put(faction.id(), now);
         ctx.changed();
+        if (now < old) {
+            ctx.player.displayClientMessage(Component.literal((now - old) + " reputation with ").append(faction.name())
+                    .withStyle(ChatFormatting.RED), true);
+        }
         Faction.Rank rank = faction.ranks().get(faction.rankIndex(now));
         if (faction.rankIndex(old) != faction.rankIndex(now)) {
             QuestNetwork.toast(ctx.player, "reputation", faction.name(), rank.name(), faction.icon());
@@ -78,7 +84,7 @@ public final class Factions {
 
     /**
      * Quest rewards and penalties on a gossip faction become real vanilla gossip on the villagers
-     * around the player, so trade prices and the Thief mod react as if the player had earned it.
+     * around the player, so trade prices react as if the player had earned it.
      */
     private static void writeGossip(ServerPlayer player, Faction faction, int amount) {
         writing = true;
@@ -112,7 +118,7 @@ public final class Factions {
 
     /**
      * A first-hand gossip change on one villager. One deed is often told to every witness in the
-     * same tick (a killed villager, a Thief crime, a raid won), so per tick only the strongest
+     * same tick (a killed villager, a crime, a raid won), so per tick only the strongest
      * villager's change counts, not the sum over villagers.
      */
     public static void onGossip(Object container, UUID id, int delta) {

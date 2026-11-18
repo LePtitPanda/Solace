@@ -190,7 +190,8 @@ public final class QuestParser {
                 repeatable, cooldown, in.bool("auto_claim", false), in.integer("time_limit_seconds", 0, 0),
                 onFail.equals("reset"), in.bool("abandonable", true), condition(in, "visible_when"),
                 // In the single-phase shorthand the top-level markers already belong to that phase.
-                in.has("phases") ? markers(in, "markers") : List.of(), List.copyOf(phases), List.copyOf(rewards));
+                in.has("phases") ? markers(in, "markers") : List.of(), List.copyOf(phases), List.copyOf(rewards),
+                in.bool("toasts", true));
         in.done();
         return quest;
     }
@@ -617,7 +618,7 @@ public final class QuestParser {
             } else if (entry.isJsonPrimitive() && ResourceLocation.tryParse(entry.getAsString()) != null) {
                 ResourceLocation ref = ResourceLocation.tryParse(entry.getAsString());
                 in.refTo(key + "[" + i + "]", "markers", ref);
-                list.add(new Marker(ref, "ref", null, 0, 0, 0, null, null, null, null, null, false));
+                list.add(new Marker(ref, "ref", null, 0, 0, 0, null, null, null, null, null, false, null));
             } else {
                 in.err(key + "[" + i + "]", "expected a marker id or a marker object");
             }
@@ -632,6 +633,7 @@ public final class QuestParser {
         Target structure = null;
         ResourceLocation npc = null;
         String objective = null;
+        ResourceLocation building = null;
         switch (kind) {
             case "position" -> {
                 dimension = in.id("dimension", true);
@@ -640,10 +642,11 @@ public final class QuestParser {
             case "structure" -> structure = in.target("structure", "structure", true);
             case "npc" -> npc = in.ref("npc", "npcs", true);
             case "objective" -> objective = in.req("objective");
-            default -> in.err("target", "expected position, structure, npc or objective");
+            case "building" -> building = in.id("building", true);
+            default -> in.err("target", "expected position, structure, npc, objective or building");
         }
         return new Marker(null, kind, dimension, pos[0], pos[1], pos[2], structure, npc, objective,
-                in.text("label", false), in.str("color", "gold"), in.bool("beam", false));
+                in.text("label", false), in.str("color", "gold"), in.bool("beam", false), building);
     }
 
     public static Marker markerFile(ResourceLocation id, In in) {
@@ -691,6 +694,8 @@ public final class QuestParser {
         boolean gossip = false;
         int radius = 48;
         String defendersAttackAt = null;
+        String golemsAttackAt = null;
+        Integer defenderKillStanding = null;
         In source = in.obj("source");
         if (source != null) {
             gossip = source.req("type").equals("solace:villager_gossip");
@@ -704,6 +709,15 @@ public final class QuestParser {
             } else {
                 defendersAttackAt = attackAt;
             }
+            String golemsAt = source.str("golems_attack_at", null);
+            if (golemsAt != null && ranks.stream().noneMatch(rank -> rank.id().equals(golemsAt))) {
+                source.err("golems_attack_at", "no rank \"" + golemsAt + "\" in this faction");
+            } else {
+                golemsAttackAt = golemsAt;
+            }
+            if (source.has("defender_kill_standing")) {
+                defenderKillStanding = source.integer("defender_kill_standing", 0, Integer.MIN_VALUE);
+            }
             source.done();
         }
         int min = in.integer("min", -1000, Integer.MIN_VALUE);
@@ -713,7 +727,8 @@ public final class QuestParser {
         }
         Faction faction = new Faction(id, in.text("name", true), color, icon(in),
                 in.integer("default", 0, Integer.MIN_VALUE), min, max, List.copyOf(ranks), List.copyOf(relations),
-                gossip, radius, defendersAttackAt);
+                gossip, radius, defendersAttackAt,
+                golemsAttackAt != null || defendersAttackAt == null ? golemsAttackAt : defendersAttackAt, defenderKillStanding);
         in.done();
         return faction;
     }

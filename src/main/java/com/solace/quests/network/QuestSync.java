@@ -190,7 +190,7 @@ public final class QuestSync {
                     Component pausedText = !paused ? Component.empty()
                             : objective.pausedText() != null ? objective.pausedText() : waitingFor(state, phase, objective);
                     objectives.add(new ObjectiveView(objective.id(),
-                            objective.text() != null ? objective.text() : describe(objective), objective.icon(),
+                            objective.text() != null ? objective.text() : describe(objective), objectiveIcon(objective),
                             progress, objective.count(), objective.optional(), objective.type().equals("solace:checkmark"),
                             !objective.needs().isEmpty() || children.contains(objective.id()), paused, pausedText));
                 }
@@ -319,6 +319,16 @@ public final class QuestSync {
             }
             default -> null;
         };
+    }
+
+    private static final java.util.Set<String> ITEM_OBJECTIVES = java.util.Set.of("solace:item", "solace:craft", "solace:smelt",
+            "solace:deliver", "solace:use_item", "solace:place_block");
+
+    /** The objective's own icon, else the item it asks for (not for tags). */
+    private static String objectiveIcon(com.solace.quests.content.Quest.Objective objective) {
+        if (objective.icon() != null) return objective.icon();
+        var target = objective.target();
+        return ITEM_OBJECTIVES.contains(objective.type()) && target != null && !target.tag() ? "item:" + target.id() : null;
     }
 
     private static String icon(ServerCtx ctx, Reward reward) {

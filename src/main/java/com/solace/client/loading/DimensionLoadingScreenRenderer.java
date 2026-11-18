@@ -3,6 +3,8 @@ package com.solace.client.loading;
 import com.mojang.authlib.GameProfile;
 import com.mojang.authlib.minecraft.MinecraftProfileTexture;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.solace.client.gui.SolaceArt;
+import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.config.DimensionLoadingScreenConfig;
 import java.util.List;
 import java.util.Map;
@@ -44,9 +46,8 @@ public final class DimensionLoadingScreenRenderer {
         int height = screen.height;
         int margin = Mth.clamp(width / 28, 18, 40);
 
-        renderBackground(graphics, config, width, height);
+        renderBackground(screen, graphics, config, width, height);
         graphics.fill(0, 0, width, height, config.backgroundTint());
-        renderCornerFrame(graphics, config, width, height, margin);
         renderIdentity(graphics, minecraft, font, config, width, margin, Mth.clamp(height / 18, 28, 40));
         renderProgress(graphics, font, config, width, height, margin, progress, status);
         renderDimensionCopy(graphics, font, config, width, height, margin);
@@ -67,38 +68,15 @@ public final class DimensionLoadingScreenRenderer {
         return created;
     }
 
-    private static void renderBackground(GuiGraphics graphics, DimensionLoadingScreenConfig.Entry config,
+    private static void renderBackground(Screen screen, GuiGraphics graphics, DimensionLoadingScreenConfig.Entry config,
                                          int width, int height) {
         LoadingScreenTextureCache.ImageTexture texture = LoadingScreenTextureCache.image(config.background);
         if (texture == null) {
-            graphics.fillGradient(0, 0, width, height, 0xFF070811, 0xFF020306);
+            // No art for this dimension: the menus' lattice backdrop.
+            WorldCreationThemeRenderer.renderBackdrop(screen, graphics);
             return;
         }
         blitCover(graphics, texture, 0, 0, width, height);
-    }
-
-    private static void renderCornerFrame(GuiGraphics graphics, DimensionLoadingScreenConfig.Entry config,
-                                          int width, int height, int margin) {
-        int length = Mth.clamp(width / 11, 62, 108);
-        int accent = config.accentColor();
-
-        renderCorner(graphics, margin, margin, length, 1, 1, accent);
-        renderCorner(graphics, width - margin, margin, length, -1, 1, accent);
-        renderCorner(graphics, margin, height - margin, length, 1, -1, accent);
-        renderCorner(graphics, width - margin, height - margin, length, -1, -1, accent);
-    }
-
-    private static void renderCorner(GuiGraphics graphics, int x, int y, int length, int xDirection, int yDirection,
-                                     int accent) {
-        fillDirected(graphics, x, y, length, 2, xDirection, yDirection, accent);
-        fillDirected(graphics, x, y, 2, length, xDirection, yDirection, accent);
-    }
-
-    private static void fillDirected(GuiGraphics graphics, int x, int y, int width, int height,
-                                     int xDirection, int yDirection, int color) {
-        int x2 = x + width * xDirection;
-        int y2 = y + height * yDirection;
-        graphics.fill(Math.min(x, x2), Math.min(y, y2), Math.max(x, x2), Math.max(y, y2), color);
     }
 
     private static void renderIdentity(GuiGraphics graphics, Minecraft minecraft, Font font,
@@ -207,11 +185,8 @@ public final class DimensionLoadingScreenRenderer {
 
     private static void renderAssetFrame(GuiGraphics graphics, DimensionLoadingScreenConfig.Entry config,
                                          int x, int y, int size) {
-        graphics.fill(x - 5, y - 5, x + size + 5, y + size + 5, 0xE8050507);
-        graphics.fill(x - 4, y - 4, x + size + 4, y - 2, config.accentColor());
-        graphics.fill(x - 4, y + size + 2, x + size + 4, y + size + 4, config.accentColor());
-        graphics.fill(x - 4, y - 2, x - 2, y + size + 2, config.accentColor());
-        graphics.fill(x + size + 2, y - 2, x + size + 4, y + size + 2, config.accentColor());
+        SolaceArt.panel(graphics::fill, x - 5, y - 5, size + 10, size + 10, 0xE80A0A0A, SolaceArt.Tones.NORMAL,
+                SolaceArt.PANEL_PLAIN);
     }
 
     private static void renderDimensionCopy(GuiGraphics graphics, Font font,
@@ -224,7 +199,7 @@ public final class DimensionLoadingScreenRenderer {
                 config.dimensionLabelColor(), true);
         int labelWidth = Math.round(font.width(config.dimensionLabel) * labelScale);
         int labelBottom = labelY + Math.round(font.lineHeight * labelScale);
-        graphics.fill(x, labelBottom + 5, x + Math.max(54, labelWidth), labelBottom + 7, config.accentColor());
+        graphics.fill(x, labelBottom + 5, x + Math.max(54, labelWidth), labelBottom + 6, config.lineColor());
 
         int titleY = labelBottom + 24;
         float titleScale = Mth.clamp(height / 150.0F, 2.8F, 4.25F);
@@ -246,8 +221,8 @@ public final class DimensionLoadingScreenRenderer {
         int x = margin + 10;
         int y = height - margin - panelHeight - 10;
 
-        graphics.fill(x, y, x + panelWidth, y + panelHeight, config.panelColor());
-        renderBracketPanel(graphics, config.accentColor(), x, y, panelWidth, panelHeight);
+        SolaceArt.panel(graphics::fill, x, y, panelWidth, panelHeight, config.panelColor(), SolaceArt.Tones.NORMAL,
+                SolaceArt.PANEL_ORNATE);
 
         float labelScale = 1.35F;
         drawScaled(graphics, font, config.tipLabel, x + 14, y + 13, labelScale,
@@ -256,16 +231,6 @@ public final class DimensionLoadingScreenRenderer {
         graphics.fill(x + 14, dividerY, x + panelWidth - 14, dividerY + 1, config.lineColor());
         drawWrappedScaled(graphics, font, tip, x + 14, dividerY + 11, panelWidth - 28,
                 1.12F, config.secondaryTextColor(), 3);
-    }
-
-    private static void renderBracketPanel(GuiGraphics graphics, int color, int x, int y, int width, int height) {
-        int corner = Math.min(9, height / 4);
-        graphics.fill(x, y, x + width, y + 2, color);
-        graphics.fill(x, y + height - 2, x + width, y + height, color);
-        graphics.fill(x, y, x + 2, y + corner, color);
-        graphics.fill(x + width - 2, y, x + width, y + corner, color);
-        graphics.fill(x, y + height - corner, x + 2, y + height, color);
-        graphics.fill(x + width - 2, y + height - corner, x + width, y + height, color);
     }
 
     private static void renderCornerAnimation(GuiGraphics graphics, DimensionLoadingScreenConfig.Entry config,

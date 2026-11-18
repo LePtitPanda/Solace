@@ -56,9 +56,9 @@ public abstract class ForgeScrollPanelMixin {
                                                 float partialTick, CallbackInfo ci) {
         if (WorldCreationThemeRenderer.isFrontEndScreen(Minecraft.getInstance().screen)
                 && Minecraft.getInstance().screen.getClass().getName().equals("net.minecraftforge.client.gui.ModListScreen")) {
-            graphics.fill(this.left, this.top, this.right, this.bottom, 0xD90C0C1C);
+            graphics.fill(this.left, this.top, this.right, this.bottom, 0xD90A0A0A);
             WorldCreationThemeRenderer.renderBracketPanel(graphics, this.left, this.top,
-                    this.right - this.left, this.bottom - this.top, WorldCreationThemeRenderer.GOLD_DIM);
+                    this.right - this.left, this.bottom - this.top, WorldCreationThemeRenderer.LINE);
             ci.cancel();
         }
     }

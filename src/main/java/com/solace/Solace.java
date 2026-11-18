@@ -46,6 +46,7 @@ public class Solace {
         LOGGER.info("[Solace] Mod Constructor Called");
         com.solace.performance.LogNoiseFilter.install();
         SolaceItems.ITEMS.register(FMLJavaModLoadingContext.get().getModEventBus());
+        com.solace.registry.SolaceEffects.EFFECTS.register(FMLJavaModLoadingContext.get().getModEventBus());
         com.solace.registry.SolaceEntities.ENTITY_TYPES.register(FMLJavaModLoadingContext.get().getModEventBus());
         com.solace.compat.terrainslabs.TerrainSlabsCompat.register(FMLJavaModLoadingContext.get().getModEventBus());
         LootEditorNetwork.register();
@@ -56,6 +57,7 @@ public class Solace {
         com.solace.world.DreamDimension.init(FMLJavaModLoadingContext.get().getModEventBus());
         MinecraftForge.EVENT_BUS.register(com.solace.world.DreamDimension.class);
         MinecraftForge.EVENT_BUS.register(com.solace.world.IntroHold.class);
+        MinecraftForge.EVENT_BUS.register(com.solace.world.Shackles.class);
         updateCraftPresenceConfig();
     }
 

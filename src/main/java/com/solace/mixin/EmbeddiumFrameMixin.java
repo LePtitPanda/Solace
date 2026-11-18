@@ -11,7 +11,7 @@ public abstract class EmbeddiumFrameMixin {
     @ModifyConstant(method = "m_88315_", constant = @Constant(intValue = -5592406), remap = false)
     private int solace$useGoldFrame(int original) {
         return WorldCreationThemeRenderer.isEmbeddiumVideoScreen(Minecraft.getInstance().screen)
-                ? WorldCreationThemeRenderer.GOLD_DIM
+                ? WorldCreationThemeRenderer.LINE
                 : original;
     }
 }

@@ -34,6 +34,11 @@ public final class SolaceItems {
             () -> new LootTableEditorItem(new Item.Properties().stacksTo(1).rarity(Rarity.EPIC))
     );
 
+    public static final RegistryObject<Item> KNOWLEDGE_BOOK = ITEMS.register(
+            "knowledge_book",
+            () -> new com.solace.item.KnowledgeBookItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON))
+    );
+
     public static final RegistryObject<Item> GUILDMASTER_SPAWN_EGG = ITEMS.register(
             "guildmaster_spawn_egg",
             () -> new ForgeSpawnEggItem(SolaceEntities.GUILDMASTER, 0x5E3B26, 0xC9A227, new Item.Properties())

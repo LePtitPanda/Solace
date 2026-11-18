@@ -46,7 +46,7 @@ public abstract class SolaceSetupScreen extends Screen implements SolaceThemedSc
 
         int top = WorldCreationThemeRenderer.MENU_CONTENT_TOP + 8;
         int footerY = buttonRowY() - 18;
-        int bottomLimit = footerY - (footnote == null ? 10 : 22);
+        int bottomLimit = footerY - (footnote == null ? 14 : 30); // leaves room for the footer crest
         int cardHeight = Mth.clamp(bottomLimit - top, 56, CARD_MAX_HEIGHT);
         int freeSpace = bottomLimit - top - cardHeight;
         top += Math.max(0, freeSpace / 3);
@@ -73,7 +73,7 @@ public abstract class SolaceSetupScreen extends Screen implements SolaceThemedSc
             if (card.isSelected()) {
                 int background = card.selectedBackground() & 0xFFFFFF;
                 int accent = card.accent() & 0xFFFFFF;
-                graphics.fill(0, 0, this.width, this.height, 0x70000000 | background);
+                graphics.fill(0, 0, this.width, this.height, 0x50000000 | background);
                 graphics.fillGradient(0, this.height / 2, this.width, this.height, 0x00000000, 0x1C000000 | accent);
                 return;
             }
@@ -86,7 +86,7 @@ public abstract class SolaceSetupScreen extends Screen implements SolaceThemedSc
                 return card.accent();
             }
         }
-        return WorldCreationThemeRenderer.GOLD;
+        return WorldCreationThemeRenderer.LIGHT;
     }
 
     @Override
@@ -104,9 +104,9 @@ public abstract class SolaceSetupScreen extends Screen implements SolaceThemedSc
             }
         }
         if (footnote != null) {
-            int y = buttonRowY() - 18 - 6 - this.font.lineHeight;
+            int y = buttonRowY() - 18 - 12 - this.font.lineHeight;
             String text = this.font.plainSubstrByWidth(footnote.getString(), this.width - 20);
-            graphics.drawCenteredString(this.font, text, centerX, y, 0xFF55557A);
+            graphics.drawCenteredString(this.font, text, centerX, y, 0xFF5A5A5A);
         }
     }
 }

@@ -10,6 +10,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.animal.AbstractGolem;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
@@ -23,10 +24,10 @@ import java.util.UUID;
 
 /**
  * Village defenders ({@code #solace:village_defenders}: iron golems, guards, clay golems) and the
- * {@code defenders_attack_at} rank of a villager-gossip faction. A defender goes for a player only when the
+ * {@code defenders_attack_at} rank of a villager-gossip faction ({@code golems_attack_at} for golems). A defender goes for a player only when the
  * player's standing is at that rank or lower, when the player hurt it, or when it saw the player hurt a villager
- * or another defender. Thief crimes and vanilla per-villager gossip no longer set defenders on anyone.
- * Killed by a defender while at that rank or lower, the player's standing is lifted to the start of the rank above.
+ * or another defender. Crimes and vanilla per-villager gossip do not set defenders on anyone.
+ * Killed by any defender, the player's standing is lifted to the faction's {@code defender_kill_standing} if below it.
  * Without a faction that sets {@code defenders_attack_at}, nothing here changes vanilla behaviour.
  */
 public final class VillageDefenders {
@@ -55,13 +56,18 @@ public final class VillageDefenders {
         return null;
     }
 
-    /** True if defenders attack this player on sight. */
-    public static boolean hostile(ServerPlayer player) {
+    /** Standing a defender leaves alone: golems (iron, clay) use the faction's golem rank, guards the defender rank. */
+    private static int safeFrom(Faction faction, LivingEntity defender) {
+        return defender instanceof AbstractGolem ? faction.golemsSafeFrom() : faction.defendersSafeFrom();
+    }
+
+    /** True if this defender attacks this player on sight. */
+    public static boolean hostile(ServerPlayer player, LivingEntity defender) {
         Faction faction = faction(QuestContent.current);
         if (faction == null || player.isCreative() || player.isSpectator()) {
             return false;
         }
-        return Factions.get(QuestEngine.ctx(player), faction.id()) < faction.defendersSafeFrom();
+        return Factions.get(QuestEngine.ctx(player), faction.id()) < safeFrom(faction, defender);
     }
 
     private static boolean provoked(LivingEntity defender, ServerPlayer player) {
@@ -81,7 +87,7 @@ public final class VillageDefenders {
         LivingEntity defender = event.getEntity();
         if (event.getNewTarget() instanceof ServerPlayer player && defender.getType().is(DEFENDERS)
                 && faction(QuestContent.current) != null
-                && defender.getLastHurtByMob() != player && !provoked(defender, player) && !hostile(player)) {
+                && defender.getLastHurtByMob() != player && !provoked(defender, player) && !hostile(player, defender)) {
             event.setCanceled(true);
         }
     }
@@ -109,11 +115,12 @@ public final class VillageDefenders {
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)
-                || player.tickCount % 20 != 0 || !hostile(player)) {
+                || player.tickCount % 20 != 0) {
             return;
         }
         for (Mob defender : player.level().getEntitiesOfClass(Mob.class, player.getBoundingBox().inflate(AGGRO_RANGE),
-                mob -> mob.getType().is(DEFENDERS) && mob.getTarget() == null && mob.hasLineOfSight(player))) {
+                mob -> mob.getType().is(DEFENDERS) && mob.getTarget() == null && hostile(player, mob)
+                        && mob.hasLineOfSight(player))) {
             defender.setTarget(player);
         }
     }
@@ -130,8 +137,8 @@ public final class VillageDefenders {
             return;
         }
         ServerCtx ctx = QuestEngine.ctx(player);
-        if (Factions.get(ctx, faction.id()) < faction.defendersSafeFrom()) {
-            Factions.set(ctx, faction, faction.defendersSafeFrom());
+        if (Factions.get(ctx, faction.id()) < faction.killStanding()) {
+            Factions.set(ctx, faction, faction.killStanding());
         }
     }
 }

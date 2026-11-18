@@ -1,5 +1,6 @@
 package com.solace.client.quests;
 
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.quests.network.QuestNetwork;
 import com.solace.quests.network.Views.ChoiceView;
@@ -24,7 +25,7 @@ public class DialogueScreen extends Screen {
     private static final int MARGIN = 24;
     private static final int CHOICE_HEIGHT = 22;
     private static final int CHOICE_WIDTH = 230;
-    private static final int PANEL_FILL = 0xE60C0C1C;
+    private static final int PANEL_FILL = 0xE60A0A0A;
     private static final long MILLIS_PER_CHAR = 18L;
 
     private QuestNetwork.DialogueNode node;
@@ -127,16 +128,16 @@ public class DialogueScreen extends Screen {
         int right = this.width - MARGIN;
         int top = this.height - PANEL_HEIGHT - MARGIN;
         int bottom = this.height - MARGIN;
-        graphics.fill(left, top, right, bottom, PANEL_FILL);
-        graphics.fill(left, top, right, top + 1, WorldCreationThemeRenderer.GOLD);
-        graphics.fill(left, bottom - 1, right, bottom, WorldCreationThemeRenderer.GOLD_DIM);
+        WorldCreationThemeRenderer.renderPanel(graphics, left, top, right - left, bottom - top, PANEL_FILL,
+                SolaceArt.Tones.NORMAL, SolaceArt.PANEL_ORNATE);
 
         String speaker = node.speaker().getString();
         if (!speaker.isEmpty()) {
-            int plateWidth = this.font.width(node.speaker()) + 18;
-            graphics.fill(left + 10, top - 15, left + 10 + plateWidth, top + 1, 0xFF0C0C1C);
-            graphics.fill(left + 10, top - 15, left + 10 + plateWidth, top - 14, WorldCreationThemeRenderer.GOLD);
-            graphics.drawString(this.font, node.speaker(), left + 19, top - 10, WorldCreationThemeRenderer.GOLD, false);
+            // Name tab sitting on the panel's top edge.
+            int plateWidth = this.font.width(node.speaker()) + 20;
+            SolaceArt.panel(graphics::fill, left + 12, top - 15, plateWidth, 17, 0xF0050505, SolaceArt.Tones.NORMAL,
+                    SolaceArt.PANEL_BARE);
+            graphics.drawString(this.font, node.speaker(), left + 22, top - 10, WorldCreationThemeRenderer.TITLE, false);
         }
 
         if (node.npcEntity() >= 0 && this.minecraft.level != null) {
@@ -173,20 +174,21 @@ public class DialogueScreen extends Screen {
                 int boxY = boxes.get(i)[1];
                 boolean hovered = choice.enabled() && mouseX >= x && mouseX < x + CHOICE_WIDTH && mouseY >= boxY
                         && mouseY < boxY + CHOICE_HEIGHT;
-                graphics.fill(x, boxY, x + CHOICE_WIDTH, boxY + CHOICE_HEIGHT, hovered ? 0xF01A1508 : PANEL_FILL);
-                graphics.fill(x, boxY, x + 2, boxY + CHOICE_HEIGHT, choice.enabled()
-                        ? WorldCreationThemeRenderer.GOLD : WorldCreationThemeRenderer.GOLD_DIM);
+                graphics.fill(x + 2, boxY + 2, x + CHOICE_WIDTH - 2, boxY + CHOICE_HEIGHT - 2,
+                        hovered ? 0xF0242424 : PANEL_FILL);
+                SolaceArt.frame(graphics::fill, x, boxY, CHOICE_WIDTH, CHOICE_HEIGHT,
+                        WorldCreationThemeRenderer.tones(choice.enabled(), hovered ? 1.0F : 0.0F), false);
                 String number = (i + 1) + ".";
-                graphics.drawString(this.font, number, x + 8, boxY + 7, WorldCreationThemeRenderer.GOLD_DIM, false);
+                graphics.drawString(this.font, number, x + 8, boxY + 7, WorldCreationThemeRenderer.LINE, false);
                 List<FormattedCharSequence> label = this.font.split(choice.text(), CHOICE_WIDTH - 30);
                 if (!label.isEmpty()) {
                     graphics.drawString(this.font, label.get(0), x + 22, boxY + 7, !choice.enabled()
-                            ? WorldCreationThemeRenderer.MUTED : hovered ? WorldCreationThemeRenderer.GOLD
+                            ? WorldCreationThemeRenderer.MUTED : hovered ? WorldCreationThemeRenderer.TITLE
                             : WorldCreationThemeRenderer.TEXT, false);
                 }
             }
             if (node.choices().isEmpty() && node.canAdvance() && (Util.getMillis() / 500) % 2 == 0) {
-                graphics.drawString(this.font, ">", right - 14, bottom - 14, WorldCreationThemeRenderer.GOLD, false);
+                graphics.drawString(this.font, ">", right - 14, bottom - 14, WorldCreationThemeRenderer.LIGHT, false);
             }
         }
     }

@@ -19,13 +19,15 @@ import java.util.UUID;
 public final class IntroHold {
     private static final int TICKS_IN_DREAM = 40;
     private static final int FAILSAFE_TICKS = 20 * 60;
-    private static final Map<UUID, int[]> HELD = new HashMap<>(); // {ticks held, ticks in dream}
+    // {ticks since the client said it was ready, ticks in dream, ready 0/1}. The failsafe only counts after ready:
+    // a minimized or background game draws nothing, so it can take any time to get there.
+    private static final Map<UUID, int[]> HELD = new HashMap<>();
 
     private IntroHold() {
     }
 
     public static void hold(ServerPlayer player) {
-        HELD.put(player.getUUID(), new int[2]);
+        HELD.put(player.getUUID(), new int[3]);
         QuestNetwork.introHold(player, true);
     }
 
@@ -35,7 +37,11 @@ public final class IntroHold {
      * teleport during login is undone by login-protection mods.
      */
     public static void ready(ServerPlayer player) {
-        if (HELD.containsKey(player.getUUID())) QuestApi.setFlag(player, "intro.ready", true);
+        com.mojang.logging.LogUtils.getLogger().info("[Solace] Intro ready from {} at {} in {}.", player.getGameProfile().getName(),
+                player.blockPosition().toShortString(), player.level().dimension().location());
+        QuestApi.setFlag(player, "intro.ready", true);
+        int[] ticks = HELD.get(player.getUUID());
+        if (ticks != null) ticks[2] = 1;
     }
 
     @SubscribeEvent
@@ -43,7 +49,7 @@ public final class IntroHold {
         if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) return;
         int[] ticks = HELD.get(player.getUUID());
         if (ticks == null) return;
-        ticks[0]++;
+        if (ticks[2] == 1) ticks[0]++;
         ticks[1] = DreamDimension.isDream(player.level()) ? ticks[1] + 1 : 0;
         if (ticks[1] >= TICKS_IN_DREAM || ticks[0] >= FAILSAFE_TICKS) {
             HELD.remove(player.getUUID());

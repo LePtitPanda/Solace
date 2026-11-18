@@ -105,8 +105,8 @@ Any text field takes vanilla text-component JSON: `"Plain words"`,
   ] }
 ```
 
-- `id` is required and unique in the quest. `story` is shown in chat when the phase begins and
-  kept in the journal.
+- `id` is required and unique in the quest. `story` is kept in the book's "Story so far" (nothing is
+  sent to chat).
 - `on_enter`: effects run when the phase begins.
 - `transitions` are checked in order; the first whose `when` is true wins. `to` is a phase id,
   `@complete` or `@fail`. `label` is recorded in the player's quest history. `actions` (effects)
@@ -289,6 +289,8 @@ still claimed with the rest.
 }
 ```
 
+A `{"selector": "@s"}` component in a line shows the player's name.
+
 `start` is a node id, or an ordered list of `{node, when}`: the first entry whose condition passes
 is where the conversation begins. This is how one NPC says different things before, during and
 after a quest. Put the entry without `when` last.
@@ -333,6 +335,7 @@ A `solace:dialogue_node` objective completes when the node is entered, after the
 | Field | Default | Meaning |
 |-------|---------|---------|
 | `entity` | required | Entity id or `#tag`. |
+| `block` | none | Instead of `entity`: right-clicking this block (id or `#tag`) opens the dialogue, with no NPC. Sneak-click uses the block normally. No `bind`. |
 | `when` | none | Condition, normally `solace:entity`. |
 | `dialogue` | — | The dialogue to open. |
 | `dialogues` | — | Instead of `dialogue`: a list of `{"dialogue": id, "when": condition}`; first match wins. |
@@ -491,7 +494,10 @@ player who is at that rank or below, who hurt them, or who they saw hurt a villa
 (they may chase him for 10 s). Thief crimes and per-villager gossip no longer set them on anyone. Idle
 defenders within 16 blocks that can see a player at that rank attack him. A player killed by a defender while
 at that rank or below has his standing raised to the start of the rank above it. Without the field,
-defenders behave as in vanilla.
+defenders behave as in vanilla. `"golems_attack_at": "<rank id>"` gives golems (iron and clay) their own,
+usually lower, rank; guards keep `defenders_attack_at`. It defaults to `defenders_attack_at`.
+`"defender_kill_standing": <number>` is the standing a player killed by any defender is raised to (if below it);
+without it, the start of the rank above `defenders_attack_at`.
 
 ## Markers — inline, or `markers/*.json`
 
@@ -509,6 +515,7 @@ object or the id of a `markers/` file. `solace:add_marker` / `solace:remove_mark
 | `structure` | `structure` (id or `#tag`) | the nearest one, searched once and remembered per player |
 | `npc` | `npc` (binding id) | the nearest loaded match, otherwise where the player last talked to it |
 | `objective` | `objective` (id of a `solace:reach_location` objective) | that objective, until it is done. Inline only. |
+| `building` | `building` (template id, e.g. `minecraft:village/plains/houses/plains_temple_4`) | that building in the home village, found once and remembered |
 
 Common: `label` (text; default the quest title), `color` (a Minecraft colour name, default
 `gold`), `beam` (default false: draw an in-world column at the marker).

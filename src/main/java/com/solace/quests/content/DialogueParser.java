@@ -111,7 +111,8 @@ public final class DialogueParser {
     }
 
     public static NpcBinding npc(ResourceLocation id, In in) {
-        Target entity = in.target("entity", "entity_type", true);
+        Target block = in.target("block", "block", false);
+        Target entity = in.target("entity", "entity_type", block == null);
         Condition when = QuestParser.condition(in, "when");
         List<Bound> dialogues = new ArrayList<>();
         if (in.has("dialogue")) {
@@ -130,7 +131,10 @@ public final class DialogueParser {
         }
         NpcBinding binding = new NpcBinding(id, entity, when, List.copyOf(dialogues),
                 in.integer("priority", 0, Integer.MIN_VALUE), in.bool("freeze", true),
-                in.integer("max_distance", 6, 1), bind.equals("first_met"));
+                in.integer("max_distance", 6, 1), bind.equals("first_met"), block);
+        if (block != null && (entity != null || binding.firstMet())) {
+            in.err("block", "a block binding has no \"entity\" and no \"bind\"");
+        }
         in.done();
         return binding;
     }

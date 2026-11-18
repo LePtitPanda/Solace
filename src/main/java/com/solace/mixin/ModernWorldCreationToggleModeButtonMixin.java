@@ -40,11 +40,12 @@ public abstract class ModernWorldCreationToggleModeButtonMixin {
             this.animationTicker = 0;
             this.addToHeightWhenHovered = 0;
             this.labelBackgroundColor = this.selected
-                    ? new Color(78, 57, 22, 235)
-                    : new Color(7, 7, 15, 220);
+                    ? new Color(36, 36, 36, 235)
+                    : new Color(7, 7, 7, 220);
+            // Monochrome like SolaceArt: LIGHT when selected, DIM otherwise.
             this.borderColor = this.selected
-                    ? new Color(212, 168, 67, 255)
-                    : new Color(106, 78, 24, 255);
+                    ? new Color(215, 215, 215, 255)
+                    : new Color(64, 64, 64, 255);
             this.darkenWhenUnfocused = true;
         }
     }

@@ -30,6 +30,7 @@ public final class IntroHoldClient {
     private static boolean released;
     private static boolean readySent;
     private static int readyTicks;
+    private static int activeTicks;
     private static int settled;
     private static int age;
 
@@ -45,6 +46,7 @@ public final class IntroHoldClient {
             age = 0;
             readySent = false;
             readyTicks = 0;
+            activeTicks = 0;
             for (SoundSource source : SoundSource.values()) {
                 if (!keeps(source)) minecraft.getSoundManager().stop(null, source);
             }
@@ -58,15 +60,20 @@ public final class IntroHoldClient {
     public static void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END || !held) return;
         Minecraft minecraft = Minecraft.getInstance();
-        if (++age > FAILSAFE_TICKS) {
+        // Counted from the ready signal only: while the game is minimized nothing is drawn and ready can't be sent yet.
+        if (readySent && ++age > FAILSAFE_TICKS) {
             finish(minecraft);
             return;
         }
         // Tell the server once the ground here (the prison) has been drawn for a second: login is over.
         if (!readySent && minecraft.player != null && minecraft.level != null) {
             BlockPos here = minecraft.player.blockPosition().below();
-            readyTicks = minecraft.level.hasChunkAt(here) && minecraft.levelRenderer.isChunkCompiled(here) ? readyTicks + 1 : 0;
-            if (readyTicks >= 20) {
+            boolean loaded = minecraft.level.hasChunkAt(here);
+            readyTicks = loaded && minecraft.levelRenderer.isChunkCompiled(here) ? readyTicks + 1 : 0;
+            if (loaded && minecraft.isWindowActive()) activeTicks++;
+            // isChunkCompiled can stay false (Embeddium); 15 s with the window in front and the ground loaded is enough.
+            // Time spent minimized or alt-tabbed doesn't count, so nothing starts while the player is away.
+            if (readyTicks >= 20 || activeTicks >= 20 * 15) {
                 readySent = true;
                 com.solace.quests.network.QuestNetwork.intent(com.solace.quests.network.QuestNetwork.INTRO_READY, "", "", 0, 0, 0);
             }
@@ -96,9 +103,12 @@ public final class IntroHoldClient {
         held = false;
     }
 
-    /** Music keeps playing behind the loading screen; everything else is silent. */
+    /** Behind the loading screen everything is silent; music only starts once he is in the dream (not the overworld's). */
     public static boolean keeps(SoundSource source) {
-        return source == SoundSource.MUSIC || source == SoundSource.RECORDS || source == SoundSource.MASTER;
+        if (source == SoundSource.MASTER) return true;
+        Minecraft minecraft = Minecraft.getInstance();
+        boolean dream = minecraft.level != null && com.solace.world.DreamDimension.isDream(minecraft.level);
+        return dream && (source == SoundSource.MUSIC || source == SoundSource.RECORDS);
     }
 
     public static boolean muting() {

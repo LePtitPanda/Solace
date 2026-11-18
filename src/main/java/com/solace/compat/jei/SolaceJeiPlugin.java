@@ -17,6 +17,14 @@ public class SolaceJeiPlugin implements IModPlugin {
     private static final ResourceLocation UID = new ResourceLocation("solace", "jei_plugin");
     private static IJeiRuntime runtime;
 
+    /** Opens JEI's recipes (or uses) for a required item clicked in the quest book. */
+    public static void show(ItemStack stack, boolean uses) {
+        if (runtime == null) return;
+        runtime.getRecipesGui().show(runtime.getJeiHelpers().getFocusFactory().createFocus(
+                uses ? mezz.jei.api.recipe.RecipeIngredientRole.INPUT : mezz.jei.api.recipe.RecipeIngredientRole.OUTPUT,
+                VanillaTypes.ITEM_STACK, stack));
+    }
+
     @Override
     public void onRuntimeAvailable(IJeiRuntime jeiRuntime) {
         runtime = jeiRuntime;

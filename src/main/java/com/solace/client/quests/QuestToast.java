@@ -1,5 +1,6 @@
 package com.solace.client.quests;
 
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.quests.network.QuestNetwork;
 import net.minecraft.client.gui.Font;
@@ -18,11 +19,10 @@ public class QuestToast implements Toast {
     @Override
     public Visibility render(GuiGraphics graphics, ToastComponent component, long timeSinceLastVisible) {
         Font font = component.getMinecraft().font;
-        int accent = toast.kind().equals("failed") ? 0xFFAA4444 : WorldCreationThemeRenderer.GOLD;
-        graphics.fill(0, 0, width(), height(), 0xFF0C0C1C);
-        graphics.fill(0, 0, width(), 1, WorldCreationThemeRenderer.GOLD_DIM);
-        graphics.fill(0, height() - 1, width(), height(), WorldCreationThemeRenderer.GOLD_DIM);
-        graphics.fill(0, 0, 2, height(), accent);
+        int accent = toast.kind().equals("failed") ? 0xFFAA4444 : WorldCreationThemeRenderer.TITLE;
+        SolaceArt.Tones tones = SolaceArt.Tones.NORMAL.withRivet(accent);
+        SolaceArt.panel(graphics::fill, 0, 0, width(), height(), 0xF0050505, tones, SolaceArt.PANEL_PLAIN);
+        SolaceArt.rivet(graphics::fill, width() - 7, 4, tones);
         int textX = ClientQuests.icon(graphics, toast.icon(), 8, 8) ? 30 : 10;
         graphics.drawString(font, toast.title(), textX, 7, accent, false);
         graphics.drawString(font, font.plainSubstrByWidth(toast.subtitle().getString(), width() - textX - 6), textX, 18,

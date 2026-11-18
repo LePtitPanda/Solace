@@ -30,6 +30,13 @@ import net.minecraft.world.level.Level;
  */
 public class Guildmaster extends AbstractVillager {
 
+    /** The click is the dialogue's (opened server-side by Solace), so the held item is never used too (eaten). */
+    @Override
+    protected net.minecraft.world.InteractionResult mobInteract(Player player, net.minecraft.world.InteractionHand hand) {
+        return player.isSecondaryUseActive() ? super.mobInteract(player, hand)
+                : net.minecraft.world.InteractionResult.sidedSuccess(level().isClientSide);
+    }
+
     public Guildmaster(EntityType<? extends Guildmaster> type, Level level) {
         super(type, level);
         ((GroundPathNavigation) getNavigation()).setCanOpenDoors(true);
@@ -55,6 +62,41 @@ public class Guildmaster extends AbstractVillager {
     @Override
     public boolean removeWhenFarAway(double distance) {
         return false;
+    }
+
+    /** Where it was placed (the guild hall, near its bed); it comes back there after dying. */
+    private net.minecraft.core.BlockPos home;
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (home == null && !level().isClientSide && isAlive()) {
+            home = blockPosition();
+        }
+    }
+
+    @Override
+    public void addAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
+        super.addAdditionalSaveData(tag);
+        if (home != null) {
+            tag.putLong("SolaceHome", home.asLong());
+        }
+    }
+
+    @Override
+    public void readAdditionalSaveData(net.minecraft.nbt.CompoundTag tag) {
+        super.readAdditionalSaveData(tag);
+        if (tag.contains("SolaceHome")) {
+            home = net.minecraft.core.BlockPos.of(tag.getLong("SolaceHome"));
+        }
+    }
+
+    @Override
+    public void die(DamageSource source) {
+        super.die(source);
+        if (level() instanceof ServerLevel server && home != null) {
+            GuildmasterRespawn.schedule(server, this, home);
+        }
     }
 
     @Override

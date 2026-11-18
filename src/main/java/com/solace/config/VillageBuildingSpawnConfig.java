@@ -186,7 +186,7 @@ public final class VillageBuildingSpawnConfig {
         if (DEFAULT_CUSTOM_BUILDINGS.contains(buildingId)) {
             return Entry.once();
         }
-        return Entry.defaultMode();
+        return Entry.range(0, 1); // a newly found building may appear at most once
     }
 
     private static Entry sanitize(Entry entry, ResourceLocation buildingId) {

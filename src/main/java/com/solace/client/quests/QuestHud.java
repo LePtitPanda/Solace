@@ -3,10 +3,12 @@ package com.solace.client.quests;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.quests.network.Views.MarkerView;
 import com.solace.quests.network.Views.ObjectiveView;
 import com.solace.quests.network.Views.QuestView;
+import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -57,6 +59,9 @@ public final class QuestHud {
                 int indent = objective.indent() ? 6 : 0;
                 // A paused objective shows why it waits instead of what it asks.
                 Component line = objective.paused() ? objective.pausedText() : objective.text();
+                if (objective.optional() && !objective.paused()) {
+                    line = line.copy().append(Component.literal(" (optional)").withStyle(ChatFormatting.ITALIC, ChatFormatting.DARK_GRAY));
+                }
                 List<FormattedCharSequence> text = font.split(line, WIDTH - 20 - indent - font.width(count) - 4);
                 lines.add(text);
                 counts.add(count);
@@ -64,10 +69,9 @@ public final class QuestHud {
             }
             int titleHeight = 4 + Math.max(1, title.size()) * 10;
             int height = titleHeight + objectiveLines * 10 + quest.objectives().size() * 2;
-            graphics.fill(x, y, x + WIDTH, y + height, 0x900C0C1C);
-            graphics.fill(x, y, x + 2, y + height, WorldCreationThemeRenderer.GOLD);
+            SolaceArt.panel(graphics::fill, x, y, WIDTH, height, 0x900A0A0A, SolaceArt.Tones.NORMAL, SolaceArt.PANEL_BARE);
             for (int i = 0; i < title.size(); i++) {
-                graphics.drawString(font, title.get(i), x + 6, y + 3 + i * 10, WorldCreationThemeRenderer.GOLD, false);
+                graphics.drawString(font, title.get(i), x + 6, y + 3 + i * 10, WorldCreationThemeRenderer.TITLE, false);
             }
 
             if (marker != null) {
@@ -82,9 +86,9 @@ public final class QuestHud {
                 pose.pushPose();
                 pose.translate(x + WIDTH - 8, y + 7, 0);
                 pose.mulPose(Axis.ZP.rotationDegrees(turn));
-                graphics.fill(-1, -4, 1, 5, WorldCreationThemeRenderer.GOLD);
-                graphics.fill(-2, -3, 2, -2, WorldCreationThemeRenderer.GOLD);
-                graphics.fill(-3, -2, 3, -1, WorldCreationThemeRenderer.GOLD);
+                graphics.fill(-1, -4, 1, 5, WorldCreationThemeRenderer.LIGHT);
+                graphics.fill(-2, -3, 2, -2, WorldCreationThemeRenderer.LIGHT);
+                graphics.fill(-3, -2, 3, -1, WorldCreationThemeRenderer.LIGHT);
                 pose.popPose();
             }
             int lineY = y + titleHeight;
@@ -92,7 +96,7 @@ public final class QuestHud {
                 ObjectiveView objective = quest.objectives().get(o);
                 boolean done = objective.progress() >= objective.count();
                 int indent = objective.indent() ? 6 : 0;
-                int color = done ? WorldCreationThemeRenderer.GOLD_DIM
+                int color = done ? WorldCreationThemeRenderer.LINE
                         : objective.paused() ? 0xFF808080 : WorldCreationThemeRenderer.TEXT;
                 String count = counts.get(o);
                 graphics.drawString(font, count, x + WIDTH - 4 - font.width(count), lineY, color, false);

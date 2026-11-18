@@ -8,10 +8,12 @@ import java.util.List;
 /**
  * {@code gossip}: one stored world-wide standing that also moves with first-hand vanilla villager gossip.
  * {@code defendersAttackAt}: a rank id (or null); village defenders attack players at this rank or below.
+ * {@code golemsAttackAt}: the same for golems (iron, clay); defaults to {@code defendersAttackAt}.
+ * {@code defenderKillStanding}: standing after being killed by a defender (null = start of the rank above).
  */
 public record Faction(ResourceLocation id, Component name, int color, String icon, int def, int min, int max,
                       List<Rank> ranks, List<Relation> relations, boolean gossip, int radius,
-                      String defendersAttackAt) {
+                      String defendersAttackAt, String golemsAttackAt, Integer defenderKillStanding) {
     /** Applies from {@code at} upward; ranks are sorted by {@code at}. */
     public record Rank(String id, Component name, int at) {
     }
@@ -41,7 +43,21 @@ public record Faction(ResourceLocation id, Component name, int color, String ico
 
     /** The lowest standing defenders leave alone: the start of the rank above {@code defendersAttackAt}. */
     public int defendersSafeFrom() {
-        int index = rankIndex(defendersAttackAt);
+        return safeFrom(defendersAttackAt);
+    }
+
+    /** The same for golems (iron and clay), from {@code golemsAttackAt}. */
+    public int golemsSafeFrom() {
+        return safeFrom(golemsAttackAt);
+    }
+
+    /** Standing a player killed by any defender is raised to (if below); defaults to {@link #defendersSafeFrom}. */
+    public int killStanding() {
+        return defenderKillStanding != null ? defenderKillStanding : defendersSafeFrom();
+    }
+
+    private int safeFrom(String rank) {
+        int index = rankIndex(rank);
         return index + 1 < ranks.size() ? ranks.get(index + 1).at() : max + 1;
     }
 }

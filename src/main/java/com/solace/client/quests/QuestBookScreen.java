@@ -1,5 +1,6 @@
 package com.solace.client.quests;
 
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.SolaceHoldButton;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import com.solace.quests.network.QuestNetwork;
@@ -18,12 +19,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static com.solace.client.gui.WorldCreationThemeRenderer.GOLD;
-import static com.solace.client.gui.WorldCreationThemeRenderer.GOLD_DIM;
+import static com.solace.client.gui.WorldCreationThemeRenderer.LIGHT;
+import static com.solace.client.gui.WorldCreationThemeRenderer.LINE;
 import static com.solace.client.gui.WorldCreationThemeRenderer.MUTED;
 import static com.solace.client.gui.WorldCreationThemeRenderer.PANEL;
 import static com.solace.client.gui.WorldCreationThemeRenderer.TEXT;
@@ -42,7 +44,8 @@ public class QuestBookScreen extends Screen {
     private static final int GRID = 46;
     private static final int NODE = 26;
     // In progress is blue, completed is green: easy to tell apart at a glance.
-    private static final int[] STATUS_COLOR = {0xFF3A3A55, TEXT, 0xFF5AB4FF, 0xFFFFE9A8, 0xFF62C462, 0xFFAA4444};
+    // The UI's own greys: in progress is lit white, completed is quiet grey with a check, failed is a dull red.
+    private static final int[] STATUS_COLOR = {0xFF3A3A3A, TEXT, SolaceArt.WHITE, SolaceArt.WHITE, LINE, 0xFFA05050};
     private static final String[] STATUS_NAME = {"Locked", "Available", "In progress", "Rewards ready", "Completed",
             "Failed"};
 
@@ -69,6 +72,51 @@ public class QuestBookScreen extends Screen {
     }
 
     private record Line(FormattedCharSequence text, int color, int indent, Runnable click) {
+    }
+
+    /** Item slots drawn this frame (quest details), for tooltips and JEI/EMI lookups. */
+    private record ItemSlot(int x, int y, ItemStack stack) {
+    }
+
+    private final List<ItemSlot> itemSlots = new ArrayList<>();
+
+    /** The required item under the mouse in an open quest book, or empty: JEI and EMI ask this for R/U. */
+    public static ItemStack stackAt(net.minecraft.client.gui.screens.Screen screen, double mouseX, double mouseY) {
+        if (screen instanceof QuestBookScreen book) {
+            for (ItemSlot slot : book.itemSlots) {
+                if (mouseX >= slot.x && mouseX < slot.x + 18 && mouseY >= slot.y && mouseY < slot.y + 18) return slot.stack;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /**
+     * JEI and EMI only read keys and clicks on inventory screens, so the book opens their views itself:
+     * left click or R shows recipes, right click or U shows uses.
+     */
+    private boolean showRecipes(double mouseX, double mouseY, boolean uses) {
+        ItemStack stack = stackAt(this, mouseX, mouseY);
+        if (stack.isEmpty()) return false;
+        if (net.minecraftforge.fml.ModList.get().isLoaded("emi")) {
+            com.solace.compat.emi.SolaceEmiPlugin.show(stack, uses);
+        } else if (net.minecraftforge.fml.ModList.get().isLoaded("jei")) {
+            com.solace.compat.jei.SolaceJeiPlugin.show(stack, uses);
+        } else {
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // shortcut: R/U are the JEI/EMI defaults; a rebound key won't work here.
+        if (keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_R || keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_U) {
+            net.minecraft.client.MouseHandler mouse = this.minecraft.mouseHandler;
+            double x = mouse.xpos() * this.width / this.minecraft.getWindow().getScreenWidth();
+            double y = mouse.ypos() * this.height / this.minecraft.getWindow().getScreenHeight();
+            if (showRecipes(x, y, keyCode == org.lwjgl.glfw.GLFW.GLFW_KEY_U)) return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     public QuestBookScreen() {
@@ -185,7 +233,10 @@ public class QuestBookScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         WorldCreationThemeRenderer.renderBackdrop(this, graphics);
         hits.clear();
-        graphics.fill(0, TOP - 2, this.width, TOP - 1, GOLD_DIM);
+        itemSlots.clear();
+        // Rule under the tabs: grey line between black outlines.
+        graphics.fill(0, TOP - 3, this.width, TOP, SolaceArt.BLACK);
+        graphics.fill(0, TOP - 2, this.width, TOP - 1, LINE);
         if (ClientQuests.chapters.isEmpty() && tab == Tab.QUESTS) {
             graphics.drawCenteredString(this.font, "No quests yet.", this.width / 2, this.height / 2, MUTED);
         } else if (tab == Tab.QUESTS) {
@@ -198,6 +249,8 @@ public class QuestBookScreen extends Screen {
             renderFactions(graphics);
         }
         super.render(graphics, mouseX, mouseY, partialTick);
+        ItemStack under = stackAt(this, mouseX, mouseY);
+        if (!under.isEmpty()) graphics.renderTooltip(this.font, under, mouseX, mouseY);
     }
 
     private void renderChapters(GuiGraphics graphics, int mouseX, int mouseY) {
@@ -206,8 +259,12 @@ public class QuestBookScreen extends Screen {
         for (ChapterView view : ClientQuests.chapters) {
             boolean active = current != null && view.id().equals(current.id());
             boolean hovered = mouseX >= 6 && mouseX < left() - 6 && mouseY >= y && mouseY < y + 22;
-            graphics.fill(6, y, left() - 6, y + 22, active ? 0xF01A1508 : hovered ? 0xC0141428 : 0x900C0C1C);
-            graphics.fill(6, y, 8, y + 22, active ? GOLD : GOLD_DIM);
+            // Chapters are inventory slots; the open one gets a lit frame.
+            SolaceArt.slot(graphics::fill, 6, y, left() - 12, 22,
+                    active || hovered ? SolaceArt.SLOT_HOVER : SolaceArt.SLOT);
+            if (active) {
+                SolaceArt.frame(graphics::fill, 6, y, left() - 12, 22, SolaceArt.Tones.HOVER);
+            }
             int textX = ClientQuests.icon(graphics, view.icon(), 12, y + 3) ? 32 : 14;
             int total = 0, done = 0;
             for (QuestView quest : ClientQuests.QUESTS.values()) {
@@ -219,7 +276,8 @@ public class QuestBookScreen extends Screen {
             String count = done + "/" + total;
             String title = this.font.plainSubstrByWidth(view.title().getString(),
                     left() - 12 - textX - this.font.width(count) - 6);
-            graphics.drawString(this.font, title, textX, y + 7, active ? GOLD : TEXT, false);
+            graphics.drawString(this.font, title, textX, y + 7, active ? WorldCreationThemeRenderer.TITLE : TEXT,
+                    false);
             graphics.drawString(this.font, count, left() - 10 - this.font.width(count), y + 7, MUTED, false);
             ResourceLocation id = view.id();
             hits.add(new Hit(6, y, left() - 6, y + 22, () -> {
@@ -241,10 +299,10 @@ public class QuestBookScreen extends Screen {
 
     private void renderCanvas(GuiGraphics graphics, int mouseX, int mouseY) {
         int left = left(), right = canvasRight(), top = TOP, bottom = this.height - 10;
-        graphics.fill(left, top, right, bottom, 0x70070712);
-        graphics.fill(left - 2, top + 4, left - 1, bottom - 4, resizing ? GOLD : GOLD_DIM); // sidebar drag edge
-        WorldCreationThemeRenderer.renderBracketPanel(graphics, left, top, right - left, bottom - top, GOLD_DIM);
-        graphics.enableScissor(left + 2, top + 2, right - 2, bottom - 2);
+        graphics.fill(left - 2, top + 4, left - 1, bottom - 4, resizing ? LIGHT : SolaceArt.DIM); // sidebar drag edge
+        WorldCreationThemeRenderer.renderPanel(graphics, left, top, right - left, bottom - top, 0xB0050505,
+                SolaceArt.Tones.NORMAL, SolaceArt.PANEL_ORNATE);
+        graphics.enableScissor(left + 3, top + 3, right - 3, bottom - 3);
         List<QuestView> quests = new ArrayList<>();
         for (QuestView quest : ClientQuests.QUESTS.values()) {
             if (quest.chapter().equals(chapter)) {
@@ -259,7 +317,7 @@ public class QuestBookScreen extends Screen {
                     continue;
                 }
                 boolean done = required.status() == QuestView.COMPLETED || required.status() == QuestView.CLAIMABLE;
-                int color = done ? GOLD_DIM : 0xFF2A2A44;
+                int color = done ? LINE : 0xFF2E2E2E;
                 int x0 = nodeX(required), y0 = nodeY(required), x1 = nodeX(quest), y1 = nodeY(quest);
                 // Bend halfway between the columns, so a branch never runs through the nodes of another column.
                 int mx = x0 == x1 ? x0 : x0 + (x1 > x0 ? 1 : -1) * (int) (GRID * zoom / 2);
@@ -276,12 +334,16 @@ public class QuestBookScreen extends Screen {
                     && mouseX > left && mouseX < right && mouseY > top && mouseY < bottom;
             int color = STATUS_COLOR[Mth.clamp(quest.status(), 0, 5)];
             if (quest.status() == QuestView.CLAIMABLE && (Util.getMillis() / 400) % 2 == 0) {
-                color = GOLD;
+                color = LINE;
             }
-            graphics.fill(x - half - 1, y - half - 1, x + half + 1, y + half + 1,
-                    quest.id().equals(selected) || over ? 0xFFFFFFFF : color);
-            graphics.fill(x - half, y - half, x + half, y + half, quest.status() == QuestView.LOCKED ? 0xFF090912 : PANEL);
-            graphics.fill(x - half, y + half - 2, x + half, y + half, color);
+            // Nodes are framed slots; the status color runs along the bottom inside the frame.
+            boolean lit = quest.id().equals(selected) || over;
+            SolaceArt.slot(graphics::fill, x - half - 2, y - half - 2, half * 2 + 4, half * 2 + 4,
+                    quest.status() == QuestView.LOCKED ? 0xFF080808 : SolaceArt.SLOT);
+            SolaceArt.frame(graphics::fill, x - half - 2, y - half - 2, half * 2 + 4, half * 2 + 4,
+                    lit ? SolaceArt.Tones.HOVER : quest.status() == QuestView.LOCKED
+                            ? SolaceArt.Tones.DISABLED : SolaceArt.Tones.NORMAL, false);
+            graphics.fill(x - half + 1, y + half - 2, x + half - 1, y + half, color);
             graphics.pose().pushPose();
             graphics.pose().translate(x - 8 * zoom, y - 8 * zoom, 0);
             graphics.pose().scale((float) zoom, (float) zoom, 1.0F);
@@ -290,9 +352,12 @@ public class QuestBookScreen extends Screen {
             }
             graphics.pose().popPose();
             if (quest.status() == QuestView.COMPLETED) {
-                // A check in the corner: finished, not just started.
-                graphics.fill(x + half - 8, y - half, x + half, y - half + 8, 0xFF62C462);
-                graphics.drawString(this.font, "\u2714", x + half - 7, y - half, 0xFF0C2A0C, false);
+                // Finished: the icon is dimmed and carries a small check; in-progress icons stay bright.
+                graphics.pose().pushPose();
+                graphics.pose().translate(0, 0, 200);
+                graphics.fill(x - half + 1, y - half + 1, x + half - 1, y + half - 2, 0x90000000);
+                graphics.drawString(this.font, "\u2714", x + half - 8, y - half + 1, LIGHT, true);
+                graphics.pose().popPose();
             }
             if (over) {
                 hovered = quest;
@@ -317,11 +382,11 @@ public class QuestBookScreen extends Screen {
 
     private void renderDetails(GuiGraphics graphics, QuestView quest) {
         int left = this.width - RIGHT, right = this.width - 6, top = TOP, bottom = this.height - 36;
-        graphics.fill(left, top, right, this.height - 6, 0xE60C0C1C);
-        graphics.fill(left, top, left + 1, this.height - 6, GOLD_DIM);
+        WorldCreationThemeRenderer.renderPanel(graphics, left, top, right - left, this.height - 6 - top, 0xF0050505,
+                SolaceArt.Tones.NORMAL, SolaceArt.PANEL_ORNATE);
         int width = right - left - 20;
         List<Line> lines = new ArrayList<>();
-        wrap(lines, quest.title(), GOLD, 0, width, null);
+        wrap(lines, quest.title(), WorldCreationThemeRenderer.TITLE, 0, width, null);
         String status = STATUS_NAME[Mth.clamp(quest.status(), 0, 5)] + (quest.optional() ? "  (optional)" : "");
         if (quest.secondsLeft() >= 0) {
             status += "  " + quest.secondsLeft() / 60 + ":" + String.format("%02d", quest.secondsLeft() % 60) + " left";
@@ -340,7 +405,7 @@ public class QuestBookScreen extends Screen {
                         .append(suffix + (objective.optional() ? " (optional)" : "") + (tickable ? "  (click)" : ""));
                 String questId = quest.id().toString();
                 int indent = objective.indent() ? 14 : 4;
-                wrap(lines, text, done ? GOLD_DIM : objective.paused() ? MUTED : tickable ? GOLD : TEXT, indent, width,
+                wrap(lines, text, done ? LINE : objective.paused() ? MUTED : tickable ? LIGHT : TEXT, indent, width,
                         tickable && !objective.paused()
                                 ? () -> QuestNetwork.intent(QuestNetwork.CHECK, questId, objective.id(), 0, 0, 0) : null);
                 if (objective.paused()) {
@@ -353,15 +418,39 @@ public class QuestBookScreen extends Screen {
             wrap(lines, Component.literal("Rewards"), MUTED, 0, width, null);
             for (RewardView reward : quest.rewards()) {
                 wrap(lines, Component.literal(reward.claimed() ? "[x] " : " +  ").append(reward.text()),
-                        reward.claimed() ? GOLD_DIM : TEXT, 4, width, null);
+                        reward.claimed() ? LINE : TEXT, 4, width, null);
             }
         }
         if (!quest.story().isEmpty()) {
             lines.add(null);
             wrap(lines, Component.literal("Story so far"), MUTED, 0, width, null);
             for (Component story : quest.story()) {
-                wrap(lines, story.copy().withStyle(ChatFormatting.ITALIC), 0xFFAAAACC, 4, width, null);
+                wrap(lines, story.copy().withStyle(ChatFormatting.ITALIC), 0xFFAAAAAA, 4, width, null);
             }
+        }
+        // Items the objectives ask for, as slots along the bottom: hover for the tooltip, R/U for JEI or EMI.
+        List<ItemStack> items = new ArrayList<>();
+        for (ObjectiveView objective : quest.objectives()) {
+            String icon = objective.icon();
+            if (icon == null || !icon.startsWith("item:")) continue;
+            ResourceLocation itemId = ResourceLocation.tryParse(icon.substring(5));
+            net.minecraft.world.item.Item item = itemId == null ? null : net.minecraftforge.registries.ForgeRegistries.ITEMS.getValue(itemId);
+            if (item == null || item == net.minecraft.world.item.Items.AIR || items.stream().anyMatch(stack -> stack.is(item))) continue;
+            items.add(new ItemStack(item, Math.max(1, Math.min(objective.count(), 999))));
+        }
+        if (!items.isEmpty()) {
+            int perRow = Math.max(1, width / 20);
+            int rows = (items.size() + perRow - 1) / perRow;
+            int slotsTop = bottom - rows * 20 - 2;
+            graphics.fill(left + 8, slotsTop - 4, right - 8, slotsTop - 3, SolaceArt.DIM);
+            for (int i = 0; i < items.size(); i++) {
+                int sx = left + 10 + (i % perRow) * 20, sy = slotsTop + (i / perRow) * 20;
+                SolaceArt.slot(graphics::fill, sx, sy, 18, 18, SolaceArt.SLOT);
+                graphics.renderItem(items.get(i), sx + 1, sy + 1);
+                graphics.renderItemDecorations(this.font, items.get(i), sx + 1, sy + 1);
+                itemSlots.add(new ItemSlot(sx, sy, items.get(i)));
+            }
+            bottom = slotsTop - 8;
         }
         detailScroll = Mth.clamp(detailScroll, 0, Math.max(0, lines.size() * 11 - (bottom - top - 16)));
         graphics.enableScissor(left, top + 4, right, bottom);
@@ -396,8 +485,9 @@ public class QuestBookScreen extends Screen {
         }
         for (FactionView faction : ClientQuests.factions) {
             int color = 0xFF000000 | faction.color();
-            graphics.fill(left, y, right, y + 34, 0xC00C0C1C);
-            graphics.fill(left, y, left + 2, y + 34, color);
+            SolaceArt.slot(graphics::fill, left, y, right - left, 34, SolaceArt.SLOT);
+            SolaceArt.frame(graphics::fill, left, y, right - left, 34, SolaceArt.Tones.NORMAL.withRivet(color));
+            SolaceArt.rivet(graphics::fill, left + 2, y + 2, SolaceArt.Tones.NORMAL.withRivet(color));
             int textX = ClientQuests.icon(graphics, faction.icon(), left + 8, y + 9) ? left + 30 : left + 10;
             graphics.drawString(this.font, faction.name(), textX, y + 6, color, false);
             String standing = faction.rank().getString() + "  " + faction.value();
@@ -406,7 +496,7 @@ public class QuestBookScreen extends Screen {
             int barLeft = textX, barRight = right - 8;
             double span = Math.max(1, faction.next() - faction.floor());
             double filled = Mth.clamp((faction.value() - faction.floor()) / span, 0, 1);
-            graphics.fill(barLeft, y + 22, barRight, y + 26, 0xFF16162A);
+            SolaceArt.slot(graphics::fill, barLeft - 1, y + 21, barRight - barLeft + 2, 6, 0xFF0A0A0A);
             graphics.fill(barLeft, y + 22, barLeft + (int) ((barRight - barLeft) * filled), y + 26, color);
             y += 40;
         }
@@ -414,6 +504,9 @@ public class QuestBookScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (showRecipes(mouseX, mouseY, button == 1)) {
+            return true;
+        }
         if (super.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }

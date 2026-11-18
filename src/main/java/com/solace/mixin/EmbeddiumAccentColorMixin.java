@@ -19,6 +19,6 @@ import org.spongepowered.asm.mixin.injection.ModifyConstant;
 public abstract class EmbeddiumAccentColorMixin {
     @ModifyConstant(method = "*", constant = @Constant(intValue = 0xFFCF7CB6), require = 0, remap = false)
     private int solace$goldAccent(int original) {
-        return WorldCreationThemeRenderer.GOLD;
+        return WorldCreationThemeRenderer.LIGHT;
     }
 }

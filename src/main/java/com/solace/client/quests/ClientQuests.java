@@ -94,6 +94,7 @@ public final class ClientQuests {
         if (minecraft.screen instanceof DialogueScreen screen) {
             screen.show(node);
         } else {
+            if (minecraft.player != null) minecraft.player.stopUsingItem(); // the click opened a dialogue, not a meal
             minecraft.setScreen(new DialogueScreen(node));
         }
     }

@@ -15,8 +15,9 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 
 /**
- * A selectable card in the Difficulty Enhancement style: dark panel, accent rail,
- * accent border on hover and corner brackets when selected. Each card can carry
+ * A selectable card in the Difficulty Enhancement style: a framed panel
+ * whose lines brighten when hovered or selected, with the card's accent in its
+ * rivets and title. Each card can carry
  * its own accent and tinted background, like each difficulty does.
  */
 public class SolaceChoiceCard extends AbstractButton {
@@ -25,8 +26,8 @@ public class SolaceChoiceCard extends AbstractButton {
     private final Component tag;
     private final Component description;
     private final Consumer<SolaceChoiceCard> onPress;
-    private int accent = WorldCreationThemeRenderer.GOLD;
-    private int selectedBackground = 0xF01A1508;
+    private int accent = WorldCreationThemeRenderer.LIGHT;
+    private int selectedBackground = 0xF01A1A1A;
     private boolean selected;
     private float hover;
     private float selection;
@@ -88,30 +89,18 @@ public class SolaceChoiceCard extends AbstractButton {
         int w = getWidth();
         int h = getHeight();
 
-        graphics.fill(x, y, x + w, y + h, lerpArgb(selection, 0xD90C0C1C, selectedBackground));
-        // Soft accent wash from the rail, like the difficulty rows.
-        int washAlpha = Math.round(34.0F * Math.max(hover * 0.6F, selection));
-        if (washAlpha > 0) {
-            graphics.fillGradient(x, y, x + w, y + h, washAlpha << 24 | (accent & 0xFFFFFF), 0x00000000);
-        }
+        // A grey panel; the card's accent shows only in its rivets, title and tag.
         float emphasis = Math.max(hover * 0.55F, selection);
-        if (emphasis > 0.02F) {
-            int alpha = Math.round(200.0F * emphasis);
-            border(graphics, x, y, w, h, alpha << 24 | (accent & 0xFFFFFF));
-        }
-        int rail = 3 + Math.round(3.0F * hover + 4.0F * selection);
-        graphics.fill(x, y, x + rail, y + h, accent);
-        if (selection > 0.02F) {
-            int alpha = Math.round(255.0F * selection);
-            WorldCreationThemeRenderer.renderBracketPanel(graphics, x - 4, y - 4, w + 8, h + 8,
-                    alpha << 24 | (accent & 0xFFFFFF));
-        }
+        SolaceArt.Tones tones = WorldCreationThemeRenderer.tones(true, emphasis).withRivet(accent);
+        WorldCreationThemeRenderer.renderPanel(graphics, x, y, w, h,
+                lerpArgb(selection, 0xE0050505, selectedBackground), tones,
+                SolaceArt.PANEL_ORNATE);
 
         Font font = Minecraft.getInstance().font;
-        int textX = x + rail + PADDING;
-        int textWidth = Math.max(10, w - rail - PADDING * 2);
-        int textY = y + PADDING;
-        int bottom = y + h - PADDING;
+        int textX = x + PADDING + 3;
+        int textWidth = Math.max(10, w - PADDING * 2 - 6);
+        int textY = y + PADDING + 2;
+        int bottom = y + h - PADDING - 2;
 
         int titleColor = lerpArgb(Math.max(selection, hover), WorldCreationThemeRenderer.TEXT, accent);
         String title = font.plainSubstrByWidth(getMessage().getString().toUpperCase(Locale.ROOT), textWidth);
@@ -123,8 +112,9 @@ public class SolaceChoiceCard extends AbstractButton {
             graphics.drawString(font, tagText, textX, textY, lerpArgb(0.3F, accent, 0xFF000000), false);
             textY += font.lineHeight + 1;
         }
-        graphics.fill(textX, textY + 2, textX + Math.min(textWidth, 40), textY + 3,
-                lerpArgb(0.55F, accent, 0xFF000000));
+        // Rivet and short rule under the title, like the rivet-capped rules on the panels.
+        SolaceArt.rivet(graphics::fill, textX - 1, textY, tones);
+        graphics.fill(textX + 3, textY + 1, textX + Math.min(textWidth, 44), textY + 2, SolaceArt.DIM);
         textY += 8;
 
         int bodyColor = lerpArgb(Math.max(hover, selection), WorldCreationThemeRenderer.MUTED,
@@ -151,13 +141,6 @@ public class SolaceChoiceCard extends AbstractButton {
 
     private static float approach(float value, float target, float step) {
         return value < target ? Math.min(target, value + step) : Math.max(target, value - step);
-    }
-
-    private static void border(GuiGraphics graphics, int x, int y, int w, int h, int color) {
-        graphics.fill(x - 1, y - 1, x + w + 1, y, color);
-        graphics.fill(x - 1, y + h, x + w + 1, y + h + 1, color);
-        graphics.fill(x - 1, y, x, y + h, color);
-        graphics.fill(x + w, y, x + w + 1, y + h, color);
     }
 
     static int lerpArgb(float t, int from, int to) {

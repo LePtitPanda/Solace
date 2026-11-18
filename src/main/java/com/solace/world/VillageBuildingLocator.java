@@ -37,6 +37,32 @@ public final class VillageBuildingLocator {
         return null;
     }
 
+    private static boolean fallbackLogged;
+
+    /**
+     * The home village's start, if it has a piece at {@code pos}. Looked up from the village's own start chunk, which
+     * works where the vanilla lookup from the player's chunk was seen to fail (the prison, in playtests).
+     * shortcut: covers the home village only; find the root cause if other villages need piece checks.
+     */
+    public static StructureStart homeStartAt(ServerLevel level, BlockPos pos) {
+        BlockPos home = level.dimension().equals(net.minecraft.world.level.Level.OVERWORLD) ? HomeVillage.homeVillage(level) : null;
+        if (home == null) {
+            return null;
+        }
+        var structures = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        for (StructureStart start : level.structureManager().startsForStructure(new ChunkPos(home),
+                structure -> structures.wrapAsHolder(structure).is(StructureTags.VILLAGE))) {
+            if (level.structureManager().structureHasPieceAt(pos, start)) {
+                if (!fallbackLogged) {
+                    fallbackLogged = true;
+                    com.mojang.logging.LogUtils.getLogger().info("[Solace] Village lookup at {} needed the home-village fallback.", pos.toShortString());
+                }
+                return start;
+            }
+        }
+        return null;
+    }
+
     /** A block inside {@code box} that matches, or null. */
     public static BlockPos findBlock(ServerLevel level, BoundingBox box, Predicate<BlockInWorld> block) {
         for (BlockPos pos : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())) {

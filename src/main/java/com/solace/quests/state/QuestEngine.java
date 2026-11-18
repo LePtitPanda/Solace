@@ -18,7 +18,6 @@ import com.solace.quests.network.QuestNetwork;
 import com.solace.quests.state.PlayerQuestData.Active;
 import com.solace.quests.state.PlayerQuestData.QuestState;
 import com.solace.quests.state.PlayerQuestData.Status;
-import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -61,9 +60,8 @@ public final class QuestEngine {
             @Override
             public void started(Quest quest) {
                 if (!QuestLogic.hidden(ctx(player), quest)) {
-                    QuestNetwork.toast(player, "started", Component.literal("Quest started"), quest.title(),
+                    if (quest.toasts()) QuestNetwork.toast(player, "started", Component.literal("Quest started"), quest.title(),
                             quest.icon());
-                    story(player, quest.phases().get(0));
                 }
                 post(QuestEvent.Type.QUEST_STARTED, player, quest.id(), "", 0);
             }
@@ -71,9 +69,8 @@ public final class QuestEngine {
             @Override
             public void phase(Quest quest, Phase phase) {
                 if (!QuestLogic.hidden(ctx(player), quest)) {
-                    QuestNetwork.toast(player, "phase", Component.literal("Quest updated"), quest.title(),
+                    if (quest.toasts()) QuestNetwork.toast(player, "phase", Component.literal("Quest updated"), quest.title(),
                             quest.icon());
-                    story(player, phase);
                 }
                 post(QuestEvent.Type.PHASE_CHANGED, player, quest.id(), phase.id(), 0);
             }
@@ -90,7 +87,7 @@ public final class QuestEngine {
                         waiting = true;
                     }
                 }
-                QuestNetwork.toast(player, "completed",
+                if (quest.toasts()) QuestNetwork.toast(player, "completed",
                         Component.literal(waiting ? "Quest completed - claim rewards in the quest book" : "Quest completed"),
                         quest.title(), quest.icon());
                 post(QuestEvent.Type.QUEST_COMPLETED, player, quest.id(), "", 0);
@@ -98,7 +95,7 @@ public final class QuestEngine {
 
             @Override
             public void failed(Quest quest) {
-                QuestNetwork.toast(player, "failed", Component.literal("Quest failed"), quest.title(), quest.icon());
+                if (quest.toasts()) QuestNetwork.toast(player, "failed", Component.literal("Quest failed"), quest.title(), quest.icon());
                 post(QuestEvent.Type.QUEST_FAILED, player, quest.id(), "", 0);
             }
 
@@ -111,12 +108,6 @@ public final class QuestEngine {
 
     public static void post(QuestEvent.Type type, ServerPlayer player, ResourceLocation id, String detail, int value) {
         MinecraftForge.EVENT_BUS.post(new QuestEvent(type, player, id, detail, value));
-    }
-
-    private static void story(ServerPlayer player, Phase phase) {
-        if (phase.story() != null) {
-            player.sendSystemMessage(phase.story().copy().withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
-        }
     }
 
     private static Map<String, List<Active>> index(ServerCtx ctx) {
@@ -221,6 +212,7 @@ public final class QuestEngine {
         if (!content.recipeLocks.isEmpty()) {
             com.solace.quests.locks.RecipeLocks.refresh(player);
         }
+        com.solace.quests.locks.PonderLocks.refresh(player);
         if (ctx.data().quests.isEmpty() && content.autoStart.isEmpty() && ctx.data().markers.isEmpty()) {
             return;
         }
@@ -545,6 +537,9 @@ public final class QuestEngine {
             net.minecraft.world.level.levelgen.structure.Structure exact = level.registryAccess()
                     .registryOrThrow(net.minecraft.core.registries.Registries.STRUCTURE).get(id);
             start = exact == null ? null : level.structureManager().getStructureWithPieceAt(player.blockPosition(), exact);
+        }
+        if ((start == null || !start.isValid()) && id.getPath().contains("village")) {
+            start = com.solace.world.VillageBuildingLocator.homeStartAt(level, player.blockPosition());
         }
         return start == null || !start.isValid() ? null : start.getBoundingBox();
     }

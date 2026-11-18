@@ -1,7 +1,7 @@
 package com.solace.mixin;
 
 import com.mojang.logging.LogUtils;
-import com.solace.client.SolaceClientState;
+import com.solace.client.gui.SolaceArt;
 import com.solace.client.gui.WorldCreationThemeRenderer;
 import de.keksuccino.modernworldcreation.ModernWorldCreationGameTab;
 import java.util.Arrays;
@@ -188,18 +188,17 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
 
     @Inject(method = {"init", "tick"}, at = @At("RETURN"))
     private void solace$preventEasyDifficulty(CallbackInfo ci) {
-        SolaceClientState.setLastCreatedWorldWasHardcore(this.uiState.getGameMode() == WorldCreationUiState.SelectedGameMode.HARDCORE);
         if (this.uiState.getDifficulty() == Difficulty.EASY) {
             this.uiState.setDifficulty(Difficulty.NORMAL);
         }
     }
 
     private void solace$renderModePanel(GuiGraphics guiGraphics, ModeInfo modeInfo, int x, int y, int width, int height) {
-        guiGraphics.fill(x, y, x + width, y + height, 0xE60C0C1C);
-        WorldCreationThemeRenderer.renderBracketPanel(guiGraphics, x, y, width, height,
-                WorldCreationThemeRenderer.GOLD);
-        guiGraphics.fill(x + 66, y + 14, x + 67, y + height - 14,
-                WorldCreationThemeRenderer.GOLD_DIM);
+        WorldCreationThemeRenderer.renderPanel(guiGraphics, x, y, width, height, 0xE6050505,
+                SolaceArt.Tones.NORMAL, SolaceArt.PANEL_ORNATE);
+        // Icon column divider: a slot-style groove.
+        guiGraphics.fill(x + 65, y + 14, x + 68, y + height - 14, SolaceArt.BLACK);
+        guiGraphics.fill(x + 66, y + 14, x + 67, y + height - 14, SolaceArt.DIM);
 
         this.solace$renderPanelIcon(guiGraphics, modeInfo.iconTexture(), x + 17, y + (height - 32) / 2);
 
@@ -207,7 +206,7 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
         int textRightPadding = 16;
         int textWidth = width - 84 - textRightPadding;
         guiGraphics.drawString(this.font, modeInfo.title(), textX, y + 13,
-                WorldCreationThemeRenderer.GOLD, true);
+                WorldCreationThemeRenderer.TITLE, true);
 
         int lineY = y + 33;
         List<FormattedCharSequence> bodyLines = this.font.split(Component.literal(modeInfo.description()), textWidth);
@@ -217,8 +216,8 @@ public abstract class CreateWorldScreenTabsMixin extends Screen {
         }
 
         int noteY = y + 78;
-        guiGraphics.fill(textX, noteY - 5, x + width - 18, noteY - 4,
-                WorldCreationThemeRenderer.GOLD_DIM);
+        SolaceArt.rivet(guiGraphics::fill, textX - 1, noteY - 6, SolaceArt.Tones.NORMAL);
+        guiGraphics.fill(textX + 3, noteY - 5, x + width - 18, noteY - 4, SolaceArt.DIM);
         List<FormattedCharSequence> noteLines = this.font.split(Component.literal(modeInfo.note()), textWidth);
         int maxNoteLines = Math.min(Math.max(1, (y + height - 8 - noteY) / 10), noteLines.size());
         for (int i = 0; i < maxNoteLines; i++) {

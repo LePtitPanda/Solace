@@ -57,7 +57,7 @@ public final class DialogueManager {
         ServerCtx ctx = QuestEngine.ctx(player);
         ctx.entity = target;
         for (NpcBinding binding : ctx.content().bindings) {
-            if (!binding.entity().matches(target) || binding.when() != null && !binding.when().test(ctx)
+            if (binding.entity() == null || !binding.entity().matches(target) || binding.when() != null && !binding.when().test(ctx)
                     || !com.solace.quests.npc.NpcRegistry.accepts(player.server, binding, target, true)) {
                 continue;
             }
@@ -70,6 +70,23 @@ public final class DialogueManager {
                 if (dialogue != null && (bound.when() == null || bound.when().test(ctx))) {
                     open(player, dialogue, target, null, binding);
                     return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Right-click on a block with a block binding. Returns true when a dialogue opened. */
+    public static boolean interactBlock(ServerPlayer player, net.minecraft.world.level.block.state.BlockState state) {
+        ServerCtx ctx = QuestEngine.ctx(player);
+        for (NpcBinding binding : ctx.content().bindings) {
+            if (binding.block() == null || !binding.block().matches(state) || binding.when() != null && !binding.when().test(ctx)) {
+                continue;
+            }
+            for (Dialogue.Bound bound : binding.dialogues()) {
+                Dialogue dialogue = ctx.content().dialogues.get(bound.dialogue());
+                if (dialogue != null && (bound.when() == null || bound.when().test(ctx))) {
+                    return open(player, dialogue, null, null, binding);
                 }
             }
         }
@@ -101,6 +118,10 @@ public final class DialogueManager {
         SESSIONS.put(player.getUUID(), session);
         enter(player, session, start);
         return true;
+    }
+
+    public static boolean talking(ServerPlayer player) {
+        return SESSIONS.containsKey(player.getUUID());
     }
 
     /** The NPC of the player's current session, so a follow-up dialogue keeps talking to it. */
@@ -153,6 +174,12 @@ public final class DialogueManager {
                 text = variant.text();
                 break;
             }
+        }
+        // {"selector": "@s"} in a line is the player's name.
+        try {
+            text = net.minecraft.network.chat.ComponentUtils.updateForEntity(player.createCommandSourceStack(), text, player, 0);
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ignored) {
+            // keep the line as written
         }
         List<Views.ChoiceView> choices = new ArrayList<>();
         for (int i = 0; i < node.choices().size(); i++) {

@@ -16,7 +16,7 @@ import java.util.TreeMap;
 /** One immutable snapshot of all loaded quest content. Swapped atomically on reload. */
 public final class QuestContent {
     public static final List<String> KINDS = List.of("chapters", "quests", "dialogues", "npcs", "factions", "markers",
-            "loot", "recipe_locks", "trades", "block_locks");
+            "loot", "recipe_locks", "trades", "block_locks", "knowledge");
     public static final QuestContent EMPTY = new QuestContent(Map.of(), List.of());
     public static volatile QuestContent current = EMPTY;
 
@@ -40,6 +40,7 @@ public final class QuestContent {
     public final Map<ResourceLocation, Locks.RecipeLock> recipeLocks = new TreeMap<>();
     public final Map<ResourceLocation, Locks.TradeLock> tradeLocks = new TreeMap<>();
     public final Map<ResourceLocation, Locks.BlockLock> blockLocks = new TreeMap<>();
+    public final Map<ResourceLocation, Locks.Knowledge> knowledge = new TreeMap<>();
     /** Highest priority first. */
     public final List<NpcBinding> bindings = new ArrayList<>();
     public final List<Quest> autoStart = new ArrayList<>();
@@ -74,6 +75,8 @@ public final class QuestContent {
                 tradeLocks.put(lock.id(), lock);
             } else if (entry.definition instanceof Locks.BlockLock lock) {
                 blockLocks.put(lock.id(), lock);
+            } else if (entry.definition instanceof Locks.Knowledge book) {
+                knowledge.put(book.id(), book);
             }
         }
         entries.forEach((key, entry) -> {
@@ -106,6 +109,7 @@ public final class QuestContent {
             case "recipe_locks" -> Locks.recipeLock(key.id(), in);
             case "trades" -> Locks.tradeLock(key.id(), in);
             case "block_locks" -> Locks.blockLock(key.id(), in);
+            case "knowledge" -> Locks.knowledge(key.id(), in);
             default -> QuestParser.markerFile(key.id(), in);
         };
     }
