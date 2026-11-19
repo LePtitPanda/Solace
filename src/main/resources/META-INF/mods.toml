@@ -1,13 +1,13 @@
 modLoader="javafml"
 loaderVersion="[47,)"  # Matches Forge 1.20.1+
-license="All Rights Reserved"
+license="${mod_license}"
 mixins="solace.mixins.json"
 
 [[mods]]
 modId="solace"  # Must match @Mod("solace")
 version="1.0.0"
 displayName="Solace"
-authors="YourNameHere"
+authors="${mod_authors}"
 description='''This mod adds a custom Dirt portal that leads to the Nether and returns to the Overworld.
 The portal is activated with Flint and Steel and has a brown portal effect.'''
 
